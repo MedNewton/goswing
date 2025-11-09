@@ -13,6 +13,7 @@ import BottomTabBar, { type BottomTabKey } from '@/components/navigation/BottomT
 import SearchPage from '@/pages/SearchPage';
 import SavedPage from '@/components/sections/SavedPage';
 import EventPage from '@/pages/EventPage';
+import ReservationsPage from '@/pages/ReservationPage';
 
 import { getEvents, getCategories, getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
@@ -83,6 +84,7 @@ function HomeScreen(): ReactElement {
   const renderRoot = (): ReactElement => {
     if (bottomTab === 'search') return <SearchPage />;
     if (bottomTab === 'saved') return <SavedPage />;
+    if (bottomTab === 'reservations') return <ReservationsPage />;
 
     if (bottomTab !== 'home') {
       return (
