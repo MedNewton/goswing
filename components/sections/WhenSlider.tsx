@@ -1,4 +1,3 @@
-// components/sections/WhenSlider.tsx
 import React, { type ReactElement } from 'react';
 import { View, Text, ScrollView, type ViewProps } from 'react-native';
 import Chip from '@/components/ui/Chip';

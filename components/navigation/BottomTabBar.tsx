@@ -1,4 +1,3 @@
-// components/nav/BottomTabBar.tsx
 import React, { memo, type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -9,7 +8,7 @@ export type BottomTabKey = 'home' | 'search' | 'saved' | 'reservations' | 'profi
 export type BottomTabItem = Readonly<{
   key: BottomTabKey;
   label: string;
-  icon: keyof typeof Feather.glyphMap; // e.g., 'home', 'search'
+  icon: keyof typeof Feather.glyphMap;
 }>;
 
 export type BottomTabBarProps = Readonly<
@@ -24,7 +23,6 @@ export type BottomTabBarProps = Readonly<
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
   c.filter(Boolean).join(' ');
 
-// Default set matching your mock
 const defaultItems: ReadonlyArray<BottomTabItem> = [
   { key: 'home',         label: 'Home',         icon: 'home' },
   { key: 'search',       label: 'Search',       icon: 'search' },
@@ -70,7 +68,7 @@ export default memo(function BottomTabBar({
   ...rest
 }: BottomTabBarProps): ReactElement {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 6); // ensure comfortable touch area
+  const bottomPad = Math.max(insets.bottom, 6);
 
   return (
     <View

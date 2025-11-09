@@ -1,4 +1,3 @@
-// components/ui/SearchResultCard.tsx
 import React, { memo, type ReactElement } from 'react';
 import { Image, Pressable, Text, View, type ImageProps, type ViewProps } from 'react-native';
 import Card from '@/components/ui/Card';
@@ -47,7 +46,6 @@ function formatDateTime(
   return { date, time };
 }
 
-/** Compact list-style search result card */
 function SearchResultCardBase({
   item,
   onPress,
@@ -61,7 +59,6 @@ function SearchResultCardBase({
     <Card {...rest} variant="outlined" padding="md" className={cx('overflow-hidden', className)}>
       <Pressable onPress={() => onPress?.(item.id)} className="active:opacity-95">
         <View className="flex-row">
-          {/* Thumbnail */}
           <View className="mr-3">
             <View className="h-20 w-20 items-center justify-center rounded-2xl border-2 border-brand/70 bg-white overflow-hidden">
               {item.thumbnailUrl ? (
@@ -72,7 +69,6 @@ function SearchResultCardBase({
             </View>
           </View>
 
-          {/* Main content */}
           <View className="flex-1">
             <Text numberOfLines={1} className="text-base font-semibold text-black pr-16">
               {item.title}
@@ -108,7 +104,6 @@ function SearchResultCardBase({
             ) : null}
           </View>
 
-          {/* Right rail: price + rating */}
           <View className="ml-2 items-end justify-start">
             {item.priceLabel ? (
               <Badge label={item.priceLabel} tone="brand" variant="solid" size="sm" className="rounded-full" />

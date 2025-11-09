@@ -1,5 +1,3 @@
-// src/theme/colors.ts
-
 /**
  * Centralized color system for GoSwing.
  * - Fully typed, no `any`.
@@ -42,7 +40,7 @@ export const palette = {
   
       /**
        * Semantic aliases for UI usage
-       * (prefer these over raw palette keys in components)
+       * (we prefer these over raw palette keys in components)
        */
       background: palette.white,
       surface: palette.gray50,

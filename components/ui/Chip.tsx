@@ -1,4 +1,3 @@
-// src/components/ui/Chip.tsx
 import React, { type ReactElement } from 'react';
 import { Pressable, Text, View, type PressableProps } from 'react-native';
 
@@ -15,8 +14,8 @@ export type ChipProps = Readonly<
     size?: ChipSize;
     leading?: ReactElement | null;
     trailing?: ReactElement | null;
-    className?: string;      // container classes
-    labelClassName?: string; // text classes
+    className?: string;
+    labelClassName?: string;
   } & Omit<PressableProps, 'children'>
 >;
 

@@ -1,5 +1,3 @@
-// types/domain.ts
-
 /** Common ID brand type (string) to avoid mixing with other strings */
 export type ID = string & { readonly __brand: 'ID' };
 

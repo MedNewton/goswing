@@ -1,15 +1,6 @@
-// src/theme/typography.ts
 import type { TextStyle } from 'react-native';
 
-/**
- * Typed typography tokens for GoSwing.
- * - No `any`
- * - Works with React Native + NativeWind
- * - We can swap font families later when we load custom fonts via Expo
- */
-
 export const fontFamilies = {
-  // Use platform defaults for now; replace with loaded fonts later (e.g., 'Inter-Regular')
   regular: 'System',
   medium: 'System',
   bold: 'System',
@@ -44,7 +35,6 @@ export const lineHeights = {
 
 export type LineHeightKey = keyof typeof lineHeights;
 
-// RN-compatible font weights
 export const fontWeights: Record<
   'regular' | 'medium' | 'bold',
   NonNullable<TextStyle['fontWeight']>
@@ -76,10 +66,6 @@ export type TextVariant = Readonly<{
   letterSpacing?: number;
 }>;
 
-/**
- * Predefined text styles (semantic). These are plain objects you can spread into RN <Text style={...} />
- * or reference in a design system. We’ll also mirror these in Tailwind config later.
- */
 export const variants: Readonly<Record<TextVariantName, TextVariant>> = {
   h1: {
     fontFamily: fontFamilies.bold,

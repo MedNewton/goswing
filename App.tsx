@@ -1,4 +1,3 @@
-// App.tsx
 import './style/globals.css';
 import React, { useMemo, useState, type ReactElement } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -22,8 +21,8 @@ const cx = (...classes: ReadonlyArray<string | null | undefined | false>): strin
   classes.filter(Boolean).join(' ');
 
 type Route =
-  | { name: 'root' }                      // normal bottom-tab shell
-  | { name: 'eventDetails'; id: string }; // details page overlay
+  | { name: 'root' }
+  | { name: 'eventDetails'; id: string };
 
 function HomeScreen(): ReactElement {
   const user = getUser();
@@ -31,7 +30,7 @@ function HomeScreen(): ReactElement {
   const categories = getCategories();
 
   const [bottomTab, setBottomTab] = useState<BottomTabKey>('home');
-  const [route, setRoute] = useState<Route>({ name: 'root' }); // simple in-app router
+  const [route, setRoute] = useState<Route>({ name: 'root' });
 
   const [query, setQuery] = useState<string>('');
   const [activeCats, setActiveCats] = useState<ReadonlyArray<string>>([]);
@@ -64,7 +63,6 @@ function HomeScreen(): ReactElement {
     }
 
     if (whenKey) {
-      // future: filter by date window
       list = list;
     }
 
@@ -82,7 +80,6 @@ function HomeScreen(): ReactElement {
     [categories]
   );
 
-  // Root shell by bottom tab
   const renderRoot = (): ReactElement => {
     if (bottomTab === 'search') return <SearchPage />;
     if (bottomTab === 'saved') return <SavedPage />;
@@ -97,7 +94,6 @@ function HomeScreen(): ReactElement {
       );
     }
 
-    // Home tab content
     return (
       <ScrollView contentContainerClassName={cx('pb-32')} showsVerticalScrollIndicator={false}>
         <Header
@@ -138,7 +134,7 @@ function HomeScreen(): ReactElement {
               key === 'events' ? (
                 <FeaturedEvents
                   events={filteredEvents}
-                  onPressEvent={openEventDetails}          // ← navigate to details
+                  onPressEvent={openEventDetails}
                   onToggleFavorite={() => { }}
                   onPressSeeAll={() => {
                     console.log('See All tapped');
@@ -158,15 +154,12 @@ function HomeScreen(): ReactElement {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
-      {/* Either the root (home/search/saved) or the details screen */}
       {route.name === 'root' ? renderRoot() : (
         <EventPage eventId={route.id} onBack={closeEventDetails} onBook={(id) => console.log('Book', id)} />
       )}
 
-      {/* Persistent bottom navigation (also shown on the details page by design) */}
       <BottomTabBar activeKey={bottomTab} onChange={(key) => {
         setBottomTab(key);
-        // leaving details when user taps a tab
         if (route.name !== 'root') closeEventDetails();
       }} />
     </SafeAreaView>

@@ -1,11 +1,4 @@
-// data/loaders.ts
 import type { Event, Category, UserProfile } from '@/types/domain';
-
-/**
- * Typed loaders for local JSON datasets bundled with the app.
- * Uses `require` so Metro (Expo) resolves JSON at runtime without extra config.
- * All exports are readonly to prevent accidental mutation.
- */
 
 export function getEvents(): ReadonlyArray<Event> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires

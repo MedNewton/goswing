@@ -1,4 +1,3 @@
-// components/sections/FeaturedEvents.tsx
 import React, { type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
 import EventCard, { type EventItem } from '@/components/blocks/EventCard';
@@ -28,7 +27,6 @@ export default function FeaturedEvents({
 }: FeaturedEventsProps): ReactElement {
   return (
     <View {...rest} className={cx('w-full', className)}>
-      {/* Header row (smaller + lighter) */}
       <View className="px-5 mt-1 mb-4 flex-row items-center justify-between">
         <Text className="text-base font-semibold text-black">{title}</Text>
         {onPressSeeAll ? (
@@ -38,7 +36,6 @@ export default function FeaturedEvents({
         ) : null}
       </View>
 
-      {/* Vertical list */}
       <View className={cx('px-2 gap-y-4', contentClassName)}>
         {events.map((ev) => (
           <EventCard

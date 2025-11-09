@@ -1,4 +1,3 @@
-// src/components/ui/Card.tsx
 import React, { type ReactElement, type PropsWithChildren } from 'react';
 import { View, Text, type ViewProps } from 'react-native';
 
@@ -8,8 +7,8 @@ type CardPadding = 'none' | 'sm' | 'md' | 'lg';
 export type CardProps = Readonly<
   {
     variant?: CardVariant;
-    padding?: CardPadding;   // default padding for body area
-    className?: string;      // container classes
+    padding?: CardPadding;
+    className?: string;
   } & ViewProps
 >;
 

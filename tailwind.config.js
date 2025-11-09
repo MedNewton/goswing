@@ -5,8 +5,8 @@ module.exports = {
     './App.{ts,tsx,js,jsx}',
     './app/**/*.{ts,tsx,js,jsx}',
     './src/**/*.{ts,tsx,js,jsx}',
-    './components/**/*.{ts,tsx,js,jsx}',  // Add this line
-    './data/**/*.{ts,tsx,js,jsx}',        // Add this if you have styled components in data
+    './components/**/*.{ts,tsx,js,jsx}',
+    './data/**/*.{ts,tsx,js,jsx}',
   ],
   presets: [require('nativewind/preset')],
   theme: {

@@ -1,4 +1,3 @@
-// components/sections/SearchPage.tsx
 import React, { useMemo, useState, type ReactElement } from 'react';
 import { View, Text, ScrollView, Pressable, type ViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +16,6 @@ export type SearchPageProps = Readonly<
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
     c.filter(Boolean).join(' ');
 
-// simple helper to map our Event model to a search result row
 function mapToResult(e: ReturnType<typeof getEvents>[number]): SearchResultItem {
     return {
         id: e.id,
@@ -35,22 +33,19 @@ function mapToResult(e: ReturnType<typeof getEvents>[number]): SearchResultItem 
 type Mode = 'list' | 'map';
 
 export default function SearchPage({ className, ...rest }: SearchPageProps): ReactElement {
-    // local state
     const [query, setQuery] = useState<string>('');
     const [location, setLocation] = useState<string | null>(null);
     const [mode, setMode] = useState<Mode>('list');
 
     const insets = useSafeAreaInsets();
-    const TAB_BAR_HEIGHT = 56; // approx height of our BottomTabBar content area
-    const bottomPad = insets.bottom + TAB_BAR_HEIGHT + 16; // little extra breathing room
+    const TAB_BAR_HEIGHT = 56;
+    const bottomPad = insets.bottom + TAB_BAR_HEIGHT + 16;
 
-    // dataset
     const resultsBase: ReadonlyArray<SearchResultItem> = useMemo(
         () => getEvents().map(mapToResult),
         []
     );
 
-    // filtering
     const filtered: ReadonlyArray<SearchResultItem> = useMemo(() => {
         let rows = resultsBase;
 
@@ -65,7 +60,6 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
             );
         }
 
-        // location filter (label contains city name)
         if (location) {
             const label =
                 DEFAULT_CITIES.find((c) => c.key === location)?.label.toLowerCase() ?? '';
@@ -81,7 +75,6 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
 
     return (
         <View {...rest} className={cx('w-full flex-1', className)}>
-            {/* Search input + filter icon */}
             <View className="px-4 mt-2">
                 <SearchBar
                     value={query}
@@ -92,12 +85,10 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
                 />
             </View>
 
-            {/* Location pill */}
             <View className="px-4 mt-3">
                 <LocationPicker value={location} onChange={setLocation} />
             </View>
 
-            {/* Segmented: List | Map */}
             <View className="px-4 mt-3">
                 <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
                     <SegBtn
@@ -115,7 +106,6 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
                 </View>
             </View>
 
-            {/* Result toolbar (count + placeholder sort) */}
             <View className="px-4 mt-4">
                 <View className="flex-row items-center justify-between">
                     <Text className="text-sm text-gray700">
@@ -128,20 +118,17 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
                 </View>
             </View>
 
-            {/* Body */}
             <View className="mt-3 px-4 flex-1">
                 {mode === 'list' ? (
                     <ScrollView
                         showsVerticalScrollIndicator={false}
                         contentContainerClassName="gap-y-3"
-                        // generous bottom padding so content can scroll past the overlaid tab bar
                         contentContainerStyle={{ paddingBottom: (insets.bottom || 0) + 40 }}
                         keyboardShouldPersistTaps="handled"
                     >
                         {filtered.map((item) => (
                             <SearchResultCard key={item.id} item={item} />
                         ))}
-                        {/* extra spacer as a final guarantee */}
                         <View style={{ height: (insets.bottom || 0) + 24 }} />
                     </ScrollView>
                 ) : (

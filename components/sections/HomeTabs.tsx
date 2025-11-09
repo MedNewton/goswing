@@ -1,4 +1,3 @@
-// components/sections/HomeTabs.tsx
 import React, { type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -58,7 +57,6 @@ export default function HomeTabs({
 
   return (
     <View {...rest} className={cx('w-full', className)}>
-      {/* Segmented control */}
       <View className="px-4">
         <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
           <SegButton
@@ -76,7 +74,6 @@ export default function HomeTabs({
         </View>
       </View>
 
-      {/* Panel */}
       <View className={cx('mt-4 px-4', contentClassName)}>
         {renderPanel ? (
           renderPanel(activeKey)

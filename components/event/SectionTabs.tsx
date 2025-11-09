@@ -1,4 +1,3 @@
-// components/event/SectionTabs.tsx
 import React, { useState, type ReactElement } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -17,7 +16,6 @@ export default function SectionTabs({ event }: { event: Event }): ReactElement {
 
   return (
     <View className="px-5 mt-5">
-      {/* Pills */}
       <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
         <TabPill label="About" selected={active === 'about'} onPress={() => setActive('about')} />
         <TabPill label="Offers" selected={active === 'offers'} onPress={() => setActive('offers')} />
@@ -28,7 +26,6 @@ export default function SectionTabs({ event }: { event: Event }): ReactElement {
         />
       </View>
 
-      {/* Panels */}
       <View className="mt-5">
         {active === 'about' && (
           <View>
@@ -80,8 +77,6 @@ function TabPill({
     </Pressable>
   );
 }
-
-/* ---------------------------------- OFFERS --------------------------------- */
 
 type Offer = Readonly<{
   id: string;
@@ -140,7 +135,6 @@ function OfferCard({ offer }: { offer: Offer }): ReactElement {
           <Text className="text-xl font-semibold text-black">{offer.title}</Text>
           <Text className="text-base text-gray600 mt-1">{offer.subtitle}</Text>
 
-          {/* bullets */}
           <View className="mt-3 gap-y-1">
             {offer.id === 'o1'
               ? ['Club entry', 'Coat check included'].map((b) => (
@@ -155,7 +149,6 @@ function OfferCard({ offer }: { offer: Offer }): ReactElement {
               ))}
           </View>
 
-          {/* qty selector */}
           <View className="mt-4 flex-row items-center gap-x-6">
             <StepperButton
               label="-"
@@ -167,7 +160,6 @@ function OfferCard({ offer }: { offer: Offer }): ReactElement {
           </View>
         </View>
 
-        {/* price side */}
         <View className="items-end">
           <View className="flex-row items-baseline gap-x-2">
             {offer.originalPrice ? (
@@ -205,8 +197,6 @@ function StepperButton({
   );
 }
 
-/* --------------------------------- UPCOMING -------------------------------- */
-
 function UpcomingPanel(): ReactElement {
   return (
     <View className="px-2">
@@ -214,7 +204,6 @@ function UpcomingPanel(): ReactElement {
         Upcoming Events from Nightlife Events Paris
       </Text>
 
-      {/* calendar mock card */}
       <Card variant="outlined" padding="lg" className="rounded-3xl border-gray200 mt-3">
         <View className="flex-row items-center justify-between mb-3">
           <Pressable className="rounded-2xl bg-white border border-gray300 h-9 w-9 items-center justify-center">
@@ -226,7 +215,6 @@ function UpcomingPanel(): ReactElement {
           </Pressable>
         </View>
 
-        {/* simple 7x5 grid */}
         <CalendarGrid />
 
         <View className="mt-4 flex-row items-center gap-x-2">
@@ -235,7 +223,6 @@ function UpcomingPanel(): ReactElement {
         </View>
       </Card>
 
-      {/* next events list */}
       <Text className="text-xl font-semibold text-black mt-6">Next Events</Text>
       <View className="mt-3 gap-y-4">
         <NextEventCard

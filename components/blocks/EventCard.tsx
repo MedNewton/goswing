@@ -1,4 +1,3 @@
-// src/components/blocks/EventCard.tsx
 import React, { type ReactElement, memo } from 'react';
 import {
   Image,
@@ -14,7 +13,7 @@ import IconButton from '@/components/ui/IconButton';
 
 export type Attendee = Readonly<{
   id: string;
-  initials: string; // e.g., "U1"
+  initials: string;
 }>;
 
 export type EventItem = Readonly<{
@@ -22,13 +21,13 @@ export type EventItem = Readonly<{
   title: string;
   organizer: string;
   imageUrl: string;
-  startsAtIso: string; // ISO date string
+  startsAtIso: string;
   venue: string;
   city?: string;
-  priceLabel?: string;  // e.g., "From $25", "Free", "Sold Out"
+  priceLabel?: string;
   favorite?: boolean;
   attendees?: ReadonlyArray<Attendee>;
-  attendeesExtraCount?: number; // e.g., 350
+  attendeesExtraCount?: number;
 }>;
 
 export type EventCardProps = Readonly<
@@ -37,7 +36,7 @@ export type EventCardProps = Readonly<
     onPress?: (eventId: string) => void;
     onToggleFavorite?: (eventId: string, next: boolean) => void;
     imageProps?: Omit<ImageProps, 'source'>;
-    className?: string; // wrapper Card classes
+    className?: string;
   } & Omit<ViewProps, 'children'>
 >;
 
@@ -46,7 +45,6 @@ const cx = (...classes: ReadonlyArray<string | null | undefined | false>): strin
 
 const formatDate = (iso: string): string => {
   const d = new Date(iso);
-  // Example: "Sep 30, 2025"
   return d.toLocaleDateString(undefined, {
     month: 'short',
     day: '2-digit',
@@ -56,7 +54,6 @@ const formatDate = (iso: string): string => {
 
 const formatTime = (iso: string): string => {
   const d = new Date(iso);
-  // Example: "11:00 PM"
   return d.toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -108,7 +105,6 @@ export default function EventCard({
       className={cx('overflow-hidden', className)}
       {...rest}
     >
-      {/* Image header */}
       <View className="relative">
         <Image
           source={{ uri: event.imageUrl }}
@@ -117,14 +113,12 @@ export default function EventCard({
           {...imageProps}
         />
 
-        {/* Top-left price/status badge */}
         {event.priceLabel ? (
           <View className="absolute left-3 top-3">
             <Badge label={event.priceLabel} variant="solid" tone="gray" size="sm" />
           </View>
         ) : null}
 
-        {/* Top-right favorite icon */}
         <View className="absolute right-3 top-3">
           <IconButton
             accessibilityLabel={event.favorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -137,7 +131,6 @@ export default function EventCard({
         </View>
       </View>
 
-      {/* Body */}
       <View className="p-4">
         <Pressable onPress={() => onPress?.(event.id)} className="active:opacity-90">
           <Text className="text-lg font-bold text-black" numberOfLines={2}>
@@ -146,7 +139,6 @@ export default function EventCard({
 
           <Text className="mt-1 text-sm text-gray600">{event.organizer}</Text>
 
-          {/* Meta rows */}
           <View className="mt-3 gap-y-2">
             <View className="flex-row items-center gap-x-2">
               <Text className="text-base">📅</Text>
@@ -164,7 +156,6 @@ export default function EventCard({
             </View>
           </View>
 
-          {/* Attendees */}
           {event.attendees && event.attendees.length > 0 ? (
             <View className="mt-3">
               <Attendees

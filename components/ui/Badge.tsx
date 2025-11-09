@@ -1,4 +1,3 @@
-// src/components/ui/Badge.tsx
 import React, { type ReactElement } from 'react';
 import { Text, View, type ViewProps } from 'react-native';
 
@@ -12,21 +11,19 @@ export type BadgeProps = Readonly<
     tone?: BadgeTone;
     size?: BadgeSize;
     label: string;
-    className?: string;      // NativeWind classes for container
-    textClassName?: string;  // optional text override
+    className?: string;
+    textClassName?: string;
   } & Omit<ViewProps, 'children'>
 >;
 
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
   classes.filter(Boolean).join(' ');
 
-// size tokens
 const sizeBase: Record<BadgeSize, { container: string; text: string }> = {
   sm: { container: 'px-2 py-0.5 rounded-full', text: 'text-xs' },
   md: { container: 'px-2.5 py-1 rounded-full', text: 'text-sm' },
 };
 
-// color recipes per variant/tone
 const solid: Record<BadgeTone, { container: string; text: string; border: string }> = {
   brand:   { container: 'bg-brand',       text: 'text-white',  border: 'border-transparent' },
   gray:    { container: 'bg-gray600',     text: 'text-white',  border: 'border-transparent' },

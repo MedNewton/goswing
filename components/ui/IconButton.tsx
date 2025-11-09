@@ -1,4 +1,3 @@
-// src/components/ui/IconButton.tsx
 import React, { type ReactElement } from 'react';
 import {
   Pressable,
@@ -14,21 +13,20 @@ type IconButtonSize = 'sm' | 'md' | 'lg';
 
 export type IconButtonProps = Readonly<
   {
-    icon: ReactElement;               // pass an icon React element (e.g., from @expo/vector-icons)
+    icon: ReactElement;
     variant?: IconButtonVariant;
     tone?: IconButtonTone;
     size?: IconButtonSize;
     loading?: boolean;
-    round?: boolean;                  // if false, uses rounded-xl instead of full circle
+    round?: boolean;
     className?: string;
-    accessibilityLabel: string;       // required for a11y
+    accessibilityLabel: string;
   } & Omit<PressableProps, 'children' | 'accessibilityRole'>
 >;
 
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
   classes.filter(Boolean).join(' ');
 
-// size tokens
 const sizeBase: Record<
   IconButtonSize,
   { box: string; icon: string; spinner: 'small' | 'large' }
@@ -38,7 +36,6 @@ const sizeBase: Record<
   lg: { box: 'h-12 w-12', icon: 'text-xl', spinner: 'large' },
 };
 
-// color recipes
 const solid: Record<IconButtonTone, { container: string; border: string; icon: string; spinner: string }> = {
   brand:   { container: 'bg-brand',   border: 'border-transparent', icon: 'text-white',  spinner: '#FFFFFF' },
   gray:    { container: 'bg-gray700', border: 'border-transparent', icon: 'text-white',  spinner: '#FFFFFF' },

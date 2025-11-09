@@ -1,4 +1,3 @@
-// src/components/ui/Tabs.tsx
 import React, { type ReactElement, memo } from 'react';
 import {
   ScrollView,
@@ -25,10 +24,10 @@ export type TabsProps = Readonly<{
   onChange: (key: string) => void;
   variant?: TabsVariant;
   size?: TabsSize;
-  scrollable?: boolean;         // horizontal scroll if many tabs
-  className?: string;           // container classes
-  tabClassName?: string;        // each tab button classes
-  labelClassName?: string;      // text label classes
+  scrollable?: boolean;
+  className?: string;
+  tabClassName?: string;
+  labelClassName?: string;
 }>;
 
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
@@ -69,7 +68,7 @@ const TabButton = memo(function TabButton({
           'border',
           isActive ? 'bg-brand border-brand text-white' : 'bg-transparent border-border'
         )
-      : // underline
+      :
         cx(
           tokens.padX,
           tokens.padY,

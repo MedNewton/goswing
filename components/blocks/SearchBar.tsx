@@ -1,4 +1,3 @@
-// components/blocks/SearchBar.tsx
 import React, { type ReactElement } from 'react';
 import { Pressable, View, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';

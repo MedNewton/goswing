@@ -1,4 +1,3 @@
-// src/components/ui/Button.tsx
 import React, { type ReactElement } from 'react';
 import {
   Pressable,
@@ -21,22 +20,20 @@ export type ButtonProps = Readonly<
     loading?: boolean;
     leading?: ReactElement | null;
     trailing?: ReactElement | null;
-    className?: string;     // container classes
-    textClassName?: string; // text classes
+    className?: string;
+    textClassName?: string;
   } & Omit<PressableProps, 'children'>
 >;
 
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
   classes.filter(Boolean).join(' ');
 
-/** Size tokens (NativeWind utility classes) */
 const sizeBase: Record<ButtonSize, { container: string; text: string; gap: string; icon: string }> = {
   sm: { container: 'h-9 px-3 rounded-lg', text: 'text-sm', gap: 'gap-x-1.5', icon: 'text-sm' },
   md: { container: 'h-10 px-4 rounded-xl', text: 'text-base', gap: 'gap-x-2', icon: 'text-base' },
   lg: { container: 'h-12 px-5 rounded-2xl', text: 'text-lg', gap: 'gap-x-2.5', icon: 'text-lg' },
 };
 
-/** Color recipes per variant/tone (mirrors tailwind.config.js colors) */
 const solid: Record<ButtonTone, { container: string; text: string; border: string; spinner: string }> = {
   brand:   { container: 'bg-brand',   text: 'text-white',  border: 'border-transparent', spinner: '#FFFFFF' },
   gray:    { container: 'bg-gray700', text: 'text-white',  border: 'border-transparent', spinner: '#FFFFFF' },

@@ -1,4 +1,3 @@
-// components/blocks/LocationPicker.tsx
 import React, { useMemo, useState, type ReactElement } from 'react';
 import { View, Text, Pressable, ScrollView, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -12,18 +11,17 @@ export type City = Readonly<{
 
 export type LocationPickerProps = Readonly<
   {
-    value: string | null;                 // selected city key or null
-    onChange: (key: string) => void;      // called when a city is chosen
-    placeholder?: string;                 // shown on closed pill if no value
-    options?: ReadonlyArray<City>;        // custom city set; defaults to built-in list
-    className?: string;                   // wrapper classes
+    value: string | null;
+    onChange: (key: string) => void;
+    placeholder?: string;
+    options?: ReadonlyArray<City>;
+    className?: string;
   } & Omit<ViewProps, 'children'>
 >;
 
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
   c.filter(Boolean).join(' ');
 
-/** Built-in hardcoded city list (you can extend freely) */
 export const DEFAULT_CITIES: ReadonlyArray<City> = [
   { key: 'new_york', label: 'New York, NY' },
   { key: 'los_angeles', label: 'Los Angeles, CA' },
@@ -67,7 +65,6 @@ export default function LocationPicker({
 
   return (
     <View {...rest} className={cx('w-full', className)}>
-      {/* Closed pill (mock style) */}
       <Pressable
         accessibilityRole="button"
         onPress={() => setOpen((s) => !s)}
@@ -82,7 +79,6 @@ export default function LocationPicker({
         <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#6B7280" />
       </Pressable>
 
-      {/* Dropdown panel */}
       {open ? (
         <Card
           variant="outlined"

@@ -1,4 +1,3 @@
-// pages/EventDetailsPage.tsx
 import React, { useMemo, type ReactElement } from 'react';
 import {
   Dimensions,
@@ -65,12 +64,11 @@ export default function EventDetailsPage({
   }
 
   const dt = formatDateTime(event.startsAtIso);
-  const bottomPad = (insets.bottom || 0) + 140; // space for navbar + floating button
+  const bottomPad = (insets.bottom || 0) + 140;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
       <View className="flex-1">
-        {/* ---------- HERO ---------- */}
         <View className="relative" style={{ width: SCREEN_WIDTH, height: HERO_HEIGHT }}>
           {event.imageUrl ? (
             <Image source={{ uri: event.imageUrl }} className="w-full h-full" resizeMode="cover" />
@@ -78,7 +76,6 @@ export default function EventDetailsPage({
             <View className="w-full h-full bg-gray200" />
           )}
 
-          {/* top overlay actions */}
           <View className="absolute left-3 top-3 flex-row items-center" >
             <CircleIcon onPress={onBack}>
               <Feather name="chevron-left" size={20} color="#111827" />
@@ -95,13 +92,11 @@ export default function EventDetailsPage({
           </View>
         </View>
 
-        {/* ---------- BODY ---------- */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerClassName="pb-40"
           contentContainerStyle={{ paddingBottom: bottomPad }}
         >
-          {/* Info note card (matches mock) */}
           <View className="px-5 mt-4">
             <Card variant="outlined" padding="md">
               <View className="flex-row items-start gap-x-2">
@@ -116,7 +111,6 @@ export default function EventDetailsPage({
             </Card>
           </View>
 
-          {/* Title & meta */}
           <View className="px-5 mt-4">
             <Text className="text-xl font-semibold text-black">{event.title}</Text>
 
@@ -144,14 +138,12 @@ export default function EventDetailsPage({
             </View>
           </View>
 
-          {/* Action chips (visible) */}
           <View className="px-5 mt-4 flex-row items-center gap-x-8">
             <ActionChip bg="bg-black" icon="music" label="Suggest Songs" darkIcon />
             <ActionChip bg="bg-indigo-600" icon="camera" label="Take Story" />
             <ActionChip bg="bg-amber-400" icon="gift" label="Give Reward" darkText />
           </View>
 
-          {/* Organizer card */}
           <View className="px-5 mt-4">
             <Card variant="outlined" padding="md">
               <View className="flex-row items-center justify-between">
@@ -176,7 +168,6 @@ export default function EventDetailsPage({
             </Card>
           </View>
 
-          {/* Event Gallery (square cells, horizontal slider) */}
           <SectionHeader title="Event Gallery" action="See all" />
           <ScrollView
             horizontal
@@ -196,7 +187,6 @@ export default function EventDetailsPage({
             ))}
           </ScrollView>
 
-          {/* Tabs (3 pills spanning width) */}
           <View className="px-5 mt-5">
             <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
               <TabPill label="About" selected />
@@ -205,7 +195,6 @@ export default function EventDetailsPage({
             </View>
           </View>
 
-          {/* About This Event */}
           <View className="px-5 mt-4">
             <Text className="text-base font-semibold text-black">About This Event</Text>
             <Text className="text-gray700 mt-2">
@@ -228,7 +217,6 @@ export default function EventDetailsPage({
             </View>
           </View>
 
-          {/* Attendees */}
           <View className="px-5 mt-6">
             <Text className="text-base font-semibold text-black">Attendees (420)</Text>
             <View className="mt-2 flex-row items-center flex-wrap gap-2">
@@ -239,7 +227,6 @@ export default function EventDetailsPage({
             </View>
           </View>
 
-          {/* Cancellation & Refund Policy */}
           <View className="px-5 mt-6">
             <View className="flex-row items-center gap-x-2">
               <Feather name="shield" size={16} color="#6B7280" />
@@ -262,7 +249,6 @@ export default function EventDetailsPage({
             </View>
           </View>
 
-          {/* More from organizer (styled like mock) */}
           <SectionHeader title={`More from ${event.organizer}`} action="View all" />
           <View className="px-5 mt-2 gap-y-3">
             {[{ t: 'Jazz Night Under Stars', p: '$45' }, { t: 'New Year Concert', p: '$80' }].map(
@@ -285,11 +271,9 @@ export default function EventDetailsPage({
               )
             )}
           </View>
-
-          {/* Divider */}
+            
           <View className="mt-5 mx-5 border-t border-gray200" />
 
-          {/* Similar events (styled like mock) */}
           <View className="px-5 mt-4">
             <Text className="text-base font-semibold text-black">Similar Events You Might Like</Text>
             <View className="mt-3 gap-y-3">

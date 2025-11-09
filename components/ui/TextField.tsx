@@ -1,4 +1,3 @@
-// src/components/ui/TextField.tsx
 import React, { type ReactElement, useMemo } from 'react';
 import {
   TextInput,
@@ -16,17 +15,17 @@ type TextFieldState = 'default' | 'error' | 'success';
 export type TextFieldProps = Readonly<
   {
     label?: string;
-    helperText?: string;         // neutral/help text (shown when no errorText)
-    errorText?: string;          // if provided, component is treated as error state
+    helperText?: string;
+    errorText?: string;
     variant?: TextFieldVariant;
     size?: TextFieldSize;
-    state?: TextFieldState;      // overrides derived state when you need explicit control
-    left?: ReactElement | null;  // left accessory (icon, badge, etc.)
-    right?: ReactElement | null; // right accessory
-    containerClassName?: string; // wrapper <View> classes
-    inputClassName?: string;     // <TextInput> classes
-    labelClassName?: string;     // label <Text> classes
-    helperClassName?: string;    // helper/error <Text> classes
+    state?: TextFieldState;
+    left?: ReactElement | null;
+    right?: ReactElement | null;
+    containerClassName?: string;
+    inputClassName?: string;
+    labelClassName?: string;
+    helperClassName?: string;
   } & Omit<TextInputProps, 'children'>
 >;
 
@@ -108,10 +107,8 @@ export function TextField({
         {left ? <View className={cx('mr-2')}>{left}</View> : null}
 
         <TextInput
-          // RN props
           editable={editable}
           keyboardAppearance={keyboardAppearance ?? 'light'}
-          // NativeWind classes
           className={cx(
             'flex-1 text-black',
             sizeTokens.text,

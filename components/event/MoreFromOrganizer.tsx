@@ -56,7 +56,6 @@ export default function MoreFromOrganizer({
             className="rounded-3xl border-gray200"
           >
             <View className="flex-row items-center justify-between">
-              {/* Left: thumb + text */}
               <View className="flex-row items-center gap-x-4 flex-1 pr-3">
                 <View className="h-16 w-24 rounded-xl bg-gray-200" />
                 <View className="flex-1">
@@ -70,7 +69,6 @@ export default function MoreFromOrganizer({
                 </View>
               </View>
 
-              {/* Right: price pill */}
               {ev.priceLabel ? <PricePill label={ev.priceLabel} /> : <View />}
             </View>
           </Card>

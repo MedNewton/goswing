@@ -23,7 +23,6 @@ export default function SimilarEvents({
             className="rounded-3xl border-gray200"
           >
             <View className="flex-row items-center justify-between">
-              {/* Left */}
               <View className="flex-row items-center gap-x-4 flex-1 pr-3">
                 <View className="h-16 w-24 rounded-xl bg-gray-200" />
                 <View className="flex-1">
@@ -37,7 +36,6 @@ export default function SimilarEvents({
                 </View>
               </View>
 
-              {/* Right */}
               {ev.priceLabel ? (
                 <View className="rounded-2xl bg-white border border-gray300 px-4 py-2.5 min-w-[64px] items-center">
                   <Text className="text-gray800 font-medium">{ev.priceLabel}</Text>

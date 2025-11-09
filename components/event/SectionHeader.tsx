@@ -1,15 +1,17 @@
 import React, { type ReactElement } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
 export default function SectionHeader({
   title,
   action,
   subtitle,
+  onPressAction,
 }: {
   title: string;
   action?: string;
   subtitle?: string | null;
+  onPressAction?: () => void;
 }): ReactElement {
   return (
     <View className="px-5 mt-6 flex-row items-start justify-between">
@@ -20,10 +22,10 @@ export default function SectionHeader({
         ) : null}
       </View>
       {action ? (
-        <View className="flex-row items-center">
+        <Pressable className="flex-row items-center" onPress={onPressAction}>
           <Text className="text-sm text-gray600 mr-1">{action}</Text>
           <Feather name="chevron-right" size={16} color="#6B7280" />
-        </View>
+        </Pressable>
       ) : null}
     </View>
   );

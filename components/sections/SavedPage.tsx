@@ -1,4 +1,3 @@
-// components/sections/SavedPage.tsx
 import React, { useMemo, useState, type ReactElement } from 'react';
 import { View, Text, ScrollView, Pressable, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -17,7 +16,6 @@ type SavedTab = 'events' | 'organizers';
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
   c.filter(Boolean).join(' ');
 
-// Map our Event -> SearchResultCard item
 function mapToResult(e: ReturnType<typeof getEvents>[number]): SearchResultItem {
   return {
     id: e.id,
@@ -36,7 +34,6 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
   const [tab, setTab] = useState<SavedTab>('events');
   const insets = useSafeAreaInsets();
 
-  // demo data
   const savedEvents: ReadonlyArray<SearchResultItem> = useMemo(
     () => getEvents().slice(0, 6).map(mapToResult),
     []
@@ -53,7 +50,6 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
 
   return (
     <View {...rest} className={cx('flex-1 w-full', className)}>
-      {/* Title + subtitle */}
       <View className="px-5 pt-4">
         <Text className="text-3xl font-bold text-black">Saved</Text>
         <Text className="text-base text-gray500 mt-2">
@@ -61,7 +57,6 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
         </Text>
       </View>
 
-      {/* Segmented tabs (same style as HomeTabs) */}
       <View className="px-5 mt-4">
         <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
           <SegBtn
@@ -79,7 +74,6 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
         </View>
       </View>
 
-      {/* Body */}
       <View className="mt-4 px-5 flex-1">
         {tab === 'events' ? (
           <ScrollView
