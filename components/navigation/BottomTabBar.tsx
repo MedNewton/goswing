@@ -56,10 +56,6 @@ function TabButton({
   );
 }
 
-/**
- * Absolute, safe-area aware bottom bar that overlays content.
- * Place it as the last element inside the screen container.
- */
 export default memo(function BottomTabBar({
   activeKey,
   onChange,
