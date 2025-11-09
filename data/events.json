@@ -1,0 +1,73 @@
+[
+    {
+      "id": "evt_001",
+      "title": "GoSwing Open — Night Golf & Live DJ",
+      "organizer": "GoSwing Club",
+      "imageUrl": "https://picsum.photos/seed/goswing1/800/600",
+      "startsAtIso": "2025-12-05T20:30:00.000Z",
+      "venue": "Palm Grove Course",
+      "city": "Casablanca",
+      "priceLabel": "From $25",
+      "favorite": false,
+      "categories": ["sports", "nightlife"],
+      "attendees": [
+        { "id": "u_01", "initials": "AZ" },
+        { "id": "u_02", "initials": "LM" },
+        { "id": "u_03", "initials": "KB" }
+      ],
+      "attendeesExtraCount": 42
+    },
+    {
+      "id": "evt_002",
+      "title": "Sunset Acoustic Session",
+      "organizer": "Seabreeze Events",
+      "imageUrl": "https://picsum.photos/seed/goswing2/800/600",
+      "startsAtIso": "2025-12-12T18:00:00.000Z",
+      "venue": "Corniche Stage",
+      "city": "Casablanca",
+      "priceLabel": "Free",
+      "favorite": true,
+      "categories": ["music", "outdoor"],
+      "attendees": [
+        { "id": "u_04", "initials": "JR" },
+        { "id": "u_05", "initials": "NS" }
+      ],
+      "attendeesExtraCount": 18
+    },
+    {
+      "id": "evt_003",
+      "title": "Startup Mixer & Pitch Night",
+      "organizer": "Casa Tech Hub",
+      "imageUrl": "https://picsum.photos/seed/goswing3/800/600",
+      "startsAtIso": "2025-12-08T19:00:00.000Z",
+      "venue": "Casa Hub Auditorium",
+      "city": "Casablanca",
+      "priceLabel": "From $10",
+      "favorite": false,
+      "categories": ["business", "networking"],
+      "attendees": [
+        { "id": "u_06", "initials": "TY" },
+        { "id": "u_07", "initials": "MH" },
+        { "id": "u_08", "initials": "AP" }
+      ],
+      "attendeesExtraCount": 73
+    },
+    {
+      "id": "evt_004",
+      "title": "Weekend Food Fest",
+      "organizer": "Street Bites",
+      "imageUrl": "https://picsum.photos/seed/goswing4/800/600",
+      "startsAtIso": "2025-12-20T11:00:00.000Z",
+      "venue": "Central Park",
+      "city": "Casablanca",
+      "priceLabel": "From $5",
+      "favorite": false,
+      "categories": ["food", "family"],
+      "attendees": [
+        { "id": "u_09", "initials": "DL" },
+        { "id": "u_10", "initials": "SG" }
+      ],
+      "attendeesExtraCount": 120
+    }
+  ]
+  

@@ -1,0 +1,13 @@
+[
+    { "key": "music",     "label": "Music",      "emoji": "🎵" },
+    { "key": "sports",    "label": "Sports",     "emoji": "⚽️" },
+    { "key": "nightlife", "label": "Nightlife",  "emoji": "🌙" },
+    { "key": "outdoor",   "label": "Outdoor",    "emoji": "🏞️" },
+    { "key": "business",  "label": "Business",   "emoji": "💼" },
+    { "key": "networking","label": "Networking", "emoji": "🤝" },
+    { "key": "food",      "label": "Food",       "emoji": "🍴" },
+    { "key": "family",    "label": "Family",     "emoji": "👨‍👩‍👧" },
+    { "key": "arts",      "label": "Arts",       "emoji": "🎨" },
+    { "key": "tech",      "label": "Tech",       "emoji": "💻" }
+  ]
+  
