@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "goswing",
-    "slug": "goswing_v_1_0_0",
+    "slug": "goswing",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,10 +13,14 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.goswing.app",
       "splash": {
         "image": "./assets/splash_goswing.png",
         "resizeMode": "contain",
         "backgroundColor": "#0B0B15"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "GoSwing uses your location to show nearby events and experiences."
       }
     },
     "android": {
@@ -51,7 +55,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-location"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
@@ -65,7 +70,13 @@
       "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "goswing-a69d1",
       "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "goswing-a69d1.firebasestorage.app",
       "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "717083262386",
-      "EXPO_PUBLIC_FIREBASE_APP_ID": "1:717083262386:web:f415be404c5f90992af8ab"
+      "EXPO_PUBLIC_FIREBASE_APP_ID": "1:717083262386:web:f415be404c5f90992af8ab",
+      "EXPO_PUBLIC_WEB_CLIENT_ID": "717083262386-lpf5bmhekce9qc2vh9k9ul3o5nnomhg3.apps.googleusercontent.com",
+      "EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID": "717083262386-lpf5bmhekce9qc2vh9k9ul3o5nnomhg3.apps.googleusercontent.com",
+      "EXPO_PUBLIC_GOOGLE_CLIENT_SECRET": "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",
+      "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "717083262386-m2u7cinbatm0ktf3u3ri75fp4pgacau3.apps.googleusercontent.com",
+      "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "717083262386-g223gsbsis1cebbh56ssn11u2fhfncua.apps.googleusercontent.com",
+      "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_bWFqb3ItYmF0LTQ1LmNsZXJrLmFjY291bnRzLmRldiQ"
     }
   }
 }

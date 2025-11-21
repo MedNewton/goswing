@@ -1,23 +1,27 @@
+// pages/EmailAuthPage.tsx
 import React, { useState, type ReactElement } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import {
-  fetchSignInMethodsForEmail,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { useAuth } from '@/providers/AuthProvider';
+import { useSignIn, useSignUp } from '@clerk/clerk-expo';
 
 type Props = Readonly<{
   onBack?: () => void;
   onSuccess?: () => void;   // existing user signed in
-  onNewUser?: () => void;   // new user created (optional)
+  onNewUser?: () => void;   // new user created → onboarding
   onForgotPassword?: (email?: string) => void;
 }>;
 
-const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ');
+const cx = (...c: Array<string | false | null | undefined>) =>
+  c.filter(Boolean).join(' ');
 
 export default function EmailAuthPage({
   onBack,
@@ -25,7 +29,8 @@ export default function EmailAuthPage({
   onNewUser,
   onForgotPassword,
 }: Props): ReactElement {
-  const { setOnboardingPending } = useAuth();
+  const { signIn, setActive: setActiveFromSignIn, isLoaded: signInLoaded } = useSignIn();
+  const { signUp, setActive: setActiveFromSignUp, isLoaded: signUpLoaded } = useSignUp();
 
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -44,44 +49,84 @@ export default function EmailAuthPage({
   const handleContinue = async (): Promise<void> => {
     setError(null);
     const v = validate();
-    if (v) { setError(v); return; }
+    if (v) {
+      setError(v);
+      return;
+    }
+
+    if (!signInLoaded || !signUpLoaded) {
+      setError('Authentication is still initializing. Please try again in a moment.');
+      return;
+    }
 
     setSubmitting(true);
-    const e = email.trim().toLowerCase();
+    const identifier = email.trim().toLowerCase();
+
     try {
-      const methods = await fetchSignInMethodsForEmail(auth, e);
+      // 1) Try SIGN-IN (existing user)
+      try {
+        const attempt = await signIn.create({
+          identifier,
+          password,
+        });
 
-      if (methods.includes('password')) {
-        // EXISTING user → login → Home
-        const cred = await signInWithEmailAndPassword(auth, e, password);
-        if (cred.user) onSuccess?.();
-        return;
-      }
-
-      if (methods.length === 0) {
-        // NEW user → create → mark onboarding → AuthGate will show consent → phone collect
-        const cred = await createUserWithEmailAndPassword(auth, e, password);
-        if (cred.user) {
-          await setOnboardingPending();  // <-- critical line
-          onNewUser?.();
+        if (attempt.status === 'complete') {
+          if (attempt.createdSessionId) {
+            await setActiveFromSignIn({ session: attempt.createdSessionId });
+          }
+          onSuccess?.();
+          return;
         }
+
+        console.warn('Unexpected sign-in status:', attempt.status);
+        setError('We could not complete sign-in. Please try again.');
         return;
+      } catch (err: any) {
+        const firstCode: string | undefined = err?.errors?.[0]?.code;
+
+        // "identifier not found" → treat as NEW USER → go to sign-up
+        if (firstCode !== 'form_identifier_not_found') {
+          if (firstCode === 'form_password_incorrect') {
+            setError('Incorrect password. Please try again.');
+          } else {
+            setError('Something went wrong while signing in. Please try again.');
+          }
+          console.warn('Clerk sign-in error:', JSON.stringify(err, null, 2));
+          return;
+        }
+        // fallthrough to sign-up
       }
 
-      setError('This email is registered with a different sign-in method. Please use that method.');
-    } catch (err: any) {
-      const code: string = err?.code ?? '';
-      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        setError('Incorrect password. Please try again.');
-      } else if (code === 'auth/user-disabled') {
-        setError('This account has been disabled.');
-      } else if (code === 'auth/too-many-requests') {
-        setError('Too many attempts. Please try again later.');
-      } else if (code === 'auth/weak-password') {
-        setError('Password should be at least 6 characters.');
-      } else {
-        setError('Something went wrong. Please try again.');
-        console.warn('EmailAuth error:', err);
+      // 2) SIGN-UP (new user)
+      try {
+        const signUpAttempt = await signUp.create({
+          emailAddress: identifier,
+          password,
+        });
+
+        if (signUpAttempt.status === 'complete' && signUpAttempt.createdSessionId) {
+          await setActiveFromSignUp({ session: signUpAttempt.createdSessionId });
+          onNewUser?.(); // AuthGate will mark onboarding pending and show Terms → Phone → Notifications
+          return;
+        }
+
+        console.warn(
+          'Unexpected sign-up status (with email verification disabled):',
+          signUpAttempt.status,
+          signUpAttempt
+        );
+        setError('Could not complete sign up. Please try again.');
+      } catch (signUpErr: any) {
+        console.warn('Clerk sign-up error:', JSON.stringify(signUpErr, null, 2));
+        const firstCode: string | undefined = signUpErr?.errors?.[0]?.code;
+
+        if (firstCode === 'form_password_pwned') {
+          setError('This password is too weak. Please choose a stronger one.');
+        } else if (firstCode === 'form_identifier_exists') {
+          setError('This email is already in use. Try signing in instead.');
+        } else {
+          setError('Could not create your account. Please try again.');
+        }
       }
     } finally {
       setSubmitting(false);
@@ -90,15 +135,24 @@ export default function EmailAuthPage({
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
-      <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: undefined })} className="flex-1">
+      <KeyboardAvoidingView
+        behavior={Platform.select({ ios: 'padding', android: undefined })}
+        className="flex-1"
+      >
         <View className="px-4 py-3 flex-row items-center justify-between">
-          <Pressable onPress={onBack} accessibilityRole="button" className="h-10 w-10 items-center justify-center rounded-full active:opacity-80">
+          <Pressable
+            onPress={onBack}
+            accessibilityRole="button"
+            className="h-10 w-10 items-center justify-center rounded-full active:opacity-80"
+          >
             <Feather name="arrow-left" size={20} color="#0B1220" />
           </Pressable>
         </View>
 
         <View className="flex-1 px-5">
-          <Text className="text-3xl text-black font-semibold text-center mt-6">Sign in or sign up</Text>
+          <Text className="text-3xl text-black font-semibold text-center mt-6">
+            Sign in or sign up
+          </Text>
 
           <View className="mt-8">
             <TextInput
@@ -123,7 +177,11 @@ export default function EmailAuthPage({
                 placeholderTextColor="#9CA3AF"
                 className="flex-1 px-2 py-4 text-gray900"
               />
-              <Pressable accessibilityRole="button" className="h-10 w-10 items-center justify-center rounded-xl active:opacity-80" onPress={() => setShowPassword((v) => !v)}>
+              <Pressable
+                accessibilityRole="button"
+                className="h-10 w-10 items-center justify-center rounded-xl active:opacity-80"
+                onPress={() => setShowPassword((v) => !v)}
+              >
                 <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color="#0B1220" />
               </Pressable>
             </View>
@@ -144,9 +202,16 @@ export default function EmailAuthPage({
           <Pressable
             onPress={handleContinue}
             disabled={submitting}
-            className={cx('mt-6 rounded-2xl bg-black px-5 py-4 items-center justify-center', submitting && 'opacity-70')}
+            className={cx(
+              'mt-6 rounded-2xl bg-black px-5 py-4 items-center justify-center',
+              submitting && 'opacity-70'
+            )}
           >
-            {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text className="text-white text-base font-semibold">Continue</Text>}
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text className="text-white text-base font-semibold">Continue</Text>
+            )}
           </Pressable>
         </View>
       </KeyboardAvoidingView>

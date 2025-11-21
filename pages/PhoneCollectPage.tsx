@@ -1,6 +1,15 @@
+// pages/PhoneCollectPage.tsx
 import React, { useState, type ReactElement } from 'react';
-import { View, Text, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUser } from '@clerk/clerk-expo';
 
 type Props = Readonly<{
   onSubmit: () => Promise<void>;
@@ -11,6 +20,33 @@ export default function PhoneCollectPage({ onSubmit, onSkip }: Props): ReactElem
   const [phone, setPhone] = useState<string>('');
   const insets = useSafeAreaInsets();
   const disabled = phone.trim().length < 6;
+
+  const { user, isLoaded } = useUser();
+
+  const handleContinue = async (): Promise<void> => {
+    if (disabled) return;
+
+    const normalized = phone.trim();
+
+    // Try to persist phone on the Clerk user, but don't block onboarding if it fails
+    if (isLoaded && user) {
+      try {
+        const currentUnsafe = (user.unsafeMetadata ?? {}) as Record<string, unknown>;
+
+        await user.update({
+          unsafeMetadata: {
+            ...currentUnsafe,
+            phoneNumber: normalized,
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to save phone to Clerk unsafeMetadata:', err);
+        // We still proceed with onboarding
+      }
+    }
+
+    await onSubmit();
+  };
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
@@ -51,7 +87,7 @@ export default function PhoneCollectPage({ onSubmit, onSkip }: Props): ReactElem
           style={{ paddingBottom: Math.max(insets.bottom, 16) }}
         >
           <Pressable
-            onPress={onSubmit}
+            onPress={handleContinue}
             disabled={disabled}
             className="rounded-2xl bg-[#0B0B15] py-4 items-center"
             style={{ opacity: disabled ? 0.6 : 1 }}
