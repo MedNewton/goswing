@@ -1,6 +1,7 @@
+// pages/HomePage.tsx
 import '../style/globals.css';
 import React, { useMemo, useState, type ReactElement } from 'react';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView, View, Text } from 'react-native';
 
 import Header from '@/components/sections/Header';
@@ -12,8 +13,12 @@ import WhenSlider, { type WhenKey } from '@/components/sections/WhenSlider';
 import BottomTabBar, { type BottomTabKey } from '@/components/navigation/BottomTabBar';
 import SearchPage from '@/pages/SearchPage';
 import SavedPage from '@/components/sections/SavedPage';
-import EventPage from '@/pages/EventPage';
 import ReservationsPage from '@/pages/ReservationPage';
+
+import EventsMap from '@/components/map/EventsMap';
+import EventDetailsPage from '@/pages/EventDetailsPage';
+
+import ProfilePage from '@/pages/ProfilePage';
 
 import { getEvents, getCategories, getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
@@ -23,7 +28,7 @@ const cx = (...classes: ReadonlyArray<string | null | undefined | false>): strin
 
 type Route =
   | { name: 'root' }
-  | { name: 'eventDetails'; id: string };
+  | { name: 'eventDetails'; id: string; initialTab?: 'about' | 'offers' | 'upcoming' };
 
 export default function HomePage(): ReactElement {
   const user = getUser();
@@ -35,10 +40,11 @@ export default function HomePage(): ReactElement {
 
   const [query, setQuery] = useState<string>('');
   const [activeCats, setActiveCats] = useState<ReadonlyArray<string>>([]);
-  const [activeTab, setActiveTab] = useState<HomeTabKey>('events');
+  const [activeTab, setActiveTab] = useState<HomeTabKey>('map');
   const [whenKey, setWhenKey] = useState<WhenKey | null>(null);
 
-  const openEventDetails = (eventId: string): void => setRoute({ name: 'eventDetails', id: eventId });
+  const openEventDetails = (eventId: string, initialTab?: 'about' | 'offers' | 'upcoming'): void =>
+    setRoute({ name: 'eventDetails', id: eventId, initialTab });
   const closeEventDetails = (): void => setRoute({ name: 'root' });
 
   const toggleCategory = (key: string, next: boolean): void => {
@@ -85,12 +91,13 @@ export default function HomePage(): ReactElement {
     if (bottomTab === 'search') return <SearchPage />;
     if (bottomTab === 'saved') return <SavedPage />;
     if (bottomTab === 'reservations') return <ReservationsPage />;
+    if (bottomTab === 'profile') return <ProfilePage />;
 
     if (bottomTab !== 'home') {
       return (
         <View className="flex-1 items-center justify-center">
           <Text className="text-gray600">
-            {bottomTab.charAt(0).toUpperCase() + bottomTab.slice(1)} coming soon…
+            {String(bottomTab ?? '').charAt(0).toUpperCase() + String(bottomTab ?? '').slice(1)} coming soon…
           </Text>
         </View>
       );
@@ -136,16 +143,12 @@ export default function HomePage(): ReactElement {
               key === 'events' ? (
                 <FeaturedEvents
                   events={filteredEvents}
-                  onPressEvent={openEventDetails}
+                  onPressEvent={(id) => openEventDetails(id)}
                   onToggleFavorite={() => { }}
-                  onPressSeeAll={() => {
-                    console.log('See All tapped');
-                  }}
+                  onPressSeeAll={() => { }}
                 />
               ) : (
-                <View className="h-64 items-center justify-center bg-white rounded-2xl border border-gray200">
-                  <Text className="text-gray600">Map view coming soon…</Text>
-                </View>
+                <EventsMap onPressEvent={(id, tab) => openEventDetails(id, tab)} />
               )
             }
           />
@@ -156,14 +159,24 @@ export default function HomePage(): ReactElement {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
-      {route.name === 'root' ? renderRoot() : (
-        <EventPage eventId={route.id} onBack={closeEventDetails} onBook={(id) => console.log('Book', id)} />
+      {route.name === 'root' ? (
+        renderRoot()
+      ) : (
+        <EventDetailsPage
+          eventId={route.id}
+          initialTab={route.initialTab}
+          onBack={closeEventDetails}
+          onBook={(id) => console.log('Book', id)}
+        />
       )}
 
-      <BottomTabBar activeKey={bottomTab} onChange={(key) => {
-        setBottomTab(key);
-        if (route.name !== 'root') closeEventDetails();
-      }} />
+      <BottomTabBar
+        activeKey={bottomTab}
+        onChange={(key) => {
+          setBottomTab(key);
+          if (route.name !== 'root') closeEventDetails();
+        }}
+      />
     </SafeAreaView>
   );
 }

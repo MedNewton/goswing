@@ -1,8 +1,18 @@
 {
-    "id": "user_001",
-    "name": "Amine",
-    "avatarUri": "https://picsum.photos/seed/goswing_user/200/200",
-    "city": "Casablanca",
-    "countryCode": "MA"
+  "id": "user_001",
+  "name": "Amine",
+  "email": "amine@example.com",
+  "avatarUri": "https://picsum.photos/seed/goswing_user/200/200",
+  "city": "Casablanca",
+  "countryCode": "MA",
+  "interests": ["Music", "Arts", "Food & Drink", "Business"],
+  "stats": {
+    "attendedCount": 12,
+    "savedCount": 8,
+    "reviewsCount": 5
+  },
+  "preferences": {
+    "pushNotifications": false,
+    "locationServices": false
   }
-  
+}

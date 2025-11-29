@@ -6,9 +6,31 @@ export type UserProfile = Readonly<{
   id: ID;
   name: string;
   avatarUri?: string | null;
+
+  // Location
   city?: string;
   countryCode?: string; // e.g., "MA"
+
+  // Contact
+  email?: string | null;
+
+  // Interests (shown as chips)
+  interests?: ReadonlyArray<string>;
+
+  // Simple stats for the header tiles
+  stats?: Readonly<{
+    attendedCount?: number;
+    savedCount?: number;
+    reviewsCount?: number;
+  }>;
+
+  // Quick settings (optional; UI can still keep local state if undefined)
+  preferences?: Readonly<{
+    pushNotifications?: boolean;
+    locationServices?: boolean;
+  }>;
 }>;
+
 
 /** Lightweight attendee chip shown on EventCard */
 export type Attendee = Readonly<{
@@ -24,18 +46,24 @@ export type Category = Readonly<{
   disabled?: boolean;
 }>;
 
-/** Event domain model used across the app */
+export type LatLng = Readonly<{
+  lat: number;
+  lng: number;
+}>;
+
 export type Event = Readonly<{
   id: ID;
   title: string;
   organizer: string;
   imageUrl: string;
-  startsAtIso: string;  // ISO datetime string
+  startsAtIso: string;
   venue: string;
   city?: string;
-  priceLabel?: string;  // "Free", "From $25", etc.
+  priceLabel?: string;
   favorite?: boolean;
-  categories?: ReadonlyArray<string>; // category keys
+  categories?: ReadonlyArray<string>;
   attendees?: ReadonlyArray<Attendee>;
   attendeesExtraCount?: number;
+  location?: LatLng;
 }>;
+

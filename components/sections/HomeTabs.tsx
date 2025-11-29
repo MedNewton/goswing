@@ -59,17 +59,17 @@ export default function HomeTabs({
     <View {...rest} className={cx('w-full', className)}>
       <View className="px-4">
         <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
+        <SegButton
+            label="Map"
+            icon={<Feather name="map" size={18} color={isMap ? '#0EA5E9' : '#374151'} />}
+            selected={isMap}
+            onPress={() => onChange('map')}
+          />
           <SegButton
             label="Events"
             icon={<Feather name="grid" size={18} color={isEvents ? '#0EA5E9' : '#374151'} />}
             selected={isEvents}
             onPress={() => onChange('events')}
-          />
-          <SegButton
-            label="Map"
-            icon={<Feather name="map" size={18} color={isMap ? '#0EA5E9' : '#374151'} />}
-            selected={isMap}
-            onPress={() => onChange('map')}
           />
         </View>
       </View>

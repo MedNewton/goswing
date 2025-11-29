@@ -1,73 +1,261 @@
 [
-    {
-      "id": "evt_001",
-      "title": "GoSwing Open — Night Golf & Live DJ",
-      "organizer": "GoSwing Club",
-      "imageUrl": "https://picsum.photos/seed/goswing1/800/600",
-      "startsAtIso": "2025-12-05T20:30:00.000Z",
-      "venue": "Palm Grove Course",
-      "city": "Casablanca",
-      "priceLabel": "From $25",
-      "favorite": false,
-      "categories": ["sports", "nightlife"],
-      "attendees": [
-        { "id": "u_01", "initials": "AZ" },
-        { "id": "u_02", "initials": "LM" },
-        { "id": "u_03", "initials": "KB" }
-      ],
-      "attendeesExtraCount": 42
-    },
-    {
-      "id": "evt_002",
-      "title": "Sunset Acoustic Session",
-      "organizer": "Seabreeze Events",
-      "imageUrl": "https://picsum.photos/seed/goswing2/800/600",
-      "startsAtIso": "2025-12-12T18:00:00.000Z",
-      "venue": "Corniche Stage",
-      "city": "Casablanca",
-      "priceLabel": "Free",
-      "favorite": true,
-      "categories": ["music", "outdoor"],
-      "attendees": [
-        { "id": "u_04", "initials": "JR" },
-        { "id": "u_05", "initials": "NS" }
-      ],
-      "attendeesExtraCount": 18
-    },
-    {
-      "id": "evt_003",
-      "title": "Startup Mixer & Pitch Night",
-      "organizer": "Casa Tech Hub",
-      "imageUrl": "https://picsum.photos/seed/goswing3/800/600",
-      "startsAtIso": "2025-12-08T19:00:00.000Z",
-      "venue": "Casa Hub Auditorium",
-      "city": "Casablanca",
-      "priceLabel": "From $10",
-      "favorite": false,
-      "categories": ["business", "networking"],
-      "attendees": [
-        { "id": "u_06", "initials": "TY" },
-        { "id": "u_07", "initials": "MH" },
-        { "id": "u_08", "initials": "AP" }
-      ],
-      "attendeesExtraCount": 73
-    },
-    {
-      "id": "evt_004",
-      "title": "Weekend Food Fest",
-      "organizer": "Street Bites",
-      "imageUrl": "https://picsum.photos/seed/goswing4/800/600",
-      "startsAtIso": "2025-12-20T11:00:00.000Z",
-      "venue": "Central Park",
-      "city": "Casablanca",
-      "priceLabel": "From $5",
-      "favorite": false,
-      "categories": ["food", "family"],
-      "attendees": [
-        { "id": "u_09", "initials": "DL" },
-        { "id": "u_10", "initials": "SG" }
-      ],
-      "attendeesExtraCount": 120
-    }
-  ]
-  
+  {
+    "id": "evt_001",
+    "title": "GoSwing Open — Night Golf & Live DJ",
+    "organizer": "GoSwing Club",
+    "imageUrl": "https://picsum.photos/seed/goswing1/800/600",
+    "startsAtIso": "2025-12-05T20:30:00.000Z",
+    "venue": "Palm Grove Course",
+    "city": "Casablanca",
+    "priceLabel": "From $25",
+    "favorite": false,
+    "categories": ["sports", "nightlife"],
+    "attendees": [
+      { "id": "u_01", "initials": "AZ" },
+      { "id": "u_02", "initials": "LM" },
+      { "id": "u_03", "initials": "KB" }
+    ],
+    "attendeesExtraCount": 42,
+    "location": { "lat": 33.5735, "lng": -7.5899 }
+  },
+  {
+    "id": "evt_002",
+    "title": "Sunset Acoustic Session",
+    "organizer": "Seabreeze Events",
+    "imageUrl": "https://picsum.photos/seed/goswing2/800/600",
+    "startsAtIso": "2025-12-12T18:00:00.000Z",
+    "venue": "Corniche Stage",
+    "city": "Casablanca",
+    "priceLabel": "Free",
+    "favorite": true,
+    "categories": ["music", "outdoor"],
+    "attendees": [
+      { "id": "u_04", "initials": "JR" },
+      { "id": "u_05", "initials": "NS" }
+    ],
+    "attendeesExtraCount": 18,
+    "location": { "lat": 33.6028, "lng": -7.6540 }
+  },
+  {
+    "id": "evt_003",
+    "title": "Startup Mixer & Pitch Night",
+    "organizer": "Casa Tech Hub",
+    "imageUrl": "https://picsum.photos/seed/goswing3/800/600",
+    "startsAtIso": "2025-12-08T19:00:00.000Z",
+    "venue": "Casa Hub Auditorium",
+    "city": "Casablanca",
+    "priceLabel": "From $10",
+    "favorite": false,
+    "categories": ["business", "networking"],
+    "attendees": [
+      { "id": "u_06", "initials": "TY" },
+      { "id": "u_07", "initials": "MH" },
+      { "id": "u_08", "initials": "AP" }
+    ],
+    "attendeesExtraCount": 73,
+    "location": { "lat": 33.5722, "lng": -7.6260 }
+  },
+  {
+    "id": "evt_004",
+    "title": "Weekend Food Fest",
+    "organizer": "Street Bites",
+    "imageUrl": "https://picsum.photos/seed/goswing4/800/600",
+    "startsAtIso": "2025-12-20T11:00:00.000Z",
+    "venue": "Arab League Park",
+    "city": "Casablanca",
+    "priceLabel": "From $5",
+    "favorite": false,
+    "categories": ["food", "family"],
+    "attendees": [
+      { "id": "u_09", "initials": "DL" },
+      { "id": "u_10", "initials": "SG" }
+    ],
+    "attendeesExtraCount": 120,
+    "location": { "lat": 33.5890, "lng": -7.6200 }
+  },
+
+  {
+    "id": "evt_005",
+    "title": "Rabat Art Night Market",
+    "organizer": "Rabat Culture Dept.",
+    "imageUrl": "https://picsum.photos/seed/goswing5/800/600",
+    "startsAtIso": "2025-12-06T17:30:00.000Z",
+    "venue": "Mohammed V Theater",
+    "city": "Rabat",
+    "priceLabel": "Free",
+    "favorite": true,
+    "categories": ["art", "nightlife"],
+    "attendees": [
+      { "id": "u_11", "initials": "AF" },
+      { "id": "u_12", "initials": "BK" }
+    ],
+    "attendeesExtraCount": 25,
+    "location": { "lat": 34.0209, "lng": -6.8416 }
+  },
+  {
+    "id": "evt_006",
+    "title": "Marrakech Desert Beats",
+    "organizer": "Atlas Sound Collective",
+    "imageUrl": "https://picsum.photos/seed/goswing6/800/600",
+    "startsAtIso": "2025-12-13T21:00:00.000Z",
+    "venue": "Menara Gardens",
+    "city": "Marrakech",
+    "priceLabel": "From $30",
+    "favorite": false,
+    "categories": ["music", "festival"],
+    "attendees": [
+      { "id": "u_13", "initials": "RN" },
+      { "id": "u_14", "initials": "HM" },
+      { "id": "u_15", "initials": "SK" }
+    ],
+    "attendeesExtraCount": 88,
+    "location": { "lat": 31.6240, "lng": -8.0080 }
+  },
+  {
+    "id": "evt_007",
+    "title": "Tangier Film Under the Stars",
+    "organizer": "Strait Cinema Club",
+    "imageUrl": "https://picsum.photos/seed/goswing7/800/600",
+    "startsAtIso": "2025-12-09T20:00:00.000Z",
+    "venue": "Gran Teatro Cervantes",
+    "city": "Tangier",
+    "priceLabel": "From $8",
+    "favorite": false,
+    "categories": ["film", "outdoor"],
+    "attendees": [
+      { "id": "u_16", "initials": "AM" },
+      { "id": "u_17", "initials": "HB" }
+    ],
+    "attendeesExtraCount": 40,
+    "location": { "lat": 35.7803, "lng": -5.8080 }
+  },
+  {
+    "id": "evt_008",
+    "title": "Agadir Surf & Sound",
+    "organizer": "Taghazout Vibes",
+    "imageUrl": "https://picsum.photos/seed/goswing8/800/600",
+    "startsAtIso": "2025-12-27T16:00:00.000Z",
+    "venue": "Taghazout Bay",
+    "city": "Agadir",
+    "priceLabel": "From $15",
+    "favorite": true,
+    "categories": ["outdoor", "music", "sports"],
+    "attendees": [
+      { "id": "u_18", "initials": "YT" },
+      { "id": "u_19", "initials": "LK" }
+    ],
+    "attendeesExtraCount": 33,
+    "location": { "lat": 30.5450, "lng": -9.7110 }
+  },
+  {
+    "id": "evt_009",
+    "title": "Fes Heritage Walk & Oud Recital",
+    "organizer": "Medina Arts",
+    "imageUrl": "https://picsum.photos/seed/goswing9/800/600",
+    "startsAtIso": "2025-12-15T18:30:00.000Z",
+    "venue": "Bab Boujloud",
+    "city": "Fes",
+    "priceLabel": "From $12",
+    "favorite": false,
+    "categories": ["culture", "music", "tour"],
+    "attendees": [
+      { "id": "u_20", "initials": "NA" },
+      { "id": "u_21", "initials": "OM" },
+      { "id": "u_22", "initials": "ZK" }
+    ],
+    "attendeesExtraCount": 19,
+    "location": { "lat": 34.0640, "lng": -4.9810 }
+  },
+  {
+    "id": "evt_010",
+    "title": "Chefchaouen Blue Jazz Night",
+    "organizer": "Rif Sound Lab",
+    "imageUrl": "https://picsum.photos/seed/goswing10/800/600",
+    "startsAtIso": "2026-01-03T20:00:00.000Z",
+    "venue": "Plaza Uta el-Hammam",
+    "city": "Chefchaouen",
+    "priceLabel": "From $18",
+    "favorite": false,
+    "categories": ["music", "nightlife"],
+    "attendees": [
+      { "id": "u_23", "initials": "JB" },
+      { "id": "u_24", "initials": "FA" }
+    ],
+    "attendeesExtraCount": 27,
+    "location": { "lat": 35.1710, "lng": -5.2690 }
+  },
+  {
+    "id": "evt_011",
+    "title": "Essaouira Gnawa Jam",
+    "organizer": "Mogador Rhythms",
+    "imageUrl": "https://picsum.photos/seed/goswing11/800/600",
+    "startsAtIso": "2026-01-10T19:00:00.000Z",
+    "venue": "Skala de la Ville",
+    "city": "Essaouira",
+    "priceLabel": "From $14",
+    "favorite": true,
+    "categories": ["music", "culture"],
+    "attendees": [
+      { "id": "u_25", "initials": "GS" },
+      { "id": "u_26", "initials": "AR" },
+      { "id": "u_27", "initials": "MN" }
+    ],
+    "attendeesExtraCount": 51,
+    "location": { "lat": 31.5130, "lng": -9.7700 }
+  },
+  {
+    "id": "evt_012",
+    "title": "Ouarzazate Stargazing Meetup",
+    "organizer": "Sahara Sky Society",
+    "imageUrl": "https://picsum.photos/seed/goswing12/800/600",
+    "startsAtIso": "2026-01-17T22:00:00.000Z",
+    "venue": "Atlas Studios Outlook",
+    "city": "Ouarzazate",
+    "priceLabel": "From $20",
+    "favorite": false,
+    "categories": ["science", "outdoor"],
+    "attendees": [
+      { "id": "u_28", "initials": "RT" },
+      { "id": "u_29", "initials": "EP" }
+    ],
+    "attendeesExtraCount": 14,
+    "location": { "lat": 30.9270, "lng": -6.9090 }
+  },
+  {
+    "id": "evt_013",
+    "title": "Casablanca Tech Brunch",
+    "organizer": "Technopark Community",
+    "imageUrl": "https://picsum.photos/seed/goswing13/800/600",
+    "startsAtIso": "2026-01-12T10:30:00.000Z",
+    "venue": "Technopark Casablanca",
+    "city": "Casablanca",
+    "priceLabel": "From $9",
+    "favorite": true,
+    "categories": ["business", "networking"],
+    "attendees": [
+      { "id": "u_30", "initials": "LK" },
+      { "id": "u_31", "initials": "SS" },
+      { "id": "u_32", "initials": "RD" }
+    ],
+    "attendeesExtraCount": 34,
+    "location": { "lat": 33.5680, "lng": -7.6400 }
+  },
+  {
+    "id": "evt_014",
+    "title": "Rabat Riverside Run",
+    "organizer": "Bouregreg Athletics",
+    "imageUrl": "https://picsum.photos/seed/goswing14/800/600",
+    "startsAtIso": "2026-01-24T07:30:00.000Z",
+    "venue": "Bouregreg Marina",
+    "city": "Rabat",
+    "priceLabel": "From $12",
+    "favorite": false,
+    "categories": ["sports", "outdoor"],
+    "attendees": [
+      { "id": "u_33", "initials": "QA" },
+      { "id": "u_34", "initials": "IV" }
+    ],
+    "attendeesExtraCount": 76,
+    "location": { "lat": 34.0190, "lng": -6.8320 }
+  }
+]

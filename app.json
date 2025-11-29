@@ -21,6 +21,9 @@
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "GoSwing uses your location to show nearby events and experiences."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyAElJiLEaPb1Qg-XjzE8WmjuxrQJkFsw4w"
       }
     },
     "android": {
@@ -36,7 +39,12 @@
         "resizeMode": "contain",
         "backgroundColor": "#0B0B15"
       },
-      "backgroundColor": "#0B0B15"
+      "backgroundColor": "#0B0B15",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAElJiLEaPb1Qg-XjzE8WmjuxrQJkFsw4w"
+        }
+      }
     },
     "plugins": [
       [
