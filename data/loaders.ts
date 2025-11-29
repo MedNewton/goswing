@@ -1,15 +1,23 @@
+// loaders.ts
 import type { Event, Category, UserProfile, ID } from '@/types/domain';
 
 export function getEvents(): ReadonlyArray<Event> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const raw = require('@/data/events.json') as ReadonlyArray<Event>;
-  return raw;
+  // light normalization (optional)
+  return raw.map(e => ({
+    ...e,
+    location: e.location
+      ? { lat: Number(e.location.lat), lng: Number(e.location.lng) }
+      : undefined,
+    city: e.city ?? undefined,
+    countryCode: e.countryCode ?? undefined,
+  }));
 }
 
 export function getCategories(): ReadonlyArray<Category> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const raw = require('@/data/categories.json') as ReadonlyArray<Category>;
-  return raw;
+  return require('@/data/categories.json') as ReadonlyArray<Category>;
 }
 
 export function getUser(): UserProfile {

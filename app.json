@@ -73,7 +73,8 @@
       "eas": {
         "projectId": "0cadf90f-07f5-463f-9804-023438b6cdc5"
       },
-      "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_bWFqb3ItYmF0LTQ1LmNsZXJrLmFjY291bnRzLmRldiQ"
+      "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_bWFqb3ItYmF0LTQ1LmNsZXJrLmFjY291bnRzLmRldiQ",
+      "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAElJiLEaPb1Qg-XjzE8WmjuxrQJkFsw4w"
     }
   }
 }

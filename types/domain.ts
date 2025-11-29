@@ -1,3 +1,5 @@
+// types/domain.ts
+
 /** Common ID brand type (string) to avoid mixing with other strings */
 export type ID = string & { readonly __brand: 'ID' };
 
@@ -31,7 +33,6 @@ export type UserProfile = Readonly<{
   }>;
 }>;
 
-
 /** Lightweight attendee chip shown on EventCard */
 export type Attendee = Readonly<{
   id: ID;
@@ -51,19 +52,20 @@ export type LatLng = Readonly<{
   lng: number;
 }>;
 
+/** Event domain model used across list, map, and details screens */
 export type Event = Readonly<{
   id: ID;
   title: string;
   organizer: string;
-  imageUrl: string;
-  startsAtIso: string;
+  imageUrl: string;                 // hero / thumbnail
+  startsAtIso: string;              // ISO datetime string
   venue: string;
-  city?: string;
-  priceLabel?: string;
+  city?: string;                    // e.g., "Casablanca"
+  countryCode?: string;             // <-- added for filters like "City, CC"
+  priceLabel?: string;              // "Free", "From $25", etc.
   favorite?: boolean;
   categories?: ReadonlyArray<string>;
   attendees?: ReadonlyArray<Attendee>;
-  attendeesExtraCount?: number;
-  location?: LatLng;
+  attendeesExtraCount?: number;     // number beyond listed attendees
+  location?: LatLng;                // map pin coordinates
 }>;
-

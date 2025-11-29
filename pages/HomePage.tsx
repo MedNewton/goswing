@@ -115,6 +115,7 @@ export default function HomePage(): ReactElement {
 
         <View className="mt-3 px-4">
           <SearchBar
+            events={filteredEvents}
             value={query}
             onChangeText={setQuery}
             onSubmit={() => { }}
