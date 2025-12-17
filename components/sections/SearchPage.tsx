@@ -13,6 +13,9 @@ import EventDetailsPage from '@/pages/EventDetailsPage';
 import { getEvents } from '@/data/loaders';
 import type { Event, ID } from '@/types/domain';
 
+import { applyFiltersToEvents, sortResults } from '@/components/filters/filters';
+import type { FiltersPayload } from '@/components/filters/FiltersDrawer';
+
 export type SearchPageProps = Readonly<{ className?: string } & Omit<ViewProps, 'children'>>;
 
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string => c.filter(Boolean).join(' ');
@@ -63,36 +66,35 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
 
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
   const [center, setCenter] = useState<LatLng | null>(null);
-
   const [radiusKm, setRadiusKm] = useState<number>(RADIUS_KM_DEFAULT);
 
+  const [filters, setFilters] = useState<Partial<FiltersPayload>>({
+    sortBy: 'best',
+    dateQuick: 'any',
+    venueTypes: [],
+    musicStyles: [],
+    partyTypes: [],
+    access: [],
+  });
+
   const events = useMemo(() => getEvents(), []);
-  const resultsBase: ReadonlyArray<SearchResultItem> = useMemo(() => events.map(mapToResult), [events]);
+  const filteredByQueryAndFilters: ReadonlyArray<Event> = useMemo(() => {
+    return applyFiltersToEvents(events, query, [], filters);
+  }, [events, query, filters]);
 
-  const filtered: ReadonlyArray<SearchResultItem> = useMemo(() => {
-    let rows = resultsBase;
-
-    const q = query.trim().toLowerCase();
-    if (q) {
-      rows = rows.filter(
-        (r) =>
-          r.title.toLowerCase().includes(q) ||
-          r.organizer.toLowerCase().includes(q) ||
-          (r.venue ? r.venue.toLowerCase().includes(q) : false) ||
-          (r.city ? r.city.toLowerCase().includes(q) : false)
-      );
-    }
-
+  const filteredForMapAndList: ReadonlyArray<Event> = useMemo(() => {
+    let rows = filteredByQueryAndFilters;
     if (center) {
-      rows = rows.filter((r) => {
-        const ev = events.find((e) => e.id === r.id);
-        if (!ev?.location) return false;
-        return distanceKm(center, ev.location) <= radiusKm;
-      });
+      rows = rows.filter((e) => (e.location ? distanceKm(center, e.location) <= radiusKm : false));
     }
+    const sortBy: 'best' | 'date' | 'price' = (filters.sortBy as any) ?? 'best';
+    return sortResults(rows, sortBy);
+  }, [filteredByQueryAndFilters, center, radiusKm, filters.sortBy]);
 
-    return rows;
-  }, [resultsBase, query, center, events, radiusKm]);
+  const resultsList: ReadonlyArray<SearchResultItem> = useMemo(
+    () => filteredForMapAndList.map(mapToResult),
+    [filteredForMapAndList]
+  );
 
   if (route.name === 'eventDetails') {
     return (
@@ -111,9 +113,9 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
         <SearchBar
           value={query}
           onChangeText={setQuery}
-          events={events}
+          events={filteredForMapAndList}
           onPickEvent={(eventId) => {
-            const ev = events.find((e) => e.id === eventId);
+            const ev = filteredForMapAndList.find((e) => e.id === eventId);
             if (ev?.location) {
               setCenter({ lat: ev.location.lat, lng: ev.location.lng });
               setMode('map');
@@ -121,6 +123,11 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
             }
           }}
           onSubmit={(q) => setQuery(q)}
+          initialFilters={filters}
+          onApplyFilters={(next) => {
+            setFilters(next);
+            setMode('map');
+          }}
         />
       </View>
 
@@ -147,7 +154,7 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
       <View className="px-4 mt-4">
         <View className="flex-row items-center justify-between">
           <Text className="text-sm text-gray700">
-            {filtered.length} {filtered.length === 1 ? 'event' : 'events'} found
+            {resultsList.length} {resultsList.length === 1 ? 'event' : 'events'} found
           </Text>
           <Pressable className="flex-row items-center gap-x-2 rounded-2xl bg-gray100 border border-gray200 px-3 py-2">
             <Text className="text-sm text-gray700">Date</Text>
@@ -164,7 +171,7 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
             contentContainerStyle={{ paddingBottom: (insets.bottom || 0) + 40 }}
             keyboardShouldPersistTaps="handled"
           >
-            {filtered.map((item) => (
+            {resultsList.map((item) => (
               <Pressable key={item.id} onPress={() => openEventDetails(item.id as ID, 'about')}>
                 <SearchResultCard item={item} />
               </Pressable>
@@ -173,9 +180,10 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
           </ScrollView>
         ) : (
           <SearchEventMap
+            events={filteredForMapAndList}
             center={center}
             radiusKm={radiusKm}
-            events={events}
+            filters={filters as FiltersPayload}
             onPressEvent={(id, tab) => openEventDetails(id as ID, tab)}
             onRadiusChange={(next) => setRadiusKm(next)}
             height={600}

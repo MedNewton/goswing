@@ -17,11 +17,13 @@ import ReservationsPage from '@/pages/ReservationPage';
 
 import EventsMap from '@/components/map/EventsMap';
 import EventDetailsPage from '@/pages/EventDetailsPage';
-
 import ProfilePage from '@/pages/ProfilePage';
 
 import { getEvents, getCategories, getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
+import { useCurrentCity } from '@/hooks/useCurrentCity';
+import { applyFiltersToEvents } from '@/components/filters/filters';
+import type { FiltersPayload } from '@/components/filters/FiltersDrawer';
 
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
   classes.filter(Boolean).join(' ');
@@ -35,6 +37,8 @@ export default function HomePage(): ReactElement {
   const allEvents = getEvents();
   const categories = getCategories();
 
+  const { city, region, loading, error, refresh } = useCurrentCity();
+
   const [bottomTab, setBottomTab] = useState<BottomTabKey>('home');
   const [route, setRoute] = useState<Route>({ name: 'root' });
 
@@ -42,6 +46,17 @@ export default function HomePage(): ReactElement {
   const [activeCats, setActiveCats] = useState<ReadonlyArray<string>>([]);
   const [activeTab, setActiveTab] = useState<HomeTabKey>('map');
   const [whenKey, setWhenKey] = useState<WhenKey | null>(null);
+
+  const [filters, setFilters] = useState<Partial<FiltersPayload>>({
+    sortBy: 'best',
+    dateQuick: 'any',
+    venueTypes: [],
+    musicStyles: [],
+    partyTypes: [],
+    access: [],
+  });
+
+  const [pickedEventId, setPickedEventId] = useState<string | null>(null);
 
   const openEventDetails = (eventId: string, initialTab?: 'about' | 'offers' | 'upcoming'): void =>
     setRoute({ name: 'eventDetails', id: eventId, initialTab });
@@ -52,29 +67,8 @@ export default function HomePage(): ReactElement {
   };
 
   const filteredEvents: ReadonlyArray<Event> = useMemo(() => {
-    let list = allEvents;
-
-    if (query.trim().length > 0) {
-      const q = query.trim().toLowerCase();
-      list = list.filter(
-        (e) =>
-          e.title.toLowerCase().includes(q) ||
-          e.organizer.toLowerCase().includes(q) ||
-          e.venue.toLowerCase().includes(q) ||
-          (e.city ? e.city.toLowerCase().includes(q) : false)
-      );
-    }
-
-    if (activeCats.length > 0) {
-      list = list.filter((e) => (e.categories ?? []).some((c) => activeCats.includes(c)));
-    }
-
-    if (whenKey) {
-      list = list;
-    }
-
-    return list;
-  }, [allEvents, query, activeCats, whenKey]);
+    return applyFiltersToEvents(allEvents, query, activeCats, filters);
+  }, [allEvents, query, activeCats, filters]);
 
   const catItems: ReadonlyArray<CategoryItem> = useMemo(
     () =>
@@ -86,6 +80,19 @@ export default function HomePage(): ReactElement {
       })),
     [categories]
   );
+
+  const locationLabel =
+    loading
+      ? 'Locating…'
+      : error
+      ? user.city ?? 'Unknown'
+      : city
+      ? region
+        ? `${city}, ${region}`
+        : city
+      : user.city ?? 'Unknown';
+
+  const eventsForUI = filteredEvents;
 
   const renderRoot = (): ReactElement => {
     if (bottomTab === 'search') return <SearchPage />;
@@ -108,18 +115,31 @@ export default function HomePage(): ReactElement {
         <Header
           userName={user.name}
           greeting="Good evening"
-          locationLabel={user.city ?? 'Unknown'}
-          onPressNotifications={() => { }}
-          onPressLocation={() => { }}
+          locationLabel={locationLabel}
+          onPressNotifications={() => {}}
+          onPressLocation={refresh}
         />
 
         <View className="mt-3 px-4">
           <SearchBar
-            events={filteredEvents}
+            events={eventsForUI}
             value={query}
-            onChangeText={setQuery}
-            onSubmit={() => { }}
-            onPressFilter={() => { }}
+            onChangeText={(t) => {
+              setQuery(t);
+              setPickedEventId(null);
+            }}
+            onSubmit={() => {}}
+            onPressFilter={() => {}}
+            initialFilters={filters}
+            onApplyFilters={(f) => {
+              setFilters(f);
+              setActiveTab('map');
+              setPickedEventId(null);
+            }}
+            onPickEvent={(eventId) => {
+              setPickedEventId(eventId);
+              setActiveTab('map');
+            }}
           />
         </View>
 
@@ -139,17 +159,33 @@ export default function HomePage(): ReactElement {
         <View className="mt-4">
           <HomeTabs
             activeKey={activeTab}
-            onChange={setActiveTab}
+            onChange={(k) => setActiveTab(k)}
             renderPanel={(key) =>
               key === 'events' ? (
                 <FeaturedEvents
-                  events={filteredEvents}
+                  events={
+                    pickedEventId
+                      ? (() => {
+                          const idx = eventsForUI.findIndex((e) => String(e.id) === String(pickedEventId));
+                          if (idx <= 0) return eventsForUI;
+                          const picked = eventsForUI[idx];
+                          return [picked, ...eventsForUI.slice(0, idx), ...eventsForUI.slice(idx + 1)];
+                        })()
+                      : eventsForUI
+                  }
                   onPressEvent={(id) => openEventDetails(id)}
-                  onToggleFavorite={() => { }}
-                  onPressSeeAll={() => { }}
+                  onToggleFavorite={() => {}}
+                  onPressSeeAll={() => {}}
                 />
               ) : (
-                <EventsMap onPressEvent={(id, tab) => openEventDetails(id, tab)} />
+                <EventsMap
+                  events={eventsForUI}
+                  filters={filters as FiltersPayload}
+                  searchValue={query}
+                  onChangeSearch={setQuery}
+                  focusEventId={pickedEventId}
+                  onPressEvent={(id, tab) => openEventDetails(id, tab)}
+                />
               )
             }
           />

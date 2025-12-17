@@ -17,7 +17,12 @@
       { "id": "u_03", "initials": "KB" }
     ],
     "attendeesExtraCount": 42,
-    "location": { "lat": 33.5735, "lng": -7.5899 }
+    "location": { "lat": 33.5735, "lng": -7.5899 },
+    "venueType": "Club",
+    "musicStyles": ["House", "DJ Set"],
+    "partyTypes": ["DJ Night"],
+    "access": [],
+    "basePrice": 25
   },
   {
     "id": "evt_002",
@@ -36,7 +41,12 @@
       { "id": "u_05", "initials": "NS" }
     ],
     "attendeesExtraCount": 18,
-    "location": { "lat": 33.6028, "lng": -7.654 }
+    "location": { "lat": 33.6028, "lng": -7.654 },
+    "venueType": "Rooftop",
+    "musicStyles": ["Indie", "Live Band"],
+    "partyTypes": ["Jam Session"],
+    "access": ["free"],
+    "basePrice": 0
   },
   {
     "id": "evt_003",
@@ -56,7 +66,12 @@
       { "id": "u_08", "initials": "AP" }
     ],
     "attendeesExtraCount": 73,
-    "location": { "lat": 33.5722, "lng": -7.626 }
+    "location": { "lat": 33.5722, "lng": -7.626 },
+    "venueType": "Auditorium",
+    "musicStyles": [],
+    "partyTypes": ["Afterwork"],
+    "access": [],
+    "basePrice": 10
   },
   {
     "id": "evt_004",
@@ -75,7 +90,12 @@
       { "id": "u_10", "initials": "SG" }
     ],
     "attendeesExtraCount": 120,
-    "location": { "lat": 33.589, "lng": -7.62 }
+    "location": { "lat": 33.589, "lng": -7.62 },
+    "venueType": "Park",
+    "musicStyles": ["Jazz"],
+    "partyTypes": ["Soirée Dansante"],
+    "access": [],
+    "basePrice": 5
   },
   {
     "id": "evt_005",
@@ -94,7 +114,12 @@
       { "id": "u_12", "initials": "BK" }
     ],
     "attendeesExtraCount": 25,
-    "location": { "lat": 34.0209, "lng": -6.8416 }
+    "location": { "lat": 34.0209, "lng": -6.8416 },
+    "venueType": "Market",
+    "musicStyles": ["Oriental"],
+    "partyTypes": ["Night Market"],
+    "access": ["free"],
+    "basePrice": 0
   },
   {
     "id": "evt_006",
@@ -114,7 +139,12 @@
       { "id": "u_15", "initials": "SK" }
     ],
     "attendeesExtraCount": 88,
-    "location": { "lat": 31.624, "lng": -8.008 }
+    "location": { "lat": 31.624, "lng": -8.008 },
+    "venueType": "Garden",
+    "musicStyles": ["Techno", "House"],
+    "partyTypes": ["Festival", "DJ Night"],
+    "access": [],
+    "basePrice": 30
   },
   {
     "id": "evt_007",
@@ -133,7 +163,12 @@
       { "id": "u_17", "initials": "HB" }
     ],
     "attendeesExtraCount": 40,
-    "location": { "lat": 35.7803, "lng": -5.808 }
+    "location": { "lat": 35.7803, "lng": -5.808 },
+    "venueType": "Theater",
+    "musicStyles": [],
+    "partyTypes": ["Outdoor Screening"],
+    "access": [],
+    "basePrice": 8
   },
   {
     "id": "evt_008",
@@ -152,7 +187,12 @@
       { "id": "u_19", "initials": "LK" }
     ],
     "attendeesExtraCount": 33,
-    "location": { "lat": 30.545, "lng": -9.711 }
+    "location": { "lat": 30.545, "lng": -9.711 },
+    "venueType": "Beach",
+    "musicStyles": ["Afrobeat", "DJ Set"],
+    "partyTypes": ["Soirée Latine"],
+    "access": [],
+    "basePrice": 15
   },
   {
     "id": "evt_009",
@@ -172,7 +212,12 @@
       { "id": "u_22", "initials": "ZK" }
     ],
     "attendeesExtraCount": 19,
-    "location": { "lat": 34.064, "lng": -4.981 }
+    "location": { "lat": 34.064, "lng": -4.981 },
+    "venueType": "Square",
+    "musicStyles": ["Oriental"],
+    "partyTypes": ["Guided Tour"],
+    "access": [],
+    "basePrice": 12
   },
   {
     "id": "evt_010",
@@ -191,7 +236,12 @@
       { "id": "u_24", "initials": "FA" }
     ],
     "attendeesExtraCount": 27,
-    "location": { "lat": 35.171, "lng": -5.269 }
+    "location": { "lat": 35.171, "lng": -5.269 },
+    "venueType": "Plaza",
+    "musicStyles": ["Jazz", "Live Band"],
+    "partyTypes": ["Soirée Dansante"],
+    "access": [],
+    "basePrice": 18
   },
   {
     "id": "evt_011",
@@ -211,7 +261,12 @@
       { "id": "u_27", "initials": "MN" }
     ],
     "attendeesExtraCount": 51,
-    "location": { "lat": 31.513, "lng": -9.77 }
+    "location": { "lat": 31.513, "lng": -9.77 },
+    "venueType": "Rampart",
+    "musicStyles": ["Oriental", "Live Band"],
+    "partyTypes": ["Jam Session"],
+    "access": [],
+    "basePrice": 14
   },
   {
     "id": "evt_012",
@@ -230,7 +285,12 @@
       { "id": "u_29", "initials": "EP" }
     ],
     "attendeesExtraCount": 14,
-    "location": { "lat": 30.927, "lng": -6.909 }
+    "location": { "lat": 30.927, "lng": -6.909 },
+    "venueType": "Outlook",
+    "musicStyles": [],
+    "partyTypes": ["Meetup"],
+    "access": [],
+    "basePrice": 20
   },
   {
     "id": "evt_013",
@@ -250,7 +310,12 @@
       { "id": "u_32", "initials": "RD" }
     ],
     "attendeesExtraCount": 34,
-    "location": { "lat": 33.568, "lng": -7.64 }
+    "location": { "lat": 33.568, "lng": -7.64 },
+    "venueType": "Brasserie",
+    "musicStyles": [],
+    "partyTypes": ["Brunch", "Afterwork"],
+    "access": ["free_ladies"],
+    "basePrice": 9
   },
   {
     "id": "evt_014",
@@ -269,6 +334,11 @@
       { "id": "u_34", "initials": "IV" }
     ],
     "attendeesExtraCount": 76,
-    "location": { "lat": 34.019, "lng": -6.832 }
+    "location": { "lat": 34.019, "lng": -6.832 },
+    "venueType": "Marina",
+    "musicStyles": [],
+    "partyTypes": ["Race"],
+    "access": [],
+    "basePrice": 12
   }
 ]

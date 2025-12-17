@@ -1,9 +1,12 @@
-// components/blocks/SearchBar.tsx
+
 import React, { useMemo, useState, type ReactElement } from 'react';
 import { View, Text, Pressable, ScrollView, Keyboard, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import TextField, { type TextFieldProps } from '@/components/ui/TextField';
 import type { Event } from '@/types/domain';
+import FiltersDrawer, {
+  type FiltersPayload,
+} from '@/components/filters/FiltersDrawer';
 
 export type SearchBarProps = Readonly<
   {
@@ -15,6 +18,8 @@ export type SearchBarProps = Readonly<
     maxSuggestions?: number;
     placeholder?: string;
     onPressFilter?: () => void;
+    onApplyFilters?: (filters: FiltersPayload) => void;
+    initialFilters?: Partial<FiltersPayload>;
     disabled?: boolean;
     className?: string;
     inputProps?: Omit<TextFieldProps, 'left' | 'right' | 'value' | 'onChangeText' | 'variant' | 'size'>;
@@ -22,7 +27,6 @@ export type SearchBarProps = Readonly<
 >;
 
 const cx = (...c: ReadonlyArray<string | null | undefined | false>) => c.filter(Boolean).join(' ');
-
 type Sug = { id: string; title: string; line2?: string };
 
 function line2FromEvent(e: Event): string {
@@ -44,12 +48,16 @@ export default function SearchBar({
   maxSuggestions = 6,
   placeholder = 'Search events, organizers, venues…',
   onPressFilter,
+  onApplyFilters,
+  initialFilters,
   disabled = false,
   className,
   inputProps,
   ...rest
 }: SearchBarProps): ReactElement {
   const [open, setOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   const q = value.trim().toLowerCase();
   const MIN_CHARS = 2;
 
@@ -118,7 +126,10 @@ export default function SearchBar({
           ) : (
             <Pressable
               accessibilityRole="button"
-              onPress={onPressFilter}
+              onPress={() => {
+                onPressFilter?.();
+                setFiltersOpen(true);
+              }}
               disabled={disabled}
               className="active:opacity-80"
               hitSlop={10}
@@ -194,6 +205,18 @@ export default function SearchBar({
           />
         </View>
       ) : null}
+
+      <FiltersDrawer
+        visible={filtersOpen}
+        initial={initialFilters}
+        onClose={() => setFiltersOpen(false)}
+        onApply={(f) => {
+          onApplyFilters?.(f);
+          setFiltersOpen(false);
+        }}
+        onReset={() => {
+        }}
+      />
     </View>
   );
 }

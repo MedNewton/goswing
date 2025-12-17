@@ -1,3 +1,4 @@
+// components/sections/FeaturedEvents.tsx
 import React, { type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
 import EventCard, { type EventItem } from '@/components/blocks/EventCard';
@@ -10,6 +11,8 @@ export type FeaturedEventsProps = Readonly<{
   onPressSeeAll?: () => void;
   className?: string;
   contentClassName?: string;
+  /** NEW: visually accent the picked event */
+  highlightId?: string;
 } & Omit<ViewProps, 'children'>>;
 
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
@@ -23,6 +26,7 @@ export default function FeaturedEvents({
   onPressSeeAll,
   className,
   contentClassName,
+  highlightId,
   ...rest
 }: FeaturedEventsProps): ReactElement {
   return (
@@ -37,14 +41,25 @@ export default function FeaturedEvents({
       </View>
 
       <View className={cx('px-2 gap-y-4', contentClassName)}>
-        {events.map((ev) => (
-          <EventCard
-            key={ev.id}
-            event={ev}
-            onPress={onPressEvent}
-            onToggleFavorite={onToggleFavorite}
-          />
-        ))}
+        {events.map((ev) => {
+          const isHighlighted = highlightId && String(ev.id) === String(highlightId);
+          return (
+            <View
+              key={ev.id}
+              style={{
+                borderWidth: isHighlighted ? 2 : 0,
+                borderColor: isHighlighted ? '#0EA5E9' : 'transparent',
+                borderRadius: 16,
+              }}
+            >
+              <EventCard
+                event={ev}
+                onPress={onPressEvent}
+                onToggleFavorite={onToggleFavorite}
+              />
+            </View>
+          );
+        })}
       </View>
     </View>
   );
