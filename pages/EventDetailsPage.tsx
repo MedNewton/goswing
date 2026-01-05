@@ -1,96 +1,326 @@
 // pages/EventDetailsPage.tsx
-import React, { useMemo, useState, type ReactElement } from 'react';
-import {
-  Dimensions,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { Dimensions, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import TicketQuantitySheet, {
+  type TicketQuantities,
+  type TicketType,
+} from '@/components/blocks/TicketQuantitySheet';
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
-import { getEvents } from '@/data/loaders';
+import type { Event } from '@/types/domain';
+import * as EventsApi from '@/lib/supabase/events';
 
 export type EventDetailsPageProps = Readonly<{
-  eventId: string;
+  event: Event;
   initialTab?: 'about' | 'offers' | 'upcoming';
   onBack?: () => void;
-  onBook?: (eventId: string) => void;
+
+  // Preferred: parent routes using this payload
+  onBook?: (payload: {
+    eventId: string;
+    ticketTypes: ReadonlyArray<TicketType>;
+    quantities: TicketQuantities;
+    eventSnapshot?: {
+      title: string;
+      imageUrl?: string | null;
+      startsAtIso?: string | null;
+      venue?: string | null;
+      city?: string | null;
+    };
+  }) => void;
+
+  /**
+   * Fallback routing hook (matches your "route({ name: 'checkout', ... })" pattern)
+   * Use this when you want EventDetailsPage to be able to redirect by itself.
+   */
+  route?: (r: {
+    name: 'checkout';
+    eventId: string;
+    ticketTypes: ReadonlyArray<TicketType>;
+    quantities: TicketQuantities;
+    eventSnapshot?: {
+      title: string;
+      imageUrl?: string | null;
+      startsAtIso?: string | null;
+      venue?: string | null;
+      city?: string | null;
+    };
+  }) => void;
 }>;
 
-const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
-  c.filter(Boolean).join(' ');
+const cx = (...c: ReadonlyArray<string | null | undefined | false>): string => c.filter(Boolean).join(' ');
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = Math.max(260, Math.min(340, Math.round(SCREEN_WIDTH * 0.62)));
 
-function formatDateTime(
-  iso?: string | null
-): { date: string; time: string } | null {
+const CHECKOUT_DRAFT_KEY = '@gs:checkoutDraft';
+
+function formatDateTime(iso?: string | null): { date: string; time: string } | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  const date = d.toLocaleDateString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-  const time = d.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const date = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   return { date, time };
 }
 
+function pickDetailsFetcher(): ((id: string) => Promise<Event>) | null {
+  const api: any = EventsApi as any;
+  if (typeof api.getEventDetailsById === 'function') return api.getEventDetailsById;
+  if (typeof api.getEventById === 'function') return api.getEventById;
+  if (typeof api.getEventDetails === 'function') return api.getEventDetails;
+  return null;
+}
+
+function sumSelected(quantities: TicketQuantities, ticketTypes: ReadonlyArray<TicketType>): number {
+  let sum = 0;
+  for (const t of ticketTypes) sum += Math.max(0, quantities[t.id] ?? 0);
+  return sum;
+}
+
+function buildTrimmedSelection(
+  ticketTypes: ReadonlyArray<TicketType>,
+  quantities: TicketQuantities,
+): { selectedTypes: ReadonlyArray<TicketType>; selectedQuantities: TicketQuantities } {
+  const selectedQuantities: TicketQuantities = {};
+  const selectedIds = new Set<string>();
+
+  for (const t of ticketTypes) {
+    const q = Math.max(0, quantities[t.id] ?? 0);
+    if (q > 0) {
+      selectedQuantities[t.id] = q;
+      selectedIds.add(t.id);
+    }
+  }
+
+  const selectedTypes = ticketTypes.filter((t) => selectedIds.has(t.id));
+  return { selectedTypes, selectedQuantities };
+}
+
+async function persistCheckoutDraft(draft: unknown): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(draft));
+  } catch (e) {
+    // non-fatal: routing still works without persistence
+    console.warn('[checkoutDraft] Failed to persist draft', e);
+  }
+}
+
 export default function EventDetailsPage({
-  eventId,
+  event,
   initialTab = 'about',
   onBack,
   onBook,
+  route,
 }: EventDetailsPageProps): ReactElement {
   const insets = useSafeAreaInsets();
+
   const [activeTab, setActiveTab] = useState<'about' | 'offers' | 'upcoming'>(initialTab);
 
-  const event = useMemo(
-    () => getEvents().find((e) => e.id === eventId) ?? null,
-    [eventId]
-  );
+  const [detailsEvent, setDetailsEvent] = useState<Event>(event);
+  const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
-  if (!event) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
-        <Text className="text-gray700">Event not found.</Text>
-      </SafeAreaView>
-    );
-  }
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [ticketTypes, setTicketTypes] = useState<ReadonlyArray<TicketType>>([]);
+  const [ticketTypesLoading, setTicketTypesLoading] = useState(false);
+  const [ticketTypesError, setTicketTypesError] = useState<string | null>(null);
 
-  const dt = formatDateTime(event.startsAtIso);
+  const [quantities, setQuantities] = useState<TicketQuantities>({});
+  const [proceeding, setProceeding] = useState(false);
+
+  useEffect(() => {
+    setDetailsEvent(event);
+    setDetailsError(null);
+  }, [event]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const fetcher = pickDetailsFetcher();
+      if (!fetcher) return;
+
+      try {
+        setDetailsLoading(true);
+        setDetailsError(null);
+
+        const full = await fetcher(String(event.id));
+        if (!cancelled && full) setDetailsEvent(full);
+      } catch (e: any) {
+        if (!cancelled) setDetailsError(String(e?.message ?? e));
+      } finally {
+        if (!cancelled) setDetailsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [event.id]);
+
+  useEffect(() => {
+    setTicketTypes([]);
+    setTicketTypesError(null);
+    setTicketTypesLoading(false);
+    setQuantities({});
+    setSheetOpen(false);
+    setProceeding(false);
+  }, [detailsEvent.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!sheetOpen) return;
+
+    (async () => {
+      try {
+        setTicketTypesLoading(true);
+        setTicketTypesError(null);
+
+        const fn = (EventsApi as any)?.getTicketTypesForEvent as
+          | ((id: string) => Promise<ReadonlyArray<TicketType>>)
+          | undefined;
+
+        if (!fn) {
+          setTicketTypes([]);
+          setTicketTypesError('Missing getTicketTypesForEvent() in src/lib/supabase/events.ts');
+          return;
+        }
+
+        const types = await fn(String(detailsEvent.id));
+        if (cancelled) return;
+
+        setTicketTypes(types);
+
+        setQuantities((cur) => {
+          const next: TicketQuantities = { ...cur };
+
+          for (const t of types) {
+            if (typeof next[t.id] !== 'number') next[t.id] = 0;
+          }
+          for (const k of Object.keys(next)) {
+            if (!types.some((t) => t.id === k)) delete next[k];
+          }
+          return next;
+        });
+      } catch (e: any) {
+        if (!cancelled) setTicketTypesError(String(e?.message ?? e));
+      } finally {
+        if (!cancelled) setTicketTypesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sheetOpen, detailsEvent.id]);
+
+  const dt = useMemo(() => formatDateTime(detailsEvent.startsAtIso), [detailsEvent.startsAtIso]);
   const bottomPad = (insets.bottom || 0) + 140;
+
+  const selectedCount = useMemo(() => sumSelected(quantities, ticketTypes), [quantities, ticketTypes]);
+  const canProceed =
+    !proceeding &&
+    !ticketTypesLoading &&
+    !ticketTypesError &&
+    ticketTypes.length > 0 &&
+    selectedCount > 0;
+
+  const redirectToCheckout = (payload: {
+    eventId: string;
+    ticketTypes: ReadonlyArray<TicketType>;
+    quantities: TicketQuantities;
+    eventSnapshot?: {
+      title: string;
+      imageUrl?: string | null;
+      startsAtIso?: string | null;
+      venue?: string | null;
+      city?: string | null;
+    };
+  }): void => {
+    if (typeof onBook === 'function') {
+      onBook(payload);
+      return;
+    }
+    if (typeof route === 'function') {
+      route({ name: 'checkout', ...payload });
+      return;
+    }
+
+    console.warn(
+      '[EventDetailsPage] No onBook() and no route() were provided; cannot redirect to checkout.',
+    );
+  };
+
+  const handleProceed = (): void => {
+    if (!canProceed) return;
+
+    setProceeding(true);
+
+    const { selectedTypes, selectedQuantities } = buildTrimmedSelection(ticketTypes, quantities);
+
+    const payload = {
+      eventId: String(detailsEvent.id),
+      ticketTypes: selectedTypes,
+      quantities: selectedQuantities,
+      eventSnapshot: {
+        title: String(detailsEvent.title ?? ''),
+        imageUrl: detailsEvent.imageUrl ?? null,
+        startsAtIso: detailsEvent.startsAtIso ?? null,
+        venue: detailsEvent.venue ?? null,
+        city: detailsEvent.city ?? null,
+      },
+    } as const;
+
+    (async () => {
+      await persistCheckoutDraft({
+        ...payload,
+        createdAt: Date.now(),
+      });
+
+      setSheetOpen(false);
+      setProceeding(false);
+
+      redirectToCheckout(payload);
+    })().catch((e) => {
+      console.warn('[checkoutDraft] proceed error', e);
+
+      setProceeding(false);
+      setSheetOpen(false);
+
+      redirectToCheckout(payload);
+    });
+  };
 
   return (
     <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
       <View className="flex-1">
         <View className="relative" style={{ width: SCREEN_WIDTH, height: HERO_HEIGHT }}>
-          {event.imageUrl ? (
-            <Image source={{ uri: event.imageUrl }} className="w-full h-full" resizeMode="cover" />
+          {detailsEvent.imageUrl ? (
+            <Image source={{ uri: detailsEvent.imageUrl }} className="w-full h-full" resizeMode="cover" />
           ) : (
             <View className="w-full h-full bg-gray200" />
           )}
 
-          <View className="absolute left-3 top-3 flex-row items-center" >
+          <View className="absolute left-3 top-3 flex-row items-center">
             <CircleIcon onPress={onBack}>
               <Feather name="chevron-left" size={20} color="#111827" />
             </CircleIcon>
           </View>
 
           <View className="absolute right-3 top-3 flex-row items-center gap-x-2">
-            <CircleIcon onPress={() => {}}>
+            <CircleIcon onPress={() => { }}>
               <Feather name="heart" size={18} color="#111827" />
             </CircleIcon>
-            <CircleIcon onPress={() => {}}>
+            <CircleIcon onPress={() => { }}>
               <Feather name="share-2" size={18} color="#111827" />
             </CircleIcon>
           </View>
@@ -110,13 +340,20 @@ export default function EventDetailsPage({
                   <Text className="text-gray700 mt-1">
                     ✓ Tickets Purchased ✓ Checked In – Look for colored icons in the header!
                   </Text>
+
+                  {detailsLoading ? (
+                    <Text className="text-xs text-gray500 mt-2">Loading full event details…</Text>
+                  ) : null}
+                  {detailsError ? (
+                    <Text className="text-xs text-red-600 mt-2">Could not load full details: {detailsError}</Text>
+                  ) : null}
                 </View>
               </View>
             </Card>
           </View>
 
           <View className="px-5 mt-4">
-            <Text className="text-xl font-semibold text-black">{event.title}</Text>
+            <Text className="text-xl font-semibold text-black">{detailsEvent.title}</Text>
 
             <View className="mt-3 flex-row items-center gap-x-3">
               {dt ? (
@@ -136,8 +373,8 @@ export default function EventDetailsPage({
             <View className="mt-2 flex-row items-center gap-x-1">
               <Feather name="map-pin" size={16} color="#6B7280" />
               <Text className="text-sm text-gray700">
-                {event.venue}
-                {event.city ? `, ${event.city}` : ''}
+                {detailsEvent.venue}
+                {detailsEvent.city ? `, ${detailsEvent.city}` : ''}
               </Text>
             </View>
           </View>
@@ -154,11 +391,11 @@ export default function EventDetailsPage({
                 <View className="flex-row items-center gap-x-3">
                   <View className="h-10 w-10 rounded-full bg-gray200 items-center justify-center">
                     <Text className="text-gray800 font-medium">
-                      {event.organizer.slice(0, 2).toUpperCase()}
+                      {String(detailsEvent.organizer || 'OR').slice(0, 2).toUpperCase()}
                     </Text>
                   </View>
                   <View>
-                    <Text className="text-gray900 font-medium">{event.organizer}</Text>
+                    <Text className="text-gray900 font-medium">{detailsEvent.organizer}</Text>
                     <View className="flex-row items-center gap-x-1">
                       <Feather name="star" size={14} color="#F59E0B" />
                       <Text className="text-xs text-gray600">4.8 · 1.2k followers</Text>
@@ -327,13 +564,14 @@ export default function EventDetailsPage({
           )}
         </ScrollView>
 
-        <View
-          className="absolute inset-x-5"
-          style={{ bottom: (insets.bottom || 0) + 72 }}
-        >
+        <View className="absolute inset-x-5" style={{ bottom: (insets.bottom || 0) + 72 }}>
           <Pressable
-            onPress={() => onBook?.(event.id)}
-            className="rounded-2xl bg-black px-6 py-4 items-center justify-center"
+            onPress={() => setSheetOpen(true)}
+            className={cx(
+              'rounded-2xl px-6 py-4 items-center justify-center',
+              proceeding ? 'bg-gray700' : 'bg-black',
+            )}
+            disabled={proceeding}
             style={{
               shadowColor: '#000',
               shadowOpacity: 0.25,
@@ -342,21 +580,56 @@ export default function EventDetailsPage({
               elevation: 8,
             }}
           >
-            <Text className="text-white text-base font-semibold">Book Now</Text>
+            <Text className="text-white text-base font-semibold">
+              {proceeding ? 'Preparing checkout…' : 'Book Now'}
+            </Text>
           </Pressable>
         </View>
+
+        <TicketQuantitySheet
+          visible={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          ticketTypes={ticketTypes}
+          quantities={quantities}
+          onChangeQuantities={setQuantities}
+          onProceed={handleProceed}
+        />
+
+        {sheetOpen && ticketTypesError ? (
+          <View className="absolute left-5 right-5" style={{ bottom: (insets.bottom || 0) + 150 }}>
+            <Card variant="outlined" padding="md">
+              <Text className="text-sm text-red-600">Ticket types error: {ticketTypesError}</Text>
+            </Card>
+          </View>
+        ) : null}
+
+        {sheetOpen && ticketTypesLoading ? (
+          <View className="absolute left-5 right-5" style={{ bottom: (insets.bottom || 0) + 150 }}>
+            <Card variant="outlined" padding="md">
+              <Text className="text-sm text-gray700">Loading ticket types…</Text>
+            </Card>
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );
 }
 
-function CircleIcon({
-  children,
-  onPress,
-}: {
-  children: ReactElement;
-  onPress?: () => void;
-}): ReactElement {
+function SectionHeader({ title, action }: { title: string; action?: string }): ReactElement {
+  return (
+    <View className="px-5 mt-6 flex-row items-center justify-between">
+      <Text className="text-base font-semibold text-black">{title}</Text>
+      {action ? (
+        <View className="flex-row items-center">
+          <Text className="text-sm text-gray600 mr-1">{action}</Text>
+          <Feather name="chevron-right" size={16} color="#6B7280" />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function CircleIcon({ children, onPress }: { children: ReactElement; onPress?: () => void }): ReactElement {
   return (
     <Pressable
       accessibilityRole="button"
@@ -390,26 +663,6 @@ function ActionChip({
   );
 }
 
-function SectionHeader({
-  title,
-  action,
-}: {
-  title: string;
-  action?: string;
-}): ReactElement {
-  return (
-    <View className="px-5 mt-6 flex-row items-center justify-between">
-      <Text className="text-base font-semibold text-black">{title}</Text>
-      {action ? (
-        <View className="flex-row items-center">
-          <Text className="text-sm text-gray600 mr-1">{action}</Text>
-          <Feather name="chevron-right" size={16} color="#6B7280" />
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 function TabPill({
   label,
   selected,
@@ -424,12 +677,10 @@ function TabPill({
       onPress={onPress}
       className={cx(
         'px-0 py-1.5 rounded-full flex-1 items-center',
-        selected ? 'bg-white border border-gray300' : ''
+        selected ? 'bg-white border border-gray300' : '',
       )}
     >
-      <Text className={selected ? 'text-brand font-medium' : 'text-gray700 font-medium'}>
-        {label}
-      </Text>
+      <Text className={selected ? 'text-brand font-medium' : 'text-gray700 font-medium'}>{label}</Text>
     </Pressable>
   );
 }

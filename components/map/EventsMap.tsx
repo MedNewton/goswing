@@ -8,7 +8,6 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Event, ID } from '@/types/domain';
-import { getEvents } from '@/data/loaders';
 import FullscreenMap, { type FullItem } from '@/components/map/FullScreenMap';
 
 export type FiltersPayload = Readonly<{
@@ -88,7 +87,11 @@ export default function EventsMap({
   const openFullScreen = () => setFullScreen(true);
   const closeFullScreen = () => setFullScreen(false);
 
-  const all = useMemo<ReadonlyArray<Event>>(() => externalEvents ?? getEvents(), [externalEvents]);
+  /**
+   * IMPORTANT: We no longer fallback to local JSON (getEvents()) here.
+   * This component is now “data-source agnostic” and relies on props.
+   */
+  const all = useMemo<ReadonlyArray<Event>>(() => externalEvents ?? [], [externalEvents]);
 
   useEffect(() => {
     (async () => {

@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-} from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   Platform,
   View,
@@ -16,12 +10,7 @@ import {
   Easing,
   Image,
 } from 'react-native';
-import MapView, {
-  Marker,
-  Circle,
-  PROVIDER_GOOGLE,
-  type Region,
-} from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
@@ -29,31 +18,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Event, ID } from '@/types/domain';
 import FullscreenMap, { type FullItem } from '@/components/map/FullScreenMap';
+import type { FiltersPayload } from '@/components/filters/FiltersDrawer';
 
 type LatLng = { lat: number; lng: number };
 
-export type FiltersPayload = Readonly<{
-  sortBy: 'best' | 'date' | 'price';
-  dateQuick: 'any' | 'today' | 'tomorrow' | 'this_week' | 'this_weekend' | 'this_month' | 'pick';
-  venueTypes: string[];
-  musicStyles: string[];
-  partyTypes: string[];
-  access: ('free' | 'free_ladies')[];
-}>;
-
 export type SearchEventMapProps = Readonly<{
   center: LatLng | null;
-
   radiusKm?: number;
-
   events: ReadonlyArray<Event>;
-
   onPressEvent?: (eventId: ID, initialTab?: 'about' | 'offers' | 'upcoming') => void;
-
   onRadiusChange?: (nextRadiusKm: number) => void;
-
   height?: number;
-
   filters: FiltersPayload;
 }>;
 
@@ -81,6 +56,19 @@ function regionForRadius(lat: number, lng: number, radiusKm: number): Region {
   };
 }
 
+function safeFormatDateTime(iso?: string | null): { date: string; time: string } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const date = d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return { date, time };
+}
+
 export default function SearchEventMap({
   center,
   radiusKm = 20,
@@ -100,54 +88,49 @@ export default function SearchEventMap({
   const [userLng, setUserLng] = useState<number | null>(null);
   const [locLoading, setLocLoading] = useState(true);
 
-  const bootZoomedRef = useRef(false);
-
+  // Request location once on mount (do not re-request on center/radius changes)
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!mounted) return;
+
         if (status !== 'granted') {
-          if (mounted) {
-            setHasLocation(false);
-            setLocLoading(false);
-          }
+          setHasLocation(false);
+          setLocLoading(false);
           return;
         }
+
         const pos = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
         if (!mounted) return;
+
         setUserLat(pos.coords.latitude);
         setUserLng(pos.coords.longitude);
         setHasLocation(true);
         setLocLoading(false);
-
-        if (!center && !bootZoomedRef.current) {
-          bootZoomedRef.current = true;
-          if (radiusKm !== 20) onRadiusChange?.(20);
-          mapRef.current?.animateToRegion(
-            regionForRadius(pos.coords.latitude, pos.coords.longitude, 20),
-            500
-          );
-        }
       } catch {
-        if (mounted) {
-          setHasLocation(false);
-          setLocLoading(false);
-        }
+        if (!mounted) return;
+        setHasLocation(false);
+        setLocLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
-  }, [center, radiusKm, onRadiusChange]);
+  }, []);
 
   const items: ReadonlyArray<FullItem> = useMemo(() => {
     const list: FullItem[] = [];
+
     for (const e of events) {
-      const lat = (e as any)?.location?.lat as number | undefined;
-      const lng = (e as any)?.location?.lng as number | undefined;
+      const lat = e.location?.lat;
+      const lng = e.location?.lng;
+
       if (typeof lat === 'number' && typeof lng === 'number') {
         list.push({
           id: e.id as ID,
@@ -157,23 +140,25 @@ export default function SearchEventMap({
           startsAtIso: e.startsAtIso,
           attendees: (e.attendees ?? []).length + (e.attendeesExtraCount ?? 0),
           priceLabel: e.priceLabel ?? undefined,
-          imageUrl: (e as unknown as { imageUrl?: string | undefined })?.imageUrl,
+          imageUrl: e.imageUrl ?? undefined,
           lat,
           lng,
         });
       }
     }
+
     return list;
   }, [events]);
 
   const initialRegion = useMemo<Region>(() => {
-    if (center) {
-      return regionForRadius(center.lat, center.lng, radiusKm);
-    }
+    if (center) return regionForRadius(center.lat, center.lng, radiusKm);
+
     if (hasLocation && userLat != null && userLng != null) {
       return regionForRadius(userLat, userLng, 20);
     }
+
     if (items.length === 0) return DEFAULT_REGION;
+
     if (items.length === 1) {
       return {
         latitude: items[0].lat,
@@ -182,47 +167,67 @@ export default function SearchEventMap({
         longitudeDelta: 0.06,
       };
     }
+
     const lats = items.map((c) => c.lat);
     const lngs = items.map((c) => c.lng);
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
+
     const midLat = (minLat + maxLat) / 2;
     const midLng = (minLng + maxLng) / 2;
+
     return {
       latitude: midLat,
       longitude: midLng,
       latitudeDelta: Math.max(0.06, (maxLat - minLat) * 1.4),
       longitudeDelta: Math.max(0.06, (maxLng - minLng) * 1.4),
     };
-  }, [center, hasLocation, userLat, userLng, radiusKm, items]);
+  }, [center, radiusKm, hasLocation, userLat, userLng, items]);
 
+  // If center changes, animate to it
   useEffect(() => {
     if (!center) return;
     mapRef.current?.animateToRegion(regionForRadius(center.lat, center.lng, radiusKm), 500);
   }, [center, radiusKm]);
 
-  const handleExpand = () => {
-    const base = center
-      ? { lat: center.lat, lng: center.lng }
-      : hasLocation && userLat != null && userLng != null
-      ? { lat: userLat, lng: userLng }
-      : null;
+  // If user location becomes available and there is no center, softly focus it once
+  const bootFocusedRef = useRef(false);
+  useEffect(() => {
+    if (center) return;
+    if (!hasLocation || userLat == null || userLng == null) return;
+    if (bootFocusedRef.current) return;
 
+    bootFocusedRef.current = true;
+    if (radiusKm !== 20) onRadiusChange?.(20);
+    mapRef.current?.animateToRegion(regionForRadius(userLat, userLng, 20), 500);
+  }, [center, hasLocation, userLat, userLng, radiusKm, onRadiusChange]);
+
+  const circleCenter =
+    center ??
+    (hasLocation && userLat != null && userLng != null ? { lat: userLat, lng: userLng } : null);
+
+  const clampRadius = (v: number) => Math.max(5, Math.min(200, v));
+
+  const handleExpand = () => {
+    const base = circleCenter;
     if (!base) return;
 
-    const next = radiusKm + 40;
+    const next = clampRadius(radiusKm + 40);
     onRadiusChange?.(next);
     mapRef.current?.animateToRegion(regionForRadius(base.lat, base.lng, next), 500);
   };
 
-  const circleCenter =
-    center ??
-    (hasLocation && userLat != null && userLng != null
-      ? { lat: userLat, lng: userLng }
-      : null);
+  const handleRecenter = () => {
+    const base = circleCenter;
+    if (!base) return;
 
+    const next = clampRadius(radiusKm);
+    mapRef.current?.animateToRegion(regionForRadius(base.lat, base.lng, next), 450);
+  };
+
+  // Bottom sheet
   const [selected, setSelected] = useState<FullItem | null>(null);
   const [visible, setVisible] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
@@ -269,17 +274,9 @@ export default function SearchEventMap({
     outputRange: [0, 0.45],
   });
 
-  const formatDateTime = (iso: string) => {
-    const d = new Date(iso);
-    const date = d.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    return { date, time };
-  };
+  const selectedDt = useMemo(() => safeFormatDateTime(selected?.startsAtIso ?? null), [selected?.startsAtIso]);
 
+  // Full screen map
   const [fullScreen, setFullScreen] = useState(false);
   const [search, setSearch] = useState<string>('');
   const openFullScreen = () => setFullScreen(true);
@@ -329,9 +326,8 @@ export default function SearchEventMap({
             borderRadius: 14,
             paddingVertical: 10,
             paddingHorizontal: 12,
-            flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
+            justifyContent: 'center',
             shadowColor: '#000',
             shadowOpacity: 0.2,
             shadowRadius: 8,
@@ -367,6 +363,29 @@ export default function SearchEventMap({
           <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Expand</Text>
         </Pressable>
 
+        <Pressable
+          onPress={handleRecenter}
+          accessibilityRole="button"
+          style={{
+            position: 'absolute',
+            left: 12,
+            top: 12,
+            backgroundColor: '#0B0B15',
+            borderRadius: 14,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 6,
+          }}
+        >
+          <Feather name="crosshair" size={16} color="#FFFFFF" />
+        </Pressable>
+
         {locLoading && !center ? (
           <View
             pointerEvents="none"
@@ -395,14 +414,13 @@ export default function SearchEventMap({
         userLat={userLat}
         userLng={userLng}
         radiusKm={radiusKm}
-        onExpand={() => onRadiusChange?.(radiusKm + 40)}
+        onExpand={() => onRadiusChange?.(clampRadius(radiusKm + 40))}
         items={items}
         events={events}
         filters={filters}
         searchValue={search}
         onChangeSearch={setSearch}
-        onSearchSubmit={() => {
-        }}
+        onSearchSubmit={() => {}}
         onPressEvent={(id, tab) => {
           closeFullScreen();
           onPressEvent?.(id, tab);
@@ -410,14 +428,8 @@ export default function SearchEventMap({
       />
 
       <Modal visible={visible} transparent animationType="none" onRequestClose={closeSheet}>
-        <Animated.View
-          style={{
-            flex: 1,
-            backgroundColor: 'black',
-            opacity: backdropOpacity,
-          }}
-        >
-          <Pressable style={{ flex: 1 }} onPress={closeSheet} />
+        <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: backdropOpacity }}>
+          <Pressable style={{ flex: 1 }} onPress={closeSheet} accessibilityRole="button" />
         </Animated.View>
 
         <Animated.View
@@ -428,14 +440,9 @@ export default function SearchEventMap({
             bottom: 0,
             transform: [{ translateY }],
             backgroundColor: '#ffffff',
-
             borderTopLeftRadius: 18,
             borderTopRightRadius: 18,
-            borderBottomLeftRadius: 0,
-            borderBottomRightRadius: 0,
-
             paddingBottom: bottomPad,
-
             shadowColor: '#000',
             shadowOpacity: 0.15,
             shadowRadius: 16,
@@ -508,27 +515,18 @@ export default function SearchEventMap({
                 <View style={{ marginTop: 10, gap: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Feather name="calendar" size={16} color="#6B7280" />
-                    <Text style={{ color: '#6B7280' }}>
-                      {formatDateTime(selected.startsAtIso).date}
-                    </Text>
+                    <Text style={{ color: '#6B7280' }}>{selectedDt?.date ?? '—'}</Text>
                     <Feather name="clock" size={16} color="#6B7280" style={{ marginLeft: 14 }} />
-                    <Text style={{ color: '#6B7280' }}>
-                      {formatDateTime(selected.startsAtIso).time}
-                    </Text>
+                    <Text style={{ color: '#6B7280' }}>{selectedDt?.time ?? '—'}</Text>
                   </View>
+
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Feather name="map-pin" size={16} color="#6B7280" />
-                    <Text style={{ color: '#6B7280' }}>{selected.venue}</Text>
+                    <Text style={{ color: '#6B7280' }}>{selected.venue ?? ''}</Text>
                   </View>
                 </View>
 
-                <View
-                  style={{
-                    height: 1,
-                    backgroundColor: '#E5E7EB',
-                    marginVertical: 12,
-                  }}
-                />
+                <View style={{ height: 1, backgroundColor: '#E5E7EB', marginVertical: 12 }} />
 
                 <View
                   style={{

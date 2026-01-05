@@ -1,5 +1,5 @@
 // pages/SearchPage.tsx
-import React, { useMemo, useState, type ReactElement } from 'react';
+import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { View, Text, ScrollView, Pressable, type ViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -10,11 +10,11 @@ import SearchResultCard, { type SearchResultItem } from '@/components/ui/SearchR
 import SearchEventMap from '@/components/map/SearchEventMap';
 import EventDetailsPage from '@/pages/EventDetailsPage';
 
-import { getEvents } from '@/data/loaders';
 import type { Event, ID } from '@/types/domain';
-
 import { applyFiltersToEvents, sortResults } from '@/components/filters/filters';
 import type { FiltersPayload } from '@/components/filters/FiltersDrawer';
+
+import { getPublishedEvents } from '@/lib/supabase/events';
 
 export type SearchPageProps = Readonly<{ className?: string } & Omit<ViewProps, 'children'>>;
 
@@ -26,19 +26,19 @@ const RADIUS_KM_DEFAULT = 20;
 
 type Route =
   | { name: 'root' }
-  | { name: 'eventDetails'; id: ID; initialTab?: 'about' | 'offers' | 'upcoming' };
+  | { name: 'eventDetails'; event: Event; initialTab?: 'about' | 'offers' | 'upcoming' };
 
 function mapToResult(e: Event): SearchResultItem {
   return {
-    id: e.id,
+    id: String(e.id),
     title: e.title,
     organizer: e.organizer,
     city: e.city ?? null,
-    venue: e.venue,
-    startsAtIso: e.startsAtIso,
+    venue: e.venue ?? null,
+    startsAtIso: e.startsAtIso ?? null,
     priceLabel: e.priceLabel ?? null,
     rating: null,
-    thumbnailUrl: (e as any)?.imageUrl as string | undefined,
+    thumbnailUrl: e.imageUrl ?? null,
   };
 }
 
@@ -56,12 +56,9 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
   const insets = useSafeAreaInsets();
 
   const [route, setRoute] = useState<Route>({ name: 'root' });
-  const openEventDetails = (id: ID, initialTab?: 'about' | 'offers' | 'upcoming') =>
-    setRoute({ name: 'eventDetails', id, initialTab });
   const closeEventDetails = () => setRoute({ name: 'root' });
 
   const [mode, setMode] = useState<Mode>('map');
-
   const [query, setQuery] = useState<string>('');
 
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
@@ -77,16 +74,49 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
     access: [],
   });
 
-  const events = useMemo(() => getEvents(), []);
+  // Supabase-backed events source of truth
+  const [allEvents, setAllEvents] = useState<ReadonlyArray<Event>>([]);
+  const [eventsLoading, setEventsLoading] = useState<boolean>(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setEventsLoading(true);
+        setEventsError(null);
+        const rows = await getPublishedEvents();
+        if (!cancelled) setAllEvents(rows);
+      } catch (e: any) {
+        if (!cancelled) setEventsError(String(e?.message ?? e));
+      } finally {
+        if (!cancelled) setEventsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openEventDetailsById = (id: ID, initialTab?: 'about' | 'offers' | 'upcoming') => {
+    const ev = allEvents.find((e) => String(e.id) === String(id));
+    if (!ev) return;
+    setRoute({ name: 'eventDetails', event: ev, initialTab });
+  };
+
   const filteredByQueryAndFilters: ReadonlyArray<Event> = useMemo(() => {
-    return applyFiltersToEvents(events, query, [], filters);
-  }, [events, query, filters]);
+    return applyFiltersToEvents(allEvents, query, [], filters);
+  }, [allEvents, query, filters]);
 
   const filteredForMapAndList: ReadonlyArray<Event> = useMemo(() => {
     let rows = filteredByQueryAndFilters;
+
     if (center) {
       rows = rows.filter((e) => (e.location ? distanceKm(center, e.location) <= radiusKm : false));
     }
+
     const sortBy: 'best' | 'date' | 'price' = (filters.sortBy as any) ?? 'best';
     return sortResults(rows, sortBy);
   }, [filteredByQueryAndFilters, center, radiusKm, filters.sortBy]);
@@ -99,7 +129,7 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
   if (route.name === 'eventDetails') {
     return (
       <EventDetailsPage
-        eventId={route.id}
+        event={route.event}
         initialTab={route.initialTab}
         onBack={closeEventDetails}
         onBook={(id) => console.log('Book', id)}
@@ -115,7 +145,7 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
           onChangeText={setQuery}
           events={filteredForMapAndList}
           onPickEvent={(eventId) => {
-            const ev = filteredForMapAndList.find((e) => e.id === eventId);
+            const ev = filteredForMapAndList.find((e) => String(e.id) === String(eventId));
             if (ev?.location) {
               setCenter({ lat: ev.location.lat, lng: ev.location.lng });
               setMode('map');
@@ -135,7 +165,7 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
         <LocationPicker
           value={locationLabel}
           onChange={(label) => setLocationLabel(label)}
-          events={events}
+          events={allEvents}
           onPickCenter={(c) => {
             setCenter(c);
             setMode('map');
@@ -164,7 +194,16 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
       </View>
 
       <View className="mt-3 px-4 flex-1">
-        {mode === 'list' ? (
+        {eventsLoading ? (
+          <View className="flex-1 items-center justify-center">
+            <Text className="text-gray700">Loading events…</Text>
+          </View>
+        ) : eventsError ? (
+          <View className="flex-1 items-center justify-center px-6">
+            <Text className="text-gray900 font-semibold">Could not load events</Text>
+            <Text className="text-gray600 mt-2 text-center">{eventsError}</Text>
+          </View>
+        ) : mode === 'list' ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerClassName="gap-y-3"
@@ -172,10 +211,13 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
             keyboardShouldPersistTaps="handled"
           >
             {resultsList.map((item) => (
-              <Pressable key={item.id} onPress={() => openEventDetails(item.id as ID, 'about')}>
-                <SearchResultCard item={item} />
-              </Pressable>
+              <SearchResultCard
+                key={item.id}
+                item={item}
+                onPress={(id) => openEventDetailsById(id as ID, 'about')}
+              />
             ))}
+
             <View style={{ height: (insets.bottom || 0) + 24 }} />
           </ScrollView>
         ) : (
@@ -184,7 +226,7 @@ export default function SearchPage({ className, ...rest }: SearchPageProps): Rea
             center={center}
             radiusKm={radiusKm}
             filters={filters as FiltersPayload}
-            onPressEvent={(id, tab) => openEventDetails(id as ID, tab)}
+            onPressEvent={(id, tab) => openEventDetailsById(id as ID, tab)}
             onRadiusChange={(next) => setRadiusKm(next)}
             height={600}
           />

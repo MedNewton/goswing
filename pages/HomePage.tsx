@@ -1,6 +1,6 @@
 // pages/HomePage.tsx
 import '../style/globals.css';
-import React, { useMemo, useState, type ReactElement } from 'react';
+import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView, View, Text } from 'react-native';
 
@@ -18,23 +18,58 @@ import ReservationsPage from '@/pages/ReservationPage';
 import EventsMap from '@/components/map/EventsMap';
 import EventDetailsPage from '@/pages/EventDetailsPage';
 import ProfilePage from '@/pages/ProfilePage';
+import CheckoutPage from '@/pages/CheckoutPage';
 
-import { getEvents, getCategories, getUser } from '@/data/loaders';
+import { getCategories, getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
 import { useCurrentCity } from '@/hooks/useCurrentCity';
 import { applyFiltersToEvents } from '@/components/filters/filters';
 import type { FiltersPayload } from '@/components/filters/FiltersDrawer';
+
+import { getPublishedEvents } from '@/lib/supabase/events';
+import type { TicketQuantities, TicketType } from '@/components/blocks/TicketQuantitySheet';
+
+import { supabase } from '@/lib/supabase';
+
+import { useAuth } from '@/providers/AuthProvider';
+
 
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
   classes.filter(Boolean).join(' ');
 
 type Route =
   | { name: 'root' }
-  | { name: 'eventDetails'; id: string; initialTab?: 'about' | 'offers' | 'upcoming' };
+  | { name: 'eventDetails'; event: Event; initialTab?: 'about' | 'offers' | 'upcoming' }
+  | {
+    name: 'checkout';
+    event: Event; // keep full event so Checkout + back navigation is easy
+    eventId: string;
+    ticketTypes: ReadonlyArray<TicketType>;
+    quantities: TicketQuantities;
+    eventSnapshot?: {
+      title: string;
+      imageUrl?: string | null;
+      startsAtIso?: string | null;
+      venue?: string | null;
+      city?: string | null;
+    };
+  };
 
 export default function HomePage(): ReactElement {
-  const user = getUser();
-  const allEvents = getEvents();
+  const { user: clerkUser } = useAuth();
+
+  const user = getUser(); // you can keep this for UI mock fields (name/city) if you want
+
+  // This is the ONLY userId you should pass to CheckoutPage/createReservation
+  const userId: string = String(clerkUser?.id ?? '');
+
+  if (!userId) {
+    // AuthGate should prevent this, but keep it as a safety net
+    return <Text>Missing auth session</Text>;
+  }
+
+
+  
   const categories = getCategories();
 
   const { city, region, loading, error, refresh } = useCurrentCity();
@@ -58,8 +93,51 @@ export default function HomePage(): ReactElement {
 
   const [pickedEventId, setPickedEventId] = useState<string | null>(null);
 
-  const openEventDetails = (eventId: string, initialTab?: 'about' | 'offers' | 'upcoming'): void =>
-    setRoute({ name: 'eventDetails', id: eventId, initialTab });
+  // Supabase-backed events source of truth
+  const [allEvents, setAllEvents] = useState<ReadonlyArray<Event>>([]);
+  const [eventsLoading, setEventsLoading] = useState<boolean>(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const { data, error } = await supabase.rpc('debug_auth_context');
+      console.log('debug_auth_context', { data, error });
+      console.log("log")
+    })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setEventsLoading(true);
+        setEventsError(null);
+
+        const events = await getPublishedEvents();
+
+        if (!cancelled) setAllEvents(events);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!cancelled) setEventsError(msg);
+      } finally {
+        if (!cancelled) setEventsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openEventDetails = (eventId: string, initialTab?: 'about' | 'offers' | 'upcoming'): void => {
+    const ev = allEvents.find((e) => String(e.id) === String(eventId));
+    if (!ev) return;
+    setRoute({ name: 'eventDetails', event: ev, initialTab });
+  };
+
   const closeEventDetails = (): void => setRoute({ name: 'root' });
 
   const toggleCategory = (key: string, next: boolean): void => {
@@ -78,21 +156,23 @@ export default function HomePage(): ReactElement {
         emoji: c.emoji,
         disabled: !!c.disabled,
       })),
-    [categories]
+    [categories],
   );
 
   const locationLabel =
     loading
       ? 'Locating…'
       : error
-      ? user.city ?? 'Unknown'
-      : city
-      ? region
-        ? `${city}, ${region}`
+        ? user.city ?? 'Unknown'
         : city
-      : user.city ?? 'Unknown';
+          ? region
+            ? `${city}, ${region}`
+            : city
+          : user.city ?? 'Unknown';
 
   const eventsForUI = filteredEvents;
+
+
 
   const renderRoot = (): ReactElement => {
     if (bottomTab === 'search') return <SearchPage />;
@@ -104,8 +184,26 @@ export default function HomePage(): ReactElement {
       return (
         <View className="flex-1 items-center justify-center">
           <Text className="text-gray600">
-            {String(bottomTab ?? '').charAt(0).toUpperCase() + String(bottomTab ?? '').slice(1)} coming soon…
+            {String(bottomTab ?? '').charAt(0).toUpperCase() + String(bottomTab ?? '').slice(1)} coming
+            soon…
           </Text>
+        </View>
+      );
+    }
+
+    if (eventsLoading) {
+      return (
+        <View className="flex-1 items-center justify-center">
+          <Text className="text-gray700">Loading events…</Text>
+        </View>
+      );
+    }
+
+    if (eventsError) {
+      return (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-gray900 font-semibold">Could not load events</Text>
+          <Text className="text-gray600 mt-2 text-center">{eventsError}</Text>
         </View>
       );
     }
@@ -116,7 +214,7 @@ export default function HomePage(): ReactElement {
           userName={user.name}
           greeting="Good evening"
           locationLabel={locationLabel}
-          onPressNotifications={() => {}}
+          onPressNotifications={() => { }}
           onPressLocation={refresh}
         />
 
@@ -128,16 +226,16 @@ export default function HomePage(): ReactElement {
               setQuery(t);
               setPickedEventId(null);
             }}
-            onSubmit={() => {}}
-            onPressFilter={() => {}}
+            onSubmit={() => { }}
+            onPressFilter={() => { }}
             initialFilters={filters}
             onApplyFilters={(f) => {
               setFilters(f);
               setActiveTab('map');
               setPickedEventId(null);
             }}
-            onPickEvent={(eventId) => {
-              setPickedEventId(eventId);
+            onPickEvent={(id) => {
+              setPickedEventId(id);
               setActiveTab('map');
             }}
           />
@@ -166,16 +264,17 @@ export default function HomePage(): ReactElement {
                   events={
                     pickedEventId
                       ? (() => {
-                          const idx = eventsForUI.findIndex((e) => String(e.id) === String(pickedEventId));
-                          if (idx <= 0) return eventsForUI;
-                          const picked = eventsForUI[idx];
-                          return [picked, ...eventsForUI.slice(0, idx), ...eventsForUI.slice(idx + 1)];
-                        })()
+                        const idx = eventsForUI.findIndex((e) => String(e.id) === String(pickedEventId));
+                        if (idx <= 0) return eventsForUI;
+                        const picked = eventsForUI[idx];
+                        return [picked, ...eventsForUI.slice(0, idx), ...eventsForUI.slice(idx + 1)];
+                      })()
                       : eventsForUI
                   }
                   onPressEvent={(id) => openEventDetails(id)}
-                  onToggleFavorite={() => {}}
-                  onPressSeeAll={() => {}}
+                  onToggleFavorite={() => { }}
+                  onPressSeeAll={() => { }}
+                  highlightId={pickedEventId ?? undefined}
                 />
               ) : (
                 <EventsMap
@@ -198,12 +297,32 @@ export default function HomePage(): ReactElement {
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
       {route.name === 'root' ? (
         renderRoot()
-      ) : (
+      ) : route.name === 'eventDetails' ? (
         <EventDetailsPage
-          eventId={route.id}
+          event={route.event}
           initialTab={route.initialTab}
           onBack={closeEventDetails}
-          onBook={(id) => console.log('Book', id)}
+          // IMPORTANT: use onBook to route (no type mismatch, no setRoute signature issues)
+          onBook={(payload) => {
+            setRoute({
+              name: 'checkout',
+              event: route.event,
+              eventId: payload.eventId,
+              ticketTypes: payload.ticketTypes,
+              quantities: payload.quantities,
+              eventSnapshot: payload.eventSnapshot,
+            });
+          }}
+        />
+      ) : (
+        <CheckoutPage
+          event={route.event}
+          userId={userId}
+          ticketTypes={route.ticketTypes}
+          quantities={route.quantities}
+          // If CheckoutPage also expects eventSnapshot, pass it too:
+          // eventSnapshot={route.eventSnapshot}
+          onBack={() => setRoute({ name: 'eventDetails', event: route.event })}
         />
       )}
 

@@ -1,4 +1,3 @@
-
 import React, { useMemo, useRef, useState, useEffect, type ReactElement } from 'react';
 import {
   Modal,
@@ -23,14 +22,14 @@ export type DateQuick =
   | 'this_month'
   | 'pick';
 
-export type FiltersPayload = {
+export type FiltersPayload = Readonly<{
   sortBy: SortBy;
   dateQuick: DateQuick;
   venueTypes: string[];
   musicStyles: string[];
   partyTypes: string[];
   access: ('free' | 'free_ladies')[];
-};
+}>;
 
 export type FiltersDrawerProps = Readonly<{
   visible: boolean;
@@ -211,6 +210,15 @@ function GridMulti({
   );
 }
 
+const DEFAULTS: FiltersPayload = {
+  sortBy: 'best',
+  dateQuick: 'any',
+  venueTypes: [],
+  musicStyles: [],
+  partyTypes: [],
+  access: [],
+};
+
 export default function FiltersDrawer({
   visible,
   onClose,
@@ -220,24 +228,16 @@ export default function FiltersDrawer({
 }: FiltersDrawerProps): ReactElement {
   const insets = useSafeAreaInsets();
 
-  const initialNormalized = useMemo<FiltersPayload>(
-    () => ({
-      sortBy: initial?.sortBy ?? 'best',
-      dateQuick: initial?.dateQuick ?? 'any',
-      venueTypes: initial?.venueTypes ?? [],
-      musicStyles: initial?.musicStyles ?? [],
-      partyTypes: initial?.partyTypes ?? [],
-      access: initial?.access ?? [],
-    }),
-    [
-      initial?.sortBy,
-      initial?.dateQuick,
-      initial?.venueTypes,
-      initial?.musicStyles,
-      initial?.partyTypes,
-      initial?.access,
-    ],
-  );
+  const initialNormalized = useMemo<FiltersPayload>(() => {
+    return {
+      sortBy: initial?.sortBy ?? DEFAULTS.sortBy,
+      dateQuick: initial?.dateQuick ?? DEFAULTS.dateQuick,
+      venueTypes: [...(initial?.venueTypes ?? DEFAULTS.venueTypes)],
+      musicStyles: [...(initial?.musicStyles ?? DEFAULTS.musicStyles)],
+      partyTypes: [...(initial?.partyTypes ?? DEFAULTS.partyTypes)],
+      access: [...(initial?.access ?? DEFAULTS.access)],
+    };
+  }, [initial]);
 
   const [sortBy, setSortBy] = useState<SortBy>(initialNormalized.sortBy);
   const [dateQuick, setDateQuick] = useState<DateQuick>(initialNormalized.dateQuick);
@@ -254,10 +254,10 @@ export default function FiltersDrawer({
 
     setSortBy(initialNormalized.sortBy);
     setDateQuick(initialNormalized.dateQuick);
-    setVenueTypes(initialNormalized.venueTypes);
-    setMusicStyles(initialNormalized.musicStyles);
-    setPartyTypes(initialNormalized.partyTypes);
-    setAccess(initialNormalized.access);
+    setVenueTypes([...initialNormalized.venueTypes]);
+    setMusicStyles([...initialNormalized.musicStyles]);
+    setPartyTypes([...initialNormalized.partyTypes]);
+    setAccess([...initialNormalized.access]);
   }, [initialKey, initialNormalized]);
 
   const payload: FiltersPayload = useMemo(
@@ -288,6 +288,7 @@ export default function FiltersDrawer({
         }),
       ]).start();
     } else {
+      // Hard reset as a safety net (e.g., parent forcibly hides modal)
       translateX.setValue(1);
       backdrop.setValue(0);
     }
@@ -310,6 +311,24 @@ export default function FiltersDrawer({
     ]).start(({ finished }) => {
       if (finished) onClose();
     });
+  };
+
+  const applyAndClose = () => {
+    onApply?.(payload);
+    handleClose();
+  };
+
+  const resetAndApply = () => {
+    setSortBy(DEFAULTS.sortBy);
+    setDateQuick(DEFAULTS.dateQuick);
+    setVenueTypes([]);
+    setMusicStyles([]);
+    setPartyTypes([]);
+    setAccess([]);
+
+    onReset?.();
+    onApply?.(DEFAULTS);
+    handleClose();
   };
 
   return (
@@ -344,10 +363,17 @@ export default function FiltersDrawer({
           overflow: 'hidden',
         }}
       >
-        <View style={{ paddingTop: Math.max(insets.top, 12) }} className="px-4 pb-3 border-b border-gray200 bg-white">
+        <View
+          style={{ paddingTop: Math.max(insets.top, 12) }}
+          className="px-4 pb-3 border-b border-gray200 bg-white"
+        >
           <View className="flex-row items-center justify-between">
             <Text className="text-gray800 text-base font-semibold">Filters</Text>
-            <Pressable accessibilityRole="button" onPress={handleClose} className="rounded-2xl px-3 py-2 bg-gray100 border border-gray200">
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleClose}
+              className="rounded-2xl px-3 py-2 bg-gray100 border border-gray200"
+            >
               <Feather name="x" size={16} color="#111827" />
             </Pressable>
           </View>
@@ -391,7 +417,9 @@ export default function FiltersDrawer({
             <GridMulti
               options={[...VENUE_TYPES]}
               values={venueTypes}
-              onToggle={(k) => setVenueTypes((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))}
+              onToggle={(k) =>
+                setVenueTypes((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))
+              }
             />
           </Section>
 
@@ -399,7 +427,9 @@ export default function FiltersDrawer({
             <GridMulti
               options={[...MUSIC_STYLES]}
               values={musicStyles}
-              onToggle={(k) => setMusicStyles((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))}
+              onToggle={(k) =>
+                setMusicStyles((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))
+              }
             />
           </Section>
 
@@ -407,7 +437,9 @@ export default function FiltersDrawer({
             <GridMulti
               options={[...PARTY_TYPES]}
               values={partyTypes}
-              onToggle={(k) => setPartyTypes((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))}
+              onToggle={(k) =>
+                setPartyTypes((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))
+              }
             />
           </Section>
 
@@ -418,7 +450,11 @@ export default function FiltersDrawer({
                 { key: 'free_ladies', label: 'Free for Ladies' },
               ]}
               values={access}
-              onToggle={(k) => setAccess((cur) => (cur.includes(k as any) ? cur.filter((x) => x !== k) : [...cur, k as any]))}
+              onToggle={(k) =>
+                setAccess((cur) =>
+                  cur.includes(k as any) ? cur.filter((x) => x !== k) : [...cur, k as any]
+                )
+              }
             />
           </Section>
         </ScrollView>
@@ -430,26 +466,7 @@ export default function FiltersDrawer({
           <View className="flex-col gap-y-3">
             <Pressable
               accessibilityRole="button"
-              onPress={() => {
-                setSortBy('best');
-                setDateQuick('any');
-                setVenueTypes([]);
-                setMusicStyles([]);
-                setPartyTypes([]);
-                setAccess([]);
-
-                onReset?.();
-
-                const defaults: FiltersPayload = {
-                  sortBy: 'best',
-                  dateQuick: 'any',
-                  venueTypes: [],
-                  musicStyles: [],
-                  partyTypes: [],
-                  access: [],
-                };
-                onApply?.(defaults);
-              }}
+              onPress={resetAndApply}
               className="w-full rounded-2xl border border-gray300 bg-white py-3 items-center"
             >
               <Text className="text-gray800 font-semibold">Reset</Text>
@@ -457,10 +474,7 @@ export default function FiltersDrawer({
 
             <Pressable
               accessibilityRole="button"
-              onPress={() => {
-                onApply?.(payload);
-                handleClose();
-              }}
+              onPress={applyAndClose}
               className="w-full rounded-2xl bg-gray900 py-3 items-center"
             >
               <Text className="text-white font-semibold">Apply Filters</Text>

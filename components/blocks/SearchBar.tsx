@@ -80,7 +80,7 @@ export default function SearchBar({
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, maxSuggestions)
-      .map(({ e }) => ({ id: e.id, title: e.title, line2: line2FromEvent(e) }));
+      .map(({ e }) => ({ id: String(e.id), title: e.title, line2: line2FromEvent(e) }));
   }, [q, events, maxSuggestions]);
 
   const hasSug = suggestions.length > 0;
