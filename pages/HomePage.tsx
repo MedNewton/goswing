@@ -323,6 +323,11 @@ export default function HomePage(): ReactElement {
           // If CheckoutPage also expects eventSnapshot, pass it too:
           // eventSnapshot={route.eventSnapshot}
           onBack={() => setRoute({ name: 'eventDetails', event: route.event })}
+          onSeeReservations={() => {
+            // go back to root, switch bottom tab to reservations
+            setRoute({ name: 'root' });
+            setBottomTab('reservations');
+          }}
         />
       )}
 

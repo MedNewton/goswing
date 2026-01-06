@@ -3,13 +3,23 @@ import { Pressable, Text, View } from 'react-native';
 
 export type SegKey = 'active' | 'past';
 
+export type SegmentedTabsCounts = Readonly<{
+  active: number;
+  past: number;
+}>;
+
 export default function SegmentedTabs({
   active,
   onChange,
+  counts,
 }: {
   active: SegKey;
   onChange: (key: SegKey) => void;
+  counts: SegmentedTabsCounts;
 }): ReactElement {
+  const activeCount = Number.isFinite(counts?.active) ? Math.max(0, Math.trunc(counts.active)) : 0;
+  const pastCount = Number.isFinite(counts?.past) ? Math.max(0, Math.trunc(counts.past)) : 0;
+
   const Pill = ({ label, keyv }: { label: string; keyv: SegKey }) => {
     const selected = active === keyv;
     return (
@@ -31,8 +41,8 @@ export default function SegmentedTabs({
 
   return (
     <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
-      <Pill label="Active (2)" keyv="active" />
-      <Pill label="Past (1)" keyv="past" />
+      <Pill label={`Active (${activeCount})`} keyv="active" />
+      <Pill label={`Past (${pastCount})`} keyv="past" />
     </View>
   );
 }
