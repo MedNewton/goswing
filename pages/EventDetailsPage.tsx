@@ -13,6 +13,8 @@ import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import type { Event } from '@/types/domain';
 import * as EventsApi from '@/lib/supabase/events';
+import { getEventAccess, type EventAccess } from '@/lib/supabase/eventAccess';
+
 
 export type EventDetailsPageProps = Readonly<{
   event: Event;
@@ -110,6 +112,27 @@ async function persistCheckoutDraft(draft: unknown): Promise<void> {
   }
 }
 
+function AccessRow({
+  done,
+  label,
+}: {
+  done: boolean;
+  label: string;
+}): ReactElement {
+  return (
+    <View className="flex-row items-center mt-1">
+      <Feather
+        name={done ? 'check-circle' : 'clock'}
+        size={16}
+        color={done ? '#16A34A' : '#6B7280'}
+        style={{ marginRight: 8 }}
+      />
+      <Text className="text-gray700">{label}</Text>
+    </View>
+  );
+}
+
+
 export default function EventDetailsPage({
   event,
   initialTab = 'about',
@@ -132,6 +155,12 @@ export default function EventDetailsPage({
 
   const [quantities, setQuantities] = useState<TicketQuantities>({});
   const [proceeding, setProceeding] = useState(false);
+
+  const [access, setAccess] = useState<EventAccess | null>(null);
+  const [accessLoading, setAccessLoading] = useState<boolean>(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
+
+
 
   useEffect(() => {
     setDetailsEvent(event);
@@ -222,6 +251,30 @@ export default function EventDetailsPage({
       cancelled = true;
     };
   }, [sheetOpen, detailsEvent.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setAccessLoading(true);
+        setAccessError(null);
+
+        const a = await getEventAccess({ eventId: String(detailsEvent.id) });
+        if (!cancelled) setAccess(a);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!cancelled) setAccessError(msg);
+      } finally {
+        if (!cancelled) setAccessLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailsEvent.id]);
+
 
   const dt = useMemo(() => formatDateTime(detailsEvent.startsAtIso), [detailsEvent.startsAtIso]);
   const bottomPad = (insets.bottom || 0) + 140;
@@ -334,12 +387,30 @@ export default function EventDetailsPage({
           <View className="px-5 mt-4">
             <Card variant="outlined" padding="md">
               <View className="flex-row items-start gap-x-2">
-                <Feather name="info" size={14} color="#6B7280" style={{ marginTop: 2 }} />
                 <View className="flex-1">
-                  <Text className="text-gray800 font-medium">Demo Active:</Text>
-                  <Text className="text-gray700 mt-1">
-                    ✓ Tickets Purchased ✓ Checked In – Look for colored icons in the header!
-                  </Text>
+                <AccessRow
+                    done={Boolean(access?.steps.ticketsPurchased)}
+                    label="Tickets Purchased"
+                  />
+                  <AccessRow
+                    done={Boolean(access?.steps.reservationConfirmed)}
+                    label="Reservation confirmed"
+                  />
+                  <AccessRow
+                    done={Boolean(access?.steps.checkedIn)}
+                    label="Checked In"
+                  />
+
+                  {accessLoading ? (
+                    <Text className="text-xs text-gray500 mt-2">Checking your reservation…</Text>
+                  ) : null}
+
+                  {accessError ? (
+                    <Text className="text-xs text-red-600 mt-2">
+                      Could not verify access: {accessError}
+                    </Text>
+                  ) : null}
+
 
                   {detailsLoading ? (
                     <Text className="text-xs text-gray500 mt-2">Loading full event details…</Text>
@@ -379,11 +450,15 @@ export default function EventDetailsPage({
             </View>
           </View>
 
-          <View className="px-5 mt-4 flex-row items-center gap-x-8">
-            <ActionChip bg="bg-black" icon="music" label="Suggest Songs" darkIcon />
-            <ActionChip bg="bg-indigo-600" icon="camera" label="Take Story" />
-            <ActionChip bg="bg-amber-400" icon="gift" label="Give Reward" darkText />
+          {access?.canUseCheckedInActions ? (
+            <View className="px-5 mt-4 flex-row w-full items-stretch gap-x-3">
+            <ActionChip className="flex-1 justify-center" bg="bg-black" icon="music" label="Suggest Songs" />
+            <ActionChip className="flex-1 justify-center" bg="bg-indigo-600" icon="camera" label="Take Story" />
+            <ActionChip className="flex-1 justify-center" bg="bg-amber-400" icon="gift" label="Give Reward" darkText />
           </View>
+          
+          ) : null}
+
 
           <View className="px-5 mt-4">
             <Card variant="outlined" padding="md">
@@ -648,20 +723,29 @@ function ActionChip({
   label,
   darkText,
   darkIcon,
+  className,
 }: {
   bg: 'bg-black' | 'bg-indigo-600' | 'bg-amber-400';
   icon: keyof typeof Feather.glyphMap;
   label: string;
   darkText?: boolean;
   darkIcon?: boolean;
+  className?: string;
 }): ReactElement {
   return (
-    <View className={cx('flex-row items-center gap-x-2 rounded-xl px-3 py-2', bg)}>
+    <View
+      className={cx(
+        'flex-row items-center gap-x-2 rounded-xl px-3 py-2',
+        bg,
+        className,
+      )}
+    >
       <Feather name={icon} size={14} color={darkIcon ? '#111827' : '#FFFFFF'} />
       <Text className={cx('text-sm', darkText ? 'text-black' : 'text-white')}>{label}</Text>
     </View>
   );
 }
+
 
 function TabPill({
   label,

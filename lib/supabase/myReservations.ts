@@ -1,10 +1,15 @@
 // src/lib/supabase/myReservations.ts
 import { supabase } from '@/lib/supabase';
+import { buildTicketQr } from '@/lib/qr/ticketQr';
 
 export type MyReservationTicket = Readonly<{
   id: string;
   holder: string;
   qrLabel: string; // e.g. "#1"
+
+  // NEW: stable QR payload
+  qrValue: string;
+  qrCaption?: string | null;
 }>;
 
 export type MyReservationGroup = Readonly<{
@@ -192,7 +197,6 @@ export async function getMyReservations(): Promise<MyReservationsResult> {
       )
     `
     )
-    // Newest orders first; UI will sort per-tab again
     .order('ordered_at', { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -202,6 +206,8 @@ export async function getMyReservations(): Promise<MyReservationsResult> {
   const now = Date.now();
 
   const mapped: MyReservation[] = rows.map((r) => {
+    const reservationId = String(r.id);
+
     const event = r.event ?? null;
     const venue = event?.venues ?? null;
 
@@ -239,7 +245,6 @@ export async function getMyReservations(): Promise<MyReservationsResult> {
       holderByTicketId.set(String(h.ticket_id), full || 'Ticket holder');
     }
 
-    // total tickets: prefer actual tickets count; fallback to sum of item quantities
     const totalTickets =
       tickets.length > 0
         ? tickets.length
@@ -251,11 +256,22 @@ export async function getMyReservations(): Promise<MyReservationsResult> {
             const groupTickets = tickets
               .filter((t) => t.reservationItemId === it.id)
               .sort((a, b) => a.ticketNo - b.ticketNo)
-              .map<MyReservationTicket>((t) => ({
-                id: t.id,
-                holder: holderByTicketId.get(t.id) ?? 'Ticket holder',
-                qrLabel: `#${t.ticketNo}`,
-              }));
+              .map<MyReservationTicket>((t) => {
+                const { qrValue, qrCaption } = buildTicketQr({
+                  reservationId,
+                  ticketId: String(t.id),
+                  ticketNo: t.ticketNo,
+                  ticketCode: t.ticketCode,
+                });
+
+                return {
+                  id: t.id,
+                  holder: holderByTicketId.get(t.id) ?? 'Ticket holder',
+                  qrLabel: `#${t.ticketNo}`,
+                  qrValue,
+                  qrCaption,
+                };
+              });
 
             return {
               id: it.id,
@@ -269,7 +285,7 @@ export async function getMyReservations(): Promise<MyReservationsResult> {
     const savedBadge = savingsCents > 0 ? `Saved ${formatMoneyCents(savingsCents, currency)}` : null;
 
     return {
-      id: String(r.id),
+      id: reservationId,
       title: safeTrim(event?.title) || 'Event',
       ticketsBadge: buildTicketsBadge(totalTickets),
       dateLabel,
@@ -283,9 +299,6 @@ export async function getMyReservations(): Promise<MyReservationsResult> {
     };
   });
 
-  // Active vs Past:
-  // Active = upcoming OR ongoing
-  // Past   = started AND ended (requires ends_at)
   const active: MyReservation[] = [];
   const past: MyReservation[] = [];
 
@@ -296,32 +309,25 @@ export async function getMyReservations(): Promise<MyReservationsResult> {
     const startMs = startIso ? new Date(startIso).getTime() : NaN;
     const endMs = endIso ? new Date(endIso).getTime() : NaN;
 
-    // If starts_at is missing/invalid, keep it active so it doesn’t disappear.
     if (!Number.isFinite(startMs)) {
       active.push(r);
       continue;
     }
 
-    // Upcoming => Active
     if (now < startMs) {
       active.push(r);
       continue;
     }
 
-    // Started. If we have a valid ends_at:
     if (Number.isFinite(endMs)) {
-      if (endMs <= now) past.push(r); // ended
-      else active.push(r); // ongoing
+      if (endMs <= now) past.push(r);
+      else active.push(r);
       continue;
     }
 
-    // No ends_at: cannot confirm it ended => keep Active
     active.push(r);
   }
 
-  // Sorting:
-  // - Active: soonest first
-  // - Past: most recent first
   active.sort((a, b) => {
     const am = a.startsAtIso ? new Date(a.startsAtIso).getTime() : Number.POSITIVE_INFINITY;
     const bm = b.startsAtIso ? new Date(b.startsAtIso).getTime() : Number.POSITIVE_INFINITY;

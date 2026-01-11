@@ -1,4 +1,4 @@
-// app/(tabs)/saved.tsx  (or wherever your SavedPage lives)
+// app/(tabs)/saved.tsx  (SavedPage)
 import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   View,
@@ -13,15 +13,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import SearchResultCard, { type SearchResultItem } from '@/components/ui/SearchResultCard';
 
-// Adjust these two imports to match your project:
-import { supabase } from '@/lib/supabase'; // your initialized Supabase client
-import { useAuth } from '@clerk/clerk-expo'; // if you use something else, replace userId source
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { listFavoriteEvents } from '@/lib/supabase/saved';
 
 export type SavedPageProps = Readonly<
   {
     className?: string;
+
+    /**
+     * Called when user taps a saved event card.
+     * Parent should open EventDetailsPage (your HomePage route state).
+     */
+    onOpenEvent?: (eventId: string) => void;
   } & Omit<ViewProps, 'children'>
 >;
 
@@ -53,7 +58,11 @@ function mapToResult(e: {
   };
 }
 
-export default function SavedPage({ className, ...rest }: SavedPageProps): ReactElement {
+export default function SavedPage({
+  className,
+  onOpenEvent,
+  ...rest
+}: SavedPageProps): ReactElement {
   const [tab, setTab] = useState<SavedTab>('events');
   const insets = useSafeAreaInsets();
 
@@ -63,7 +72,6 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
   const [loading, setLoading] = useState<boolean>(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  // keep organizers tab as-is for now
   const savedOrganizers: ReadonlyArray<{ id: string; name: string }> = useMemo(
     () => [
       { id: 'org_1', name: 'Blue Note Entertainment' },
@@ -97,18 +105,20 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
 
         if (!mounted) return;
 
-        setSavedEvents(rows.map((r) =>
-          mapToResult({
-            id: r.id,
-            title: r.title,
-            organizer: r.organizer,
-            city: r.city ?? null,
-            venue: r.venue,
-            startsAtIso: r.startsAtIso,
-            priceLabel: r.priceLabel ?? null,
-            imageUrl: r.imageUrl ?? null,
-          }),
-        ));
+        setSavedEvents(
+          rows.map((r) =>
+            mapToResult({
+              id: r.id,
+              title: r.title,
+              organizer: r.organizer,
+              city: r.city ?? null,
+              venue: r.venue,
+              startsAtIso: r.startsAtIso,
+              priceLabel: r.priceLabel ?? null,
+              imageUrl: r.imageUrl ?? null,
+            }),
+          ),
+        );
       } catch (e: any) {
         if (!mounted) return;
         setErrMsg(e?.message ? String(e.message) : 'Failed to load saved events.');
@@ -125,6 +135,10 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
   }, [tab, userId]);
 
   const bottomPad = (insets.bottom || 0) + 88;
+
+  const handlePressEvent = (eventId: string): void => {
+    if (typeof onOpenEvent === 'function') onOpenEvent(String(eventId));
+  };
 
   return (
     <View {...rest} className={cx('flex-1 w-full', className)}>
@@ -190,7 +204,13 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
                 </Text>
               </View>
             ) : (
-              savedEvents.map((it) => <SearchResultCard key={it.id} item={it} />)
+              savedEvents.map((it) => (
+                <SearchResultCard
+                  key={it.id}
+                  item={it}
+                  onPress={() => handlePressEvent(it.id)}
+                />
+              ))
             )}
 
             <View style={{ height: (insets.bottom || 0) + 24 }} />

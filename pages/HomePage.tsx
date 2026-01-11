@@ -13,12 +13,13 @@ import WhenSlider, { type WhenKey } from '@/components/sections/WhenSlider';
 import BottomTabBar, { type BottomTabKey } from '@/components/navigation/BottomTabBar';
 import SearchPage from '@/pages/SearchPage';
 import SavedPage from '@/components/sections/SavedPage';
-import ReservationsPage from '@/pages/ReservationPage';
+import ReservationsPage from '@/pages/ReservationPage'; // <-- ensure this path matches your actual file
 
 import EventsMap from '@/components/map/EventsMap';
 import EventDetailsPage from '@/pages/EventDetailsPage';
 import ProfilePage from '@/pages/ProfilePage';
 import CheckoutPage from '@/pages/CheckoutPage';
+import ReservationDetailsRoutePage from '@/pages/ReservationDetailsRoutePage';
 
 import { getCategories, getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
@@ -31,6 +32,8 @@ import type { TicketQuantities, TicketType } from '@/components/blocks/TicketQua
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
+
 
 import { useEventFavorites } from '@/hooks/useEventFavorites';
 
@@ -53,7 +56,8 @@ type Route =
         venue?: string | null;
         city?: string | null;
       };
-    };
+    }
+  | { name: 'reservationDetails'; reservationId: string };
 
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -61,14 +65,13 @@ function errorMessage(e: unknown): string {
 }
 
 export default function HomePage(): ReactElement {
+  const { isSignedIn, getToken } = useClerkAuth();
   const { user: clerkUser } = useAuth();
   const user = getUser();
 
-  // This is the ONLY userId you should pass to CheckoutPage/createReservation
   const userId: string = String(clerkUser?.id ?? '');
 
   if (!userId) {
-    // AuthGate should prevent this, but keep it as a safety net
     return <Text>Missing auth session</Text>;
   }
 
@@ -94,23 +97,38 @@ export default function HomePage(): ReactElement {
 
   const [pickedEventId, setPickedEventId] = useState<string | null>(null);
 
-  // Supabase-backed events source of truth
   const [allEvents, setAllEvents] = useState<ReadonlyArray<Event>>([]);
   const [eventsLoading, setEventsLoading] = useState<boolean>(true);
   const [eventsError, setEventsError] = useState<string | null>(null);
 
-  // Favorites: run ONCE here, then pass down
   const fav = useEventFavorites({
     supabase,
     userId,
   });
 
   useEffect(() => {
+    let cancelled = false;
+  
     (async () => {
+      if (!isSignedIn) return;
+  
+      // Wait until Clerk can actually produce the Supabase JWT
+      const token = await getToken({ template: 'supabase' });
+      if (cancelled) return;
+  
+      if (!token) {
+        console.log('debug_auth_context skipped: no supabase token yet');
+        return;
+      }
+  
       const { data, error: rpcError } = await supabase.rpc('debug_auth_context');
-      console.log('debug_auth_context', { data, error: rpcError });
+      if (!cancelled) console.log('debug_auth_context', { data, error: rpcError });
     })();
-  }, []);
+  
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, getToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +139,6 @@ export default function HomePage(): ReactElement {
         setEventsError(null);
 
         const events = await getPublishedEvents();
-
         if (!cancelled) setAllEvents(events);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -136,13 +153,13 @@ export default function HomePage(): ReactElement {
     };
   }, []);
 
+  const closeOverlay = (): void => setRoute({ name: 'root' });
+
   const openEventDetails = (eventId: string, initialTab?: 'about' | 'offers' | 'upcoming'): void => {
     const ev = allEvents.find((e) => String(e.id) === String(eventId));
     if (!ev) return;
     setRoute({ name: 'eventDetails', event: ev, initialTab });
   };
-
-  const closeEventDetails = (): void => setRoute({ name: 'root' });
 
   const toggleCategory = (key: string, next: boolean): void => {
     setActiveCats((prev) => (next ? [...prev, key] : prev.filter((k) => k !== key)));
@@ -167,14 +184,13 @@ export default function HomePage(): ReactElement {
     loading
       ? 'Locating…'
       : error
-        ? user.city ?? 'Unknown'
+      ? user.city ?? 'Unknown'
+      : city
+      ? region
+        ? `${city}, ${region}`
         : city
-          ? region
-            ? `${city}, ${region}`
-            : city
-          : user.city ?? 'Unknown';
+      : user.city ?? 'Unknown';
 
-  // IMPORTANT: add favorite flag from hook
   const eventsForUIWithFav: ReadonlyArray<Event> = useMemo(() => {
     return filteredEvents.map((ev) => ({
       ...ev,
@@ -192,8 +208,31 @@ export default function HomePage(): ReactElement {
 
   const renderRoot = (): ReactElement => {
     if (bottomTab === 'search') return <SearchPage />;
-    if (bottomTab === 'saved') return <SavedPage />;
-    if (bottomTab === 'reservations') return <ReservationsPage />;
+
+    if (bottomTab === 'saved')
+      return (
+        <SavedPage
+          onOpenEvent={(eventId) => {
+            const ev = allEvents.find((e) => String(e.id) === String(eventId));
+            if (!ev) {
+              Alert.alert('Event', 'This event is not loaded yet. Pull to refresh and try again.');
+              return;
+            }
+            setRoute({ name: 'eventDetails', event: ev, initialTab: 'about' });
+          }}
+        />
+      );
+
+    if (bottomTab === 'reservations')
+      return (
+        <ReservationsPage
+          route={(r) => {
+            // r is { name: 'reservationDetails'; reservationId: string }
+            setRoute(r);
+          }}
+        />
+      );
+
     if (bottomTab === 'profile') return <ProfilePage />;
 
     if (bottomTab !== 'home') {
@@ -296,8 +335,6 @@ export default function HomePage(): ReactElement {
                   }
                   onPressEvent={(id: string) => openEventDetails(id)}
                   onToggleFavorite={handleToggleFavorite}
-                  // Do not pass no-op handlers
-                  // onPressSeeAll={() => {}}
                   highlightId={pickedEventId ?? undefined}
                 />
               ) : (
@@ -327,7 +364,7 @@ export default function HomePage(): ReactElement {
         <EventDetailsPage
           event={route.event}
           initialTab={route.initialTab}
-          onBack={closeEventDetails}
+          onBack={closeOverlay}
           onBook={(payload) => {
             setRoute({
               name: 'checkout',
@@ -338,6 +375,11 @@ export default function HomePage(): ReactElement {
               eventSnapshot: payload.eventSnapshot,
             });
           }}
+        />
+      ) : route.name === 'reservationDetails' ? (
+        <ReservationDetailsRoutePage
+          reservationId={route.reservationId}
+          onBack={closeOverlay}
         />
       ) : (
         <CheckoutPage
@@ -357,7 +399,7 @@ export default function HomePage(): ReactElement {
         activeKey={bottomTab}
         onChange={(key) => {
           setBottomTab(key);
-          if (route.name !== 'root') closeEventDetails();
+          if (route.name !== 'root') closeOverlay();
         }}
       />
     </SafeAreaView>
