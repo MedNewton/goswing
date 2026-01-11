@@ -91,7 +91,9 @@ function mapRowToEvent(row: DbEventRow): Event {
 
   return {
     // IMPORTANT: UI id is external_id if present (e.g. "evt_005"), otherwise uuid
-    id: String(row.external_id ?? row.id) as ID,
+    // IMPORTANT: Use DB UUID for all relational writes/reads (favorites, reservations, etc.)
+    id: String(row.id) as ID,
+    externalId: row.external_id ?? undefined,
 
     title: String(row.title ?? ''),
     organizer: String(row.organizers?.name ?? ''),
@@ -176,13 +178,15 @@ type DbTicketTypeRow = {
 async function resolveEventDbId(eventUiId: string): Promise<string | null> {
   const key = String(eventUiId);
 
-  if (isUuid(key)) {
-    const { data, error } = await supabase.from('events').select('id').eq('id', key).maybeSingle();
-    if (error) throw new Error(error.message);
-    return data?.id ?? null;
-  }
+  if (isUuid(key)) return key;
 
-  const { data, error } = await supabase.from('events').select('id').eq('external_id', key).maybeSingle();
+
+  const { data, error } = await supabase
+    .from('events')
+    .select('id')
+    .eq('external_id', key)
+    .maybeSingle();
+
   if (error) throw new Error(error.message);
   return data?.id ?? null;
 }

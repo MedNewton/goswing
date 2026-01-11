@@ -1,6 +1,7 @@
 // components/sections/FeaturedEvents.tsx
 import React, { type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
+
 import EventCard, { type EventItem } from '@/components/blocks/EventCard';
 
 export type FeaturedEventsProps = Readonly<{
@@ -11,7 +12,6 @@ export type FeaturedEventsProps = Readonly<{
   onPressSeeAll?: () => void;
   className?: string;
   contentClassName?: string;
-  /** NEW: visually accent the picked event */
   highlightId?: string;
 } & Omit<ViewProps, 'children'>>;
 
@@ -33,8 +33,13 @@ export default function FeaturedEvents({
     <View {...rest} className={cx('w-full', className)}>
       <View className="px-5 mt-1 mb-4 flex-row items-center justify-between">
         <Text className="text-base font-semibold text-black">{title}</Text>
+
         {onPressSeeAll ? (
-          <Pressable accessibilityRole="button" onPress={onPressSeeAll} className="active:opacity-90">
+          <Pressable
+            accessibilityRole="button"
+            onPress={onPressSeeAll}
+            className="active:opacity-90"
+          >
             <Text className="text-sm text-gray700 font-medium">See All</Text>
           </Pressable>
         ) : null}
@@ -42,21 +47,18 @@ export default function FeaturedEvents({
 
       <View className={cx('px-2 gap-y-4', contentClassName)}>
         {events.map((ev) => {
-          const isHighlighted = highlightId && String(ev.id) === String(highlightId);
+          const isHighlighted = Boolean(highlightId) && String(ev.id) === String(highlightId);
+
           return (
             <View
-              key={ev.id}
+              key={String(ev.id)}
               style={{
                 borderWidth: isHighlighted ? 2 : 0,
                 borderColor: isHighlighted ? '#0EA5E9' : 'transparent',
                 borderRadius: 16,
               }}
             >
-              <EventCard
-                event={ev}
-                onPress={onPressEvent}
-                onToggleFavorite={onToggleFavorite}
-              />
+              <EventCard event={ev} onPress={onPressEvent} onToggleFavorite={onToggleFavorite} />
             </View>
           );
         })}

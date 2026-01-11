@@ -1,3 +1,4 @@
+// components/map/FullScreenMap.tsx
 import React, {
   useEffect,
   useMemo,
@@ -28,7 +29,14 @@ import SearchBar from '@/components/blocks/SearchBar';
 
 export type FiltersPayload = Readonly<{
   sortBy: 'best' | 'date' | 'price';
-  dateQuick: 'any' | 'today' | 'tomorrow' | 'this_week' | 'this_weekend' | 'this_month' | 'pick';
+  dateQuick:
+    | 'any'
+    | 'today'
+    | 'tomorrow'
+    | 'this_week'
+    | 'this_weekend'
+    | 'this_month'
+    | 'pick';
   venueTypes: string[];
   musicStyles: string[];
   partyTypes: string[];
@@ -88,12 +96,17 @@ function regionForRadius(lat: number, lng: number, radiusKm: number): Region {
   };
 }
 
-function applyFiltersToEvents(events: ReadonlyArray<Event>, f: FiltersPayload): ReadonlyArray<Event> {
+function applyFiltersToEvents(
+  events: ReadonlyArray<Event>,
+  f: FiltersPayload,
+): ReadonlyArray<Event> {
   let rows = events;
 
   if (f.access.length > 0) {
     rows = rows.filter((e) => {
-      const evAccess = ((e as any)?.access ?? []) as ReadonlyArray<'free' | 'free_ladies'>;
+      const evAccess = ((e as any)?.access ?? []) as ReadonlyArray<
+        'free' | 'free_ladies'
+      >;
       return f.access.every((flag) => evAccess.includes(flag));
     });
   }
@@ -123,6 +136,7 @@ function applyFiltersToEvents(events: ReadonlyArray<Event>, f: FiltersPayload): 
     const now = new Date();
     rows = rows.filter((e) => {
       const d = new Date(e.startsAtIso);
+
       const sameDay = (a: Date, b: Date) =>
         a.getFullYear() === b.getFullYear() &&
         a.getMonth() === b.getMonth() &&
@@ -170,7 +184,9 @@ function applyFiltersToEvents(events: ReadonlyArray<Event>, f: FiltersPayload): 
   }
 
   if (f.sortBy === 'date') {
-    rows = [...rows].sort((a, b) => +new Date(a.startsAtIso) - +new Date(b.startsAtIso));
+    rows = [...rows].sort(
+      (a, b) => +new Date(a.startsAtIso) - +new Date(b.startsAtIso),
+    );
   } else if (f.sortBy === 'price') {
     rows = [...rows].sort((a, b) => {
       const pa = Number((a as any)?.basePrice ?? Number.MAX_SAFE_INTEGER);
@@ -202,7 +218,30 @@ export default function FullscreenMap({
   onPressEvent,
 }: FullscreenMapProps): ReactElement {
   const insets = useSafeAreaInsets();
+
   const mapRef = useRef<MapView | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  // Suppress auto camera moves while user intentionally moves the map (e.g., picking an event)
+  const suppressAutoMoveRef = useRef(false);
+  const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const suppressAutoMove = (ms = 900) => {
+    suppressAutoMoveRef.current = true;
+    if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current);
+    suppressTimerRef.current = setTimeout(() => {
+      suppressAutoMoveRef.current = false;
+    }, ms);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current);
+    };
+  }, []);
+
+  // If user picks before the map is ready, we store the target region and apply on ready.
+  const pendingRegionRef = useRef<Region | null>(null);
 
   const [selected, setSelected] = useState<FullItem | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -252,8 +291,15 @@ export default function FullscreenMap({
 
   const formatDateTime = (iso: string) => {
     const d = new Date(iso);
-    const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const date = d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    const time = d.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
     return { date, time };
   };
 
@@ -269,7 +315,11 @@ export default function FullscreenMap({
     [events, filters],
   );
 
-  const allowedIds = useMemo(() => new Set(filteredEvents.map((e) => String(e.id))), [filteredEvents]);
+  const allowedIds = useMemo(
+    () => new Set(filteredEvents.map((e) => String(e.id))),
+    [filteredEvents],
+  );
+
   const filteredItems: ReadonlyArray<FullItem> = useMemo(
     () => items.filter((it) => allowedIds.has(String(it.id))),
     [items, allowedIds],
@@ -283,54 +333,39 @@ export default function FullscreenMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowedIds]);
 
+  // One single guarded auto-camera effect (prevents snapping back after search pick)
   useEffect(() => {
     if (!visible) return;
+    if (!mapReady) return;
+    if (suppressAutoMoveRef.current) return;
+
     const m = mapRef.current;
     if (!m) return;
 
-    const t = setTimeout(() => {
-      if (currentRegion) {
-        m.animateToRegion(currentRegion, 400);
-      } else if (filteredItems.length > 0) {
-        try {
-          m.fitToCoordinates(
-            filteredItems.map((c) => ({ latitude: c.lat, longitude: c.lng })),
-            { edgePadding: { top: 60, right: 60, bottom: 60, left: 60 }, animated: true }
-          );
-        } catch {
-          /* noop */
-        }
-      }
-    }, 60);
-
-    return () => clearTimeout(t);
-  }, [visible, currentRegion, filteredItems]);
-
-  useEffect(() => {
-    if (!visible) return;
-    const m = mapRef.current;
-    if (!m || !currentRegion) return;
-    m.animateToRegion(currentRegion, 400);
-  }, [visible, currentRegion]);
-
-  useEffect(() => {
-    if (!visible) return;
-    if (currentRegion) return;
-    const m = mapRef.current;
-    if (!m || filteredItems.length === 0) return;
-    try {
-      m.fitToCoordinates(
-        filteredItems.map((c) => ({ latitude: c.lat, longitude: c.lng })),
-        { edgePadding: { top: 60, right: 60, bottom: 60, left: 60 }, animated: true }
-      );
-    } catch {
-      /* noop */
+    if (currentRegion) {
+      m.animateToRegion(currentRegion, 400);
+      return;
     }
-  }, [visible, filteredItems, currentRegion]);
+
+    if (filteredItems.length > 0) {
+      try {
+        m.fitToCoordinates(
+          filteredItems.map((c) => ({ latitude: c.lat, longitude: c.lng })),
+          {
+            edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+            animated: true,
+          },
+        );
+      } catch {
+        // noop
+      }
+    }
+  }, [visible, mapReady, currentRegion, filteredItems]);
 
   const handlePickEventFromSearch = (eventId: string) => {
     const ev = filteredEvents.find((e) => String(e.id) === String(eventId));
     const loc = ev?.location;
+
     if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') {
       return;
     }
@@ -350,15 +385,23 @@ export default function FullscreenMap({
         lng: loc.lng,
       } as FullItem);
 
-    mapRef.current?.animateToRegion(
-      {
-        latitude: loc.lat,
-        longitude: loc.lng,
-        latitudeDelta: 0.06,
-        longitudeDelta: 0.06,
-      },
-      350
-    );
+    const targetRegion: Region = {
+      latitude: loc.lat,
+      longitude: loc.lng,
+      latitudeDelta: 0.06,
+      longitudeDelta: 0.06,
+    };
+
+    // Prevent any auto effect from snapping the camera back right after this move
+    suppressAutoMove(900);
+
+    if (!mapReady) {
+      pendingRegionRef.current = targetRegion;
+    } else {
+      requestAnimationFrame(() => {
+        mapRef.current?.animateToRegion(targetRegion, 350);
+      });
+    }
 
     onChangeSearch(String(ev?.title ?? ''));
     openSheet(fromItems);
@@ -385,6 +428,14 @@ export default function FullscreenMap({
           initialRegion={currentRegion ?? initialRegion}
           showsUserLocation={hasLocation}
           followsUserLocation={false}
+          onMapReady={() => {
+            setMapReady(true);
+            if (pendingRegionRef.current) {
+              const r = pendingRegionRef.current;
+              pendingRegionRef.current = null;
+              requestAnimationFrame(() => mapRef.current?.animateToRegion(r, 350));
+            }
+          }}
         >
           {hasLocation && userLat != null && userLng != null ? (
             <Circle
@@ -429,11 +480,8 @@ export default function FullscreenMap({
           >
             <Pressable
               onPress={() => {
-                if (sheetVisible) {
-                  closeSheet();
-                } else {
-                  onClose();
-                }
+                if (sheetVisible) closeSheet();
+                else onClose();
               }}
               accessibilityRole="button"
               style={{
@@ -480,7 +528,7 @@ export default function FullscreenMap({
               onChangeText={onChangeSearch}
               events={filteredEvents}
               onSubmit={(q) => onSearchSubmit?.(q)}
-              onPickEvent={(eventId) => handlePickEventFromSearch(eventId)}
+              onPickEvent={handlePickEventFromSearch}
               onPressFilter={onSearchFilter}
               className="w-full"
             />
@@ -489,13 +537,7 @@ export default function FullscreenMap({
       </View>
 
       <Modal visible={sheetVisible} transparent animationType="none" onRequestClose={closeSheet}>
-        <Animated.View
-          style={{
-            flex: 1,
-            backgroundColor: 'black',
-            opacity: backdropOpacity,
-          }}
-        >
+        <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: backdropOpacity }}>
           <Pressable style={{ flex: 1 }} onPress={closeSheet} />
         </Animated.View>
 
@@ -553,6 +595,7 @@ export default function FullscreenMap({
                       {formatDateTime(selected.startsAtIso).time}
                     </Text>
                   </View>
+
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Feather name="map-pin" size={16} color="#6B7280" />
                     <Text style={{ color: '#6B7280' }}>{selected.venue}</Text>
@@ -612,7 +655,9 @@ export default function FullscreenMap({
                       alignItems: 'center',
                     }}
                   >
-                    <Text style={{ color: '#0B1220', fontWeight: '600' }}>See All Offers</Text>
+                    <Text style={{ color: '#0B1220', fontWeight: '600' }}>
+                      See All Offers
+                    </Text>
                   </Pressable>
 
                   <Pressable

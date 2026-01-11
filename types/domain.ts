@@ -36,6 +36,7 @@ export type LatLng = Readonly<{ lat: number; lng: number }>;
 
 export type Event = Readonly<{
   id: ID;
+  externalId?: string;
   title: string;
   organizer: string;
   imageUrl: string;

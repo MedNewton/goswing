@@ -1,3 +1,4 @@
+// components/blocks/EventCard.tsx
 import React, { type ReactElement, memo } from 'react';
 import {
   Image,
@@ -80,9 +81,7 @@ const Attendees = memo(function Attendees({
           <Text className="text-xs text-gray700">{a.initials}</Text>
         </View>
       ))}
-      {extra > 0 ? (
-        <Text className="text-xs text-gray500">+{extra}</Text>
-      ) : null}
+      {extra > 0 ? <Text className="text-xs text-gray500">+{extra}</Text> : null}
     </View>
   );
 });
@@ -120,19 +119,29 @@ export default function EventCard({
         ) : null}
 
         <View className="absolute right-3 top-3">
-          <IconButton
+          {/* Robust: ensure the tap always registers even if IconButton is not a Pressable internally */}
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel={event.favorite ? 'Remove from favorites' : 'Add to favorites'}
-            icon={<Text className="text-lg">{event.favorite ? '❤️' : '🤍'}</Text>}
-            variant="ghost"
-            tone="gray"
-            size="md"
-            onPress={() => onToggleFavorite?.(event.id, !event.favorite)}
-          />
+            hitSlop={10}
+            onPress={() => onToggleFavorite?.(String(event.id), !Boolean(event.favorite))}
+            className="active:opacity-90"
+          >
+            <IconButton
+              accessibilityLabel={event.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              icon={<Text className="text-lg">{event.favorite ? '❤️' : '🤍'}</Text>}
+              variant="ghost"
+              tone="gray"
+              size="md"
+              // keep this too (in case IconButton *does* handle presses)
+              onPress={() => onToggleFavorite?.(String(event.id), !Boolean(event.favorite))}
+            />
+          </Pressable>
         </View>
       </View>
 
       <View className="p-4">
-        <Pressable onPress={() => onPress?.(event.id)} className="active:opacity-90">
+        <Pressable onPress={() => onPress?.(String(event.id))} className="active:opacity-90">
           <Text className="text-lg font-bold text-black" numberOfLines={2}>
             {event.title}
           </Text>
@@ -143,7 +152,7 @@ export default function EventCard({
             <View className="flex-row items-center gap-x-2">
               <Text className="text-base">📅</Text>
               <Text className="text-sm text-gray800">
-                {dateLabel}  <Text className="text-gray400">•</Text>  {timeLabel}
+                {dateLabel} <Text className="text-gray400">•</Text> {timeLabel}
               </Text>
             </View>
 
@@ -158,10 +167,7 @@ export default function EventCard({
 
           {event.attendees && event.attendees.length > 0 ? (
             <View className="mt-3">
-              <Attendees
-                attendees={event.attendees}
-                extra={event.attendeesExtraCount ?? 0}
-              />
+              <Attendees attendees={event.attendees} extra={event.attendeesExtraCount ?? 0} />
             </View>
           ) : null}
         </Pressable>

@@ -1,6 +1,16 @@
 // components/map/EventsMap.tsx
 import React, { useMemo, useRef, useEffect, useState, type ReactElement } from 'react';
-import { Platform, View, Pressable, Text, Modal, Animated, Easing, Image } from 'react-native';
+import {
+  Platform,
+  View,
+  Pressable,
+  Text,
+  Modal,
+  Animated,
+  Easing,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
@@ -20,7 +30,8 @@ export type FiltersPayload = Readonly<{
 }>;
 
 const isExpoGo = Constants.appOwnership === 'expo';
-const provider = Platform.OS === 'ios' ? (isExpoGo ? undefined : PROVIDER_GOOGLE) : PROVIDER_GOOGLE;
+const provider =
+  Platform.OS === 'ios' ? (isExpoGo ? undefined : PROVIDER_GOOGLE) : PROVIDER_GOOGLE;
 
 const DEFAULT_REGION: Region = {
   latitude: 33.5731,
@@ -42,6 +53,17 @@ function regionForRadius(lat: number, lng: number, radiusKm: number): Region {
   };
 }
 
+function safeFormatDateTime(iso?: string | null): { date: string; time: string } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return { date, time };
+}
+
+type LatLng = { lat: number; lng: number };
+
 export type EventsMapProps = Readonly<{
   onPressEvent?: (eventId: string, initialTab?: 'about' | 'offers' | 'upcoming') => void;
   events?: ReadonlyArray<Event>;
@@ -50,6 +72,8 @@ export type EventsMapProps = Readonly<{
   radiusKm?: number;
   onRadiusChange?: (next: number) => void;
   filters: FiltersPayload;
+
+  // These can still exist for parent integration; fullscreen search is local now.
   searchValue: string;
   onChangeSearch: (text: string) => void;
   onSearchSubmit?: (query: string) => void;
@@ -64,97 +88,67 @@ export default function EventsMap({
   radiusKm: radiusKmProp,
   onRadiusChange,
   filters,
+  // kept for compatibility with your existing call-sites:
   searchValue,
   onChangeSearch,
   onSearchSubmit,
   onSearchFilter,
 }: EventsMapProps): ReactElement {
   const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 12);
+
   const mapRef = useRef<MapView | null>(null);
 
   const [hasLocation, setHasLocation] = useState(false);
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLng, setUserLng] = useState<number | null>(null);
+  const [locLoading, setLocLoading] = useState(true);
 
   const [radiusKmInternal, setRadiusKmInternal] = useState<number>(20);
   const radiusKm = radiusKmProp ?? radiusKmInternal;
+
   const setRadius = (next: number) => {
     if (onRadiusChange) onRadiusChange(next);
     else setRadiusKmInternal(next);
   };
 
-  const [fullScreen, setFullScreen] = useState(false);
-  const openFullScreen = () => setFullScreen(true);
-  const closeFullScreen = () => setFullScreen(false);
+  const clampRadius = (v: number) => Math.max(5, Math.min(200, v));
 
-  /**
-   * IMPORTANT: We no longer fallback to local JSON (getEvents()) here.
-   * This component is now “data-source agnostic” and relies on props.
-   */
   const all = useMemo<ReadonlyArray<Event>>(() => externalEvents ?? [], [externalEvents]);
 
+  // Request location once on mount
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
+        if (!mounted) return;
+
+        if (status !== 'granted') {
+          setHasLocation(false);
+          setLocLoading(false);
+          return;
+        }
+
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!mounted) return;
+
         setUserLat(pos.coords.latitude);
         setUserLng(pos.coords.longitude);
         setHasLocation(true);
-        mapRef.current?.animateToRegion(regionForRadius(pos.coords.latitude, pos.coords.longitude, 20), 500);
+        setLocLoading(false);
       } catch {
+        if (!mounted) return;
         setHasLocation(false);
+        setLocLoading(false);
       }
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
-
-  useEffect(() => {
-    if (focusEventId) return;
-    const m = mapRef.current;
-    if (!m || all.length === 0) return;
-    const coords = all
-      .map((e) => e.location)
-      .filter(Boolean)
-      .map((loc) => ({ latitude: loc!.lat, longitude: loc!.lng }));
-    if (coords.length === 0) return;
-    try {
-      m.fitToCoordinates(coords, {
-        edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
-        animated: true,
-      });
-    } catch {}
-  }, [all, focusEventId]);
-
-  useEffect(() => {
-    if (!focusEventId) return;
-    const ev = all.find((e) => String(e.id) === String(focusEventId));
-    if (!ev?.location) return;
-    mapRef.current?.animateToRegion(
-      {
-        latitude: ev.location.lat,
-        longitude: ev.location.lng,
-        latitudeDelta: 0.06,
-        longitudeDelta: 0.06,
-      },
-      350
-    );
-  }, [focusEventId, all]);
-
-  const handleExpand = () => {
-    const base =
-      (hasLocation && userLat != null && userLng != null
-        ? { lat: userLat, lng: userLng }
-        : (() => {
-            const ev = all.find((e) => String(e.id) === String(focusEventId));
-            return ev?.location ? { lat: ev.location.lat, lng: ev.location.lng } : null;
-          })()) ?? null;
-
-    if (!base) return;
-    const next = radiusKm + 40;
-    setRadius(next);
-    mapRef.current?.animateToRegion(regionForRadius(base.lat, base.lng, next), 500);
-  };
 
   const fsItems: ReadonlyArray<FullItem> = useMemo(() => {
     const items: FullItem[] = [];
@@ -170,7 +164,7 @@ export default function EventsMap({
           startsAtIso: e.startsAtIso,
           attendees: (e.attendees ?? []).length + (e.attendeesExtraCount ?? 0),
           priceLabel: e.priceLabel ?? undefined,
-          imageUrl: (e as any)?.imageUrl as string | undefined,
+          imageUrl: (e as any)?.imageUrl ?? e.imageUrl ?? undefined,
           lat,
           lng,
         });
@@ -179,36 +173,126 @@ export default function EventsMap({
     return items;
   }, [all]);
 
+  // Base center for radius circle / recenter / expand:
+  const circleCenter: LatLng | null =
+    hasLocation && userLat != null && userLng != null
+      ? { lat: userLat, lng: userLng }
+      : (() => {
+        const ev = all.find((e) => String(e.id) === String(focusEventId));
+        return ev?.location ? { lat: ev.location.lat, lng: ev.location.lng } : null;
+      })();
+
   const initialRegion = useMemo<Region>(() => {
-    if (hasLocation && userLat != null && userLng != null) {
-      return regionForRadius(userLat, userLng, Math.max(20, radiusKm));
-    }
-    const withLoc = fsItems;
-    if (withLoc.length === 0) return DEFAULT_REGION;
-    if (withLoc.length === 1) {
+    if (circleCenter) return regionForRadius(circleCenter.lat, circleCenter.lng, Math.max(20, radiusKm));
+
+    if (fsItems.length === 0) return DEFAULT_REGION;
+
+    if (fsItems.length === 1) {
       return {
-        latitude: withLoc[0].lat,
-        longitude: withLoc[0].lng,
+        latitude: fsItems[0].lat,
+        longitude: fsItems[0].lng,
         latitudeDelta: 0.06,
         longitudeDelta: 0.06,
       };
     }
-    const lats = withLoc.map((c) => c.lat);
-    const lngs = withLoc.map((c) => c.lng);
+
+    const lats = fsItems.map((c) => c.lat);
+    const lngs = fsItems.map((c) => c.lng);
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
     const midLat = (minLat + maxLat) / 2;
     const midLng = (minLng + maxLng) / 2;
+
     return {
       latitude: midLat,
       longitude: midLng,
       latitudeDelta: Math.max(0.06, (maxLat - minLat) * 1.4),
       longitudeDelta: Math.max(0.06, (maxLng - minLng) * 1.4),
     };
-  }, [hasLocation, userLat, userLng, radiusKm, fsItems]);
+  }, [circleCenter, radiusKm, fsItems]);
 
+  // Soft boot focus to user location ONCE (only when there's no focusEventId)
+  const bootFocusedRef = useRef(false);
+  useEffect(() => {
+    if (focusEventId) return;
+    if (!circleCenter) return;
+    if (bootFocusedRef.current) return;
+
+    bootFocusedRef.current = true;
+    const next = clampRadius(20);
+    if (radiusKm !== next) setRadius(next);
+    mapRef.current?.animateToRegion(regionForRadius(circleCenter.lat, circleCenter.lng, next), 500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusEventId, circleCenter?.lat, circleCenter?.lng]);
+
+  // If focusing a specific event, animate to it
+  useEffect(() => {
+    if (!focusEventId) return;
+    const ev = all.find((e) => String(e.id) === String(focusEventId));
+    if (!ev?.location) return;
+
+    mapRef.current?.animateToRegion(
+      {
+        latitude: ev.location.lat,
+        longitude: ev.location.lng,
+        latitudeDelta: 0.06,
+        longitudeDelta: 0.06,
+      },
+      350,
+    );
+  }, [focusEventId, all]);
+
+  // If no focusEventId and no user circle center, fit to all events
+  useEffect(() => {
+    if (focusEventId) return;
+    if (circleCenter) return; // if we have a meaningful center, keep it
+    const m = mapRef.current;
+    if (!m || all.length === 0) return;
+
+    const coords = all
+      .map((e) => e.location)
+      .filter(Boolean)
+      .map((loc) => ({ latitude: loc!.lat, longitude: loc!.lng }));
+
+    if (coords.length === 0) return;
+
+    try {
+      m.fitToCoordinates(coords, {
+        edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+        animated: true,
+      });
+    } catch { }
+  }, [all, focusEventId, circleCenter]);
+
+  const handleExpand = () => {
+    const base = circleCenter;
+    if (!base) return;
+
+    const next = clampRadius(radiusKm + 40);
+    setRadius(next);
+    mapRef.current?.animateToRegion(regionForRadius(base.lat, base.lng, next), 500);
+  };
+
+  const handleRecenter = () => {
+    const base = circleCenter;
+    if (!base) return;
+
+    mapRef.current?.animateToRegion(regionForRadius(base.lat, base.lng, clampRadius(radiusKm)), 450);
+  };
+
+  // Full screen map (SEARCH behavior like SearchEventMap: local state)
+  const [fullScreen, setFullScreen] = useState(false);
+  const [fsSearch, setFsSearch] = useState<string>('');
+  const openFullScreen = () => {
+    // initialize local fullscreen search from current parent value (optional)
+    setFsSearch((prev) => (prev.trim().length ? prev : String(searchValue ?? '')));
+    setFullScreen(true);
+  };
+  const closeFullScreen = () => setFullScreen(false);
+
+  // Bottom sheet
   const [sheetVisible, setSheetVisible] = useState(false);
   const [selected, setSelected] = useState<FullItem | null>(null);
   const anim = useRef(new Animated.Value(0)).current;
@@ -249,109 +333,158 @@ export default function EventsMap({
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
   const backdropOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.45] });
 
-  const formatDateTime = (iso: string) => {
-    const d = new Date(iso);
-    const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    return { date, time };
-  };
+  const selectedDt = useMemo(
+    () => safeFormatDateTime(selected?.startsAtIso ?? null),
+    [selected?.startsAtIso],
+  );
 
   return (
-    <View style={{ width: '100%', height, borderRadius: 16, overflow: 'hidden' }}>
-      <MapView
-        ref={mapRef}
-        style={{ width: '100%', height: '100%' }}
-        provider={provider}
-        initialRegion={DEFAULT_REGION}
-        showsUserLocation={hasLocation}
-        followsUserLocation={false}
-      >
-        {hasLocation && userLat != null && userLng != null ? (
-          <Circle
-            center={{ latitude: userLat, longitude: userLng }}
-            radius={radiusKm * 1000}
-            strokeColor="rgba(14,165,233,0.9)"
-            fillColor="rgba(14,165,233,0.15)"
-            strokeWidth={2}
-          />
-        ) : null}
-
-        {all.map((e) =>
-          e.location ? (
-            <Marker
-              key={String(e.id)}
-              coordinate={{ latitude: e.location.lat, longitude: e.location.lng }}
-              title={e.title}
-              description={e.venue}
-              onPress={() => {
-                const item: FullItem = {
-                  id: e.id as ID,
-                  title: e.title,
-                  organizer: e.organizer,
-                  venue: e.venue,
-                  startsAtIso: e.startsAtIso,
-                  attendees: (e.attendees ?? []).length + (e.attendeesExtraCount ?? 0),
-                  priceLabel: e.priceLabel ?? undefined,
-                  imageUrl: (e as any)?.imageUrl as string | undefined,
-                  lat: e.location!.lat,
-                  lng: e.location!.lng,
-                };
-                openSheet(item);
-              }}
-              tracksViewChanges={false}
+    <>
+      <View style={{ width: '100%', height, borderRadius: 16, overflow: 'hidden' }}>
+        <MapView
+          ref={mapRef}
+          style={{ width: '100%', height: '100%' }}
+          provider={provider}
+          initialRegion={initialRegion}
+          showsUserLocation={hasLocation}
+          followsUserLocation={false}
+        >
+          {circleCenter ? (
+            <Circle
+              center={{ latitude: circleCenter.lat, longitude: circleCenter.lng }}
+              radius={radiusKm * 1000}
+              strokeColor="rgba(14,165,233,0.9)"
+              fillColor="rgba(14,165,233,0.15)"
+              strokeWidth={2}
             />
-          ) : null
-        )}
-      </MapView>
+          ) : null}
 
-      <Pressable
-        onPress={openFullScreen}
-        accessibilityRole="button"
-        style={{
-          position: 'absolute',
-          right: 12,
-          top: 12,
-          backgroundColor: '#0B0B15',
-          borderRadius: 14,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          shadowColor: '#000',
-          shadowOpacity: 0.2,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 3 },
-          elevation: 6,
-        }}
-      >
-        <Feather name="maximize" size={16} color="#FFFFFF" />
-      </Pressable>
+          {all.map((e) => {
+            const loc = e.location;
+            if (!loc) return null;
 
-      <Pressable
-        onPress={handleExpand}
-        accessibilityRole="button"
-        style={{
-          position: 'absolute',
-          right: 56,
-          top: 12,
-          backgroundColor: '#0B0B15',
-          borderRadius: 14,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          shadowColor: '#000',
-          shadowOpacity: 0.2,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 3 },
-          elevation: 6,
-        }}
-      >
-        <Feather name="maximize-2" size={16} color="#FFFFFF" />
-        <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Expand</Text>
-      </Pressable>
+            return (
+              <Marker
+                key={String(e.id)}
+                coordinate={{ latitude: loc.lat, longitude: loc.lng }}
+                title={e.title}
+                description={e.venue}
+                onPress={() => {
+                  const item: FullItem = {
+                    id: e.id as ID,
+                    title: e.title,
+                    organizer: e.organizer,
+                    venue: e.venue,
+                    startsAtIso: e.startsAtIso,
+                    attendees: (e.attendees ?? []).length + (e.attendeesExtraCount ?? 0),
+                    priceLabel: e.priceLabel ?? undefined,
+                    imageUrl: (e as any)?.imageUrl ?? e.imageUrl ?? undefined,
+                    lat: loc.lat,
+                    lng: loc.lng,
+                  };
+                  openSheet(item);
+                }}
+                tracksViewChanges={false}
+              />
+            );
+          })}
+
+        </MapView>
+
+        {/* Full screen */}
+        <Pressable
+          onPress={openFullScreen}
+          accessibilityRole="button"
+          style={{
+            position: 'absolute',
+            right: 12,
+            top: 12,
+            backgroundColor: '#0B0B15',
+            borderRadius: 14,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            shadowColor: '#000',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 6,
+          }}
+        >
+          <Feather name="maximize" size={16} color="#FFFFFF" />
+        </Pressable>
+
+        {/* Expand radius */}
+        <Pressable
+          onPress={handleExpand}
+          accessibilityRole="button"
+          style={{
+            position: 'absolute',
+            right: 56,
+            top: 12,
+            backgroundColor: '#0B0B15',
+            borderRadius: 14,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            shadowColor: '#000',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 6,
+          }}
+        >
+          <Feather name="maximize-2" size={16} color="#FFFFFF" />
+          <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Expand</Text>
+        </Pressable>
+
+        {/* Recenter (added) */}
+        <Pressable
+          onPress={handleRecenter}
+          accessibilityRole="button"
+          style={{
+            position: 'absolute',
+            left: 12,
+            top: 12,
+            backgroundColor: '#0B0B15',
+            borderRadius: 14,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 6,
+          }}
+        >
+          <Feather name="crosshair" size={16} color="#FFFFFF" />
+        </Pressable>
+
+        {/* Location loading overlay (like SearchEventMap) */}
+        {locLoading && !circleCenter && !focusEventId ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(255,255,255,0.3)',
+            }}
+          >
+            <ActivityIndicator />
+          </View>
+        ) : null}
+      </View>
 
       <FullscreenMap
         visible={fullScreen}
@@ -362,29 +495,25 @@ export default function EventsMap({
         userLat={userLat}
         userLng={userLng}
         radiusKm={radiusKm}
-        onExpand={() => setRadius(radiusKm + 40)}
+        onExpand={() => setRadius(clampRadius(radiusKm + 40))}
         items={fsItems}
         events={all}
         filters={filters}
-        searchValue={searchValue}
-        onChangeSearch={onChangeSearch}
-        onSearchSubmit={onSearchSubmit}
+        // IMPORTANT: local fullscreen search state (same behavior as SearchEventMap)
+        searchValue={fsSearch}
+        onChangeSearch={setFsSearch}
+        onSearchSubmit={(q) => onSearchSubmit?.(q)}
         onSearchFilter={onSearchFilter}
         onPressEvent={(id, tab) => {
           closeFullScreen();
-          onPressEvent?.(id, tab);
+          onPressEvent?.(String(id), tab);
         }}
       />
 
+      {/* Bottom sheet */}
       <Modal visible={sheetVisible} transparent animationType="none" onRequestClose={closeSheet}>
-        <Animated.View
-          style={{
-            flex: 1,
-            backgroundColor: 'black',
-            opacity: backdropOpacity,
-          }}
-        >
-          <Pressable style={{ flex: 1 }} onPress={closeSheet} />
+        <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: backdropOpacity }}>
+          <Pressable style={{ flex: 1 }} onPress={closeSheet} accessibilityRole="button" />
         </Animated.View>
 
         <Animated.View
@@ -397,7 +526,7 @@ export default function EventsMap({
             backgroundColor: '#ffffff',
             borderTopLeftRadius: 18,
             borderTopRightRadius: 18,
-            paddingBottom: Math.max(insets.bottom, 12),
+            paddingBottom: bottomPad,
             shadowColor: '#000',
             shadowOpacity: 0.15,
             shadowRadius: 16,
@@ -440,6 +569,7 @@ export default function EventsMap({
                 >
                   <Text style={{ color: '#FFFFFF', fontWeight: '800', letterSpacing: 1.2 }}>LIVE</Text>
                 </View>
+
                 <Pressable
                   onPress={() => {
                     // TODO: open stories for selected.id
@@ -461,25 +591,20 @@ export default function EventsMap({
               </View>
 
               <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-                <Text style={{ fontSize: 18, fontWeight: '600', color: '#0B1220' }}>
-                  {selected.title}
-                </Text>
+                <Text style={{ fontSize: 18, fontWeight: '600', color: '#0B1220' }}>{selected.title}</Text>
                 <Text style={{ marginTop: 2, color: '#6B7280' }}>{selected.organizer}</Text>
 
                 <View style={{ marginTop: 10, gap: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Feather name="calendar" size={16} color="#6B7280" />
-                    <Text style={{ color: '#6B7280' }}>
-                      {formatDateTime(selected.startsAtIso).date}
-                    </Text>
+                    <Text style={{ color: '#6B7280' }}>{selectedDt?.date ?? '—'}</Text>
                     <Feather name="clock" size={16} color="#6B7280" style={{ marginLeft: 14 }} />
-                    <Text style={{ color: '#6B7280' }}>
-                      {formatDateTime(selected.startsAtIso).time}
-                    </Text>
+                    <Text style={{ color: '#6B7280' }}>{selectedDt?.time ?? '—'}</Text>
                   </View>
+
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Feather name="map-pin" size={16} color="#6B7280" />
-                    <Text style={{ color: '#6B7280' }}>{selected.venue}</Text>
+                    <Text style={{ color: '#6B7280' }}>{selected.venue ?? ''}</Text>
                   </View>
                 </View>
 
@@ -501,9 +626,7 @@ export default function EventsMap({
                       borderRadius: 10,
                     }}
                   >
-                    <Text style={{ color: 'white', fontWeight: '600' }}>
-                      {selected.priceLabel ?? 'From $15'}
-                    </Text>
+                    <Text style={{ color: 'white', fontWeight: '600' }}>{selected.priceLabel ?? 'From $15'}</Text>
                   </View>
 
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -517,7 +640,7 @@ export default function EventsMap({
                 <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
                   <Pressable
                     onPress={() => {
-                      onPressEvent?.(selected.id, 'offers');
+                      onPressEvent?.(String(selected.id), 'offers');
                       closeSheet();
                     }}
                     style={{
@@ -535,7 +658,7 @@ export default function EventsMap({
 
                   <Pressable
                     onPress={() => {
-                      onPressEvent?.(selected.id, 'about');
+                      onPressEvent?.(String(selected.id), 'about');
                       closeSheet();
                     }}
                     style={{
@@ -554,6 +677,6 @@ export default function EventsMap({
           ) : null}
         </Animated.View>
       </Modal>
-    </View>
+    </>
   );
 }

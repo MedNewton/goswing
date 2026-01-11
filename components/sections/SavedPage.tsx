@@ -1,9 +1,23 @@
-import React, { useMemo, useState, type ReactElement } from 'react';
-import { View, Text, ScrollView, Pressable, type ViewProps } from 'react-native';
+// app/(tabs)/saved.tsx  (or wherever your SavedPage lives)
+import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  type ViewProps,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import SearchResultCard, { type SearchResultItem } from '@/components/ui/SearchResultCard';
-import { getEvents } from '@/data/loaders';
+
+// Adjust these two imports to match your project:
+import { supabase } from '@/lib/supabase'; // your initialized Supabase client
+import { useAuth } from '@clerk/clerk-expo'; // if you use something else, replace userId source
+
+import { listFavoriteEvents } from '@/lib/supabase/saved';
 
 export type SavedPageProps = Readonly<
   {
@@ -16,7 +30,16 @@ type SavedTab = 'events' | 'organizers';
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
   c.filter(Boolean).join(' ');
 
-function mapToResult(e: ReturnType<typeof getEvents>[number]): SearchResultItem {
+function mapToResult(e: {
+  id: string;
+  title: string;
+  organizer: string;
+  city?: string | null;
+  venue: string;
+  startsAtIso: string;
+  priceLabel?: string | null;
+  imageUrl?: string | null;
+}): SearchResultItem {
   return {
     id: e.id,
     title: e.title,
@@ -26,7 +49,7 @@ function mapToResult(e: ReturnType<typeof getEvents>[number]): SearchResultItem 
     startsAtIso: e.startsAtIso,
     priceLabel: e.priceLabel ?? null,
     rating: null,
-    thumbnailUrl: e.imageUrl,
+    thumbnailUrl: e.imageUrl ?? '',
   };
 }
 
@@ -34,17 +57,72 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
   const [tab, setTab] = useState<SavedTab>('events');
   const insets = useSafeAreaInsets();
 
-  const savedEvents: ReadonlyArray<SearchResultItem> = useMemo(
-    () => getEvents().slice(0, 6).map(mapToResult),
-    []
-  );
+  const { userId } = useAuth();
+
+  const [savedEvents, setSavedEvents] = useState<ReadonlyArray<SearchResultItem>>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // keep organizers tab as-is for now
   const savedOrganizers: ReadonlyArray<{ id: string; name: string }> = useMemo(
     () => [
       { id: 'org_1', name: 'Blue Note Entertainment' },
       { id: 'org_2', name: 'Photography Academy' },
     ],
-    []
+    [],
   );
+
+  useEffect(() => {
+    if (tab !== 'events') return;
+
+    let mounted = true;
+
+    (async () => {
+      if (!userId) {
+        if (!mounted) return;
+        setSavedEvents([]);
+        setErrMsg(null);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setErrMsg(null);
+
+        const rows = await listFavoriteEvents({
+          supabase,
+          userId,
+          limit: 100,
+        });
+
+        if (!mounted) return;
+
+        setSavedEvents(rows.map((r) =>
+          mapToResult({
+            id: r.id,
+            title: r.title,
+            organizer: r.organizer,
+            city: r.city ?? null,
+            venue: r.venue,
+            startsAtIso: r.startsAtIso,
+            priceLabel: r.priceLabel ?? null,
+            imageUrl: r.imageUrl ?? null,
+          }),
+        ));
+      } catch (e: any) {
+        if (!mounted) return;
+        setErrMsg(e?.message ? String(e.message) : 'Failed to load saved events.');
+        setSavedEvents([]);
+      } finally {
+        if (!mounted) return;
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tab, userId]);
 
   const bottomPad = (insets.bottom || 0) + 88;
 
@@ -61,13 +139,25 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
         <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
           <SegBtn
             label={`Events (${savedEvents.length})`}
-            icon={<Feather name="grid" size={18} color={tab === 'events' ? '#0EA5E9' : '#374151'} />}
+            icon={
+              <Feather
+                name="grid"
+                size={18}
+                color={tab === 'events' ? '#0EA5E9' : '#374151'}
+              />
+            }
             selected={tab === 'events'}
             onPress={() => setTab('events')}
           />
           <SegBtn
             label={`Organizers (${savedOrganizers.length})`}
-            icon={<Feather name="users" size={18} color={tab === 'organizers' ? '#0EA5E9' : '#374151'} />}
+            icon={
+              <Feather
+                name="users"
+                size={18}
+                color={tab === 'organizers' ? '#0EA5E9' : '#374151'}
+              />
+            }
             selected={tab === 'organizers'}
             onPress={() => setTab('organizers')}
           />
@@ -82,9 +172,27 @@ export default function SavedPage({ className, ...rest }: SavedPageProps): React
             contentContainerStyle={{ paddingBottom: bottomPad }}
             keyboardShouldPersistTaps="handled"
           >
-            {savedEvents.map((it) => (
-              <SearchResultCard key={it.id} item={it} />
-            ))}
+            {loading ? (
+              <View className="py-8 items-center justify-center">
+                <ActivityIndicator />
+                <Text className="mt-3 text-gray500">Loading saved events…</Text>
+              </View>
+            ) : errMsg ? (
+              <View className="rounded-2xl border border-gray200 bg-white p-4">
+                <Text className="text-gray800 font-medium">Could not load saved events</Text>
+                <Text className="text-gray500 mt-2">{errMsg}</Text>
+              </View>
+            ) : savedEvents.length === 0 ? (
+              <View className="rounded-2xl border border-gray200 bg-white p-4">
+                <Text className="text-gray800 font-medium">No saved events yet</Text>
+                <Text className="text-gray500 mt-2">
+                  Tap the heart icon on an event to save it here.
+                </Text>
+              </View>
+            ) : (
+              savedEvents.map((it) => <SearchResultCard key={it.id} item={it} />)
+            )}
+
             <View style={{ height: (insets.bottom || 0) + 24 }} />
           </ScrollView>
         ) : (
@@ -132,11 +240,13 @@ function SegBtn({
       onPress={onPress}
       className={cx(
         'flex-1 flex-row items-center justify-center gap-x-2 py-2 rounded-full',
-        selected ? 'bg-white border border-gray300' : 'bg-transparent'
+        selected ? 'bg-white border border-gray300' : 'bg-transparent',
       )}
     >
       <View className={selected ? 'opacity-100' : 'opacity-80'}>{icon}</View>
-      <Text className={selected ? 'text-brand font-medium' : 'text-gray700 font-medium'}>{label}</Text>
+      <Text className={selected ? 'text-brand font-medium' : 'text-gray700 font-medium'}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

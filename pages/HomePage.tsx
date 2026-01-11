@@ -2,7 +2,7 @@
 import '../style/globals.css';
 import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ScrollView, View, Text } from 'react-native';
+import { ScrollView, View, Text, Alert } from 'react-native';
 
 import Header from '@/components/sections/Header';
 import SearchBar from '@/components/blocks/SearchBar';
@@ -30,9 +30,9 @@ import { getPublishedEvents } from '@/lib/supabase/events';
 import type { TicketQuantities, TicketType } from '@/components/blocks/TicketQuantitySheet';
 
 import { supabase } from '@/lib/supabase';
-
 import { useAuth } from '@/providers/AuthProvider';
 
+import { useEventFavorites } from '@/hooks/useEventFavorites';
 
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
   classes.filter(Boolean).join(' ');
@@ -41,24 +41,28 @@ type Route =
   | { name: 'root' }
   | { name: 'eventDetails'; event: Event; initialTab?: 'about' | 'offers' | 'upcoming' }
   | {
-    name: 'checkout';
-    event: Event; // keep full event so Checkout + back navigation is easy
-    eventId: string;
-    ticketTypes: ReadonlyArray<TicketType>;
-    quantities: TicketQuantities;
-    eventSnapshot?: {
-      title: string;
-      imageUrl?: string | null;
-      startsAtIso?: string | null;
-      venue?: string | null;
-      city?: string | null;
+      name: 'checkout';
+      event: Event;
+      eventId: string;
+      ticketTypes: ReadonlyArray<TicketType>;
+      quantities: TicketQuantities;
+      eventSnapshot?: {
+        title: string;
+        imageUrl?: string | null;
+        startsAtIso?: string | null;
+        venue?: string | null;
+        city?: string | null;
+      };
     };
-  };
+
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return 'Something went wrong.';
+}
 
 export default function HomePage(): ReactElement {
   const { user: clerkUser } = useAuth();
-
-  const user = getUser(); // you can keep this for UI mock fields (name/city) if you want
+  const user = getUser();
 
   // This is the ONLY userId you should pass to CheckoutPage/createReservation
   const userId: string = String(clerkUser?.id ?? '');
@@ -68,10 +72,7 @@ export default function HomePage(): ReactElement {
     return <Text>Missing auth session</Text>;
   }
 
-
-  
   const categories = getCategories();
-
   const { city, region, loading, error, refresh } = useCurrentCity();
 
   const [bottomTab, setBottomTab] = useState<BottomTabKey>('home');
@@ -98,13 +99,16 @@ export default function HomePage(): ReactElement {
   const [eventsLoading, setEventsLoading] = useState<boolean>(true);
   const [eventsError, setEventsError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Favorites: run ONCE here, then pass down
+  const fav = useEventFavorites({
+    supabase,
+    userId,
+  });
 
+  useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.rpc('debug_auth_context');
-      console.log('debug_auth_context', { data, error });
-      console.log("log")
+      const { data, error: rpcError } = await supabase.rpc('debug_auth_context');
+      console.log('debug_auth_context', { data, error: rpcError });
     })();
   }, []);
 
@@ -154,7 +158,7 @@ export default function HomePage(): ReactElement {
         key: c.key,
         label: c.label,
         emoji: c.emoji,
-        disabled: !!c.disabled,
+        disabled: Boolean(c.disabled),
       })),
     [categories],
   );
@@ -170,9 +174,21 @@ export default function HomePage(): ReactElement {
             : city
           : user.city ?? 'Unknown';
 
-  const eventsForUI = filteredEvents;
+  // IMPORTANT: add favorite flag from hook
+  const eventsForUIWithFav: ReadonlyArray<Event> = useMemo(() => {
+    return filteredEvents.map((ev) => ({
+      ...ev,
+      favorite: fav.isFavorite(String(ev.id)),
+    }));
+  }, [filteredEvents, fav]);
 
-
+  const handleToggleFavorite = async (eventId: string, next: boolean): Promise<void> => {
+    try {
+      await fav.toggle(String(eventId), next);
+    } catch (e: unknown) {
+      Alert.alert('Saved', errorMessage(e));
+    }
+  };
 
   const renderRoot = (): ReactElement => {
     if (bottomTab === 'search') return <SearchPage />;
@@ -214,27 +230,27 @@ export default function HomePage(): ReactElement {
           userName={user.name}
           greeting="Good evening"
           locationLabel={locationLabel}
-          onPressNotifications={() => { }}
+          onPressNotifications={() => {}}
           onPressLocation={refresh}
         />
 
         <View className="mt-3 px-4">
           <SearchBar
-            events={eventsForUI}
+            events={eventsForUIWithFav}
             value={query}
-            onChangeText={(t) => {
+            onChangeText={(t: string) => {
               setQuery(t);
               setPickedEventId(null);
             }}
-            onSubmit={() => { }}
-            onPressFilter={() => { }}
+            onSubmit={() => {}}
+            onPressFilter={() => {}}
             initialFilters={filters}
-            onApplyFilters={(f) => {
+            onApplyFilters={(f: Partial<FiltersPayload>) => {
               setFilters(f);
               setActiveTab('map');
               setPickedEventId(null);
             }}
-            onPickEvent={(id) => {
+            onPickEvent={(id: string) => {
               setPickedEventId(id);
               setActiveTab('map');
             }}
@@ -264,26 +280,36 @@ export default function HomePage(): ReactElement {
                   events={
                     pickedEventId
                       ? (() => {
-                        const idx = eventsForUI.findIndex((e) => String(e.id) === String(pickedEventId));
-                        if (idx <= 0) return eventsForUI;
-                        const picked = eventsForUI[idx];
-                        return [picked, ...eventsForUI.slice(0, idx), ...eventsForUI.slice(idx + 1)];
-                      })()
-                      : eventsForUI
+                          const idx = eventsForUIWithFav.findIndex(
+                            (e) => String(e.id) === String(pickedEventId),
+                          );
+                          if (idx <= 0) return eventsForUIWithFav;
+
+                          const picked = eventsForUIWithFav[idx];
+                          return [
+                            picked,
+                            ...eventsForUIWithFav.slice(0, idx),
+                            ...eventsForUIWithFav.slice(idx + 1),
+                          ];
+                        })()
+                      : eventsForUIWithFav
                   }
-                  onPressEvent={(id) => openEventDetails(id)}
-                  onToggleFavorite={() => { }}
-                  onPressSeeAll={() => { }}
+                  onPressEvent={(id: string) => openEventDetails(id)}
+                  onToggleFavorite={handleToggleFavorite}
+                  // Do not pass no-op handlers
+                  // onPressSeeAll={() => {}}
                   highlightId={pickedEventId ?? undefined}
                 />
               ) : (
                 <EventsMap
-                  events={eventsForUI}
+                  events={eventsForUIWithFav}
                   filters={filters as FiltersPayload}
                   searchValue={query}
                   onChangeSearch={setQuery}
                   focusEventId={pickedEventId}
-                  onPressEvent={(id, tab) => openEventDetails(id, tab)}
+                  onPressEvent={(id: string, tab?: 'about' | 'offers' | 'upcoming') =>
+                    openEventDetails(id, tab)
+                  }
                 />
               )
             }
@@ -302,7 +328,6 @@ export default function HomePage(): ReactElement {
           event={route.event}
           initialTab={route.initialTab}
           onBack={closeEventDetails}
-          // IMPORTANT: use onBook to route (no type mismatch, no setRoute signature issues)
           onBook={(payload) => {
             setRoute({
               name: 'checkout',
@@ -320,11 +345,8 @@ export default function HomePage(): ReactElement {
           userId={userId}
           ticketTypes={route.ticketTypes}
           quantities={route.quantities}
-          // If CheckoutPage also expects eventSnapshot, pass it too:
-          // eventSnapshot={route.eventSnapshot}
           onBack={() => setRoute({ name: 'eventDetails', event: route.event })}
           onSeeReservations={() => {
-            // go back to root, switch bottom tab to reservations
             setRoute({ name: 'root' });
             setBottomTab('reservations');
           }}
