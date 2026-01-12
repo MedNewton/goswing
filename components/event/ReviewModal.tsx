@@ -1,4 +1,5 @@
-import React, { useMemo, useState, type ReactElement } from 'react';
+// components/event/ReviewModal.tsx
+import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   Modal,
   Pressable,
@@ -21,10 +22,13 @@ export type ReviewModalProps = Readonly<
     title?: string;
     subtitle?: string;
     onClose: () => void;
-    onSubmit: (payload: ReviewPayload) => void;
+    onSubmit: (payload: ReviewPayload) => Promise<void>;
     accentColor?: ColorValue;
+    submitting?: boolean;
+    starColor?: ColorValue; // ✅ add
   } & Omit<ViewProps, 'children'>
 >;
+
 
 function Star({
   filled,
@@ -32,15 +36,17 @@ function Star({
   size = 32,
   color = '#6B7280',
   fillColor = '#11111B',
+  disabled = false,
 }: {
   filled: boolean;
   onPress: () => void;
   size?: number;
   color?: ColorValue;
   fillColor?: ColorValue;
+  disabled?: boolean;
 }): ReactElement {
   return (
-    <Pressable onPress={onPress} className="active:opacity-80">
+    <Pressable onPress={onPress} disabled={disabled} className={disabled ? 'opacity-60' : 'active:opacity-80'}>
       <Feather name="star" size={size} color={filled ? (fillColor as string) : (color as string)} />
     </Pressable>
   );
@@ -78,15 +84,20 @@ function SolidButton({
 function GhostButton({
   label,
   onPress,
+  disabled = false,
 }: {
   label: string;
   onPress: () => void;
+  disabled?: boolean;
 }): ReactElement {
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      className="rounded-2xl border border-gray300 bg-white px-5 py-3 active:opacity-90 w-1/2 items-center justify-center"
+      disabled={disabled}
+      className={`rounded-2xl border border-gray300 bg-white px-5 py-3 w-1/2 items-center justify-center ${
+        disabled ? 'opacity-60' : 'active:opacity-90'
+      }`}
     >
       <Text className="text-gray800 font-medium">{label}</Text>
     </Pressable>
@@ -100,17 +111,27 @@ export default function ReviewModal({
   onClose,
   onSubmit,
   accentColor = '#6B7280',
+  starColor = '#F59E0B',
+  submitting = false,
   ...rest
 }: ReviewModalProps): ReactElement {
   const [rating, setRating] = useState<1 | 2 | 3 | 4 | 5 | 0>(0);
   const [comment, setComment] = useState<string>('');
 
-  const canSubmit = useMemo(() => rating > 0, [rating]);
+  const canSubmit = useMemo(() => rating > 0 && !submitting, [rating, submitting]);
+
+  // Reset when closing
+  useEffect(() => {
+    if (!visible) {
+      setRating(0);
+      setComment('');
+    }
+  }, [visible]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
-        onPress={onClose}
+        onPress={submitting ? undefined : onClose}
         className="flex-1 bg-black/40"
         accessibilityHint="Close review dialog"
       />
@@ -123,14 +144,12 @@ export default function ReviewModal({
         <View className="px-5 pt-5 pb-2">
           <View className="flex-row items-start justify-between">
             <Text className="text-2xl font-semibold text-black">{title}</Text>
-            <Pressable onPress={onClose} accessibilityLabel="Close" hitSlop={12}>
+            <Pressable onPress={submitting ? undefined : onClose} accessibilityLabel="Close" hitSlop={12}>
               <Feather name="x" size={20} color="#6B7280" />
             </Pressable>
           </View>
 
-          {subtitle ? (
-            <Text className="mt-2 text-gray600">{subtitle}</Text>
-          ) : null}
+          {subtitle ? <Text className="mt-2 text-gray600">{subtitle}</Text> : null}
         </View>
 
         <View className="px-5 mt-4 flex-row items-center justify-center gap-x-2">
@@ -141,7 +160,8 @@ export default function ReviewModal({
               onPress={() => setRating(v)}
               size={34}
               color="#D1D5DB"
-              fillColor={accentColor}
+              fillColor={starColor}
+              disabled={submitting}
             />
           ))}
         </View>
@@ -154,23 +174,20 @@ export default function ReviewModal({
             placeholder="Tell us about your experience..."
             multiline
             numberOfLines={4}
+            editable={!submitting}
             className="rounded-2xl border border-gray300 bg-gray100 px-4 py-3 text-gray800 min-h-24"
             placeholderTextColor="#9CA3AF"
           />
         </View>
 
         <View className="px-8 py-5 flex-row items-center justify-center gap-x-3">
-          <GhostButton label="Cancel" onPress={onClose} />
+          <GhostButton label="Cancel" onPress={onClose} disabled={submitting} />
           <SolidButton
-            label="Submit Review"
+            label={submitting ? 'Submitting…' : 'Submit Review'}
             icon="send"
             onPress={() => {
-              if (canSubmit) {
-                onSubmit({ rating: rating as 1 | 2 | 3 | 4 | 5, comment });
-                setRating(0);
-                setComment('');
-                onClose();
-              }
+              if (!canSubmit) return;
+              onSubmit({ rating: rating as 1 | 2 | 3 | 4 | 5, comment });
             }}
             disabled={!canSubmit}
             background={accentColor}

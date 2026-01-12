@@ -15,6 +15,13 @@ import type { Event } from '@/types/domain';
 import * as EventsApi from '@/lib/supabase/events';
 import { getEventAccess, type EventAccess } from '@/lib/supabase/eventAccess';
 
+import { Alert } from 'react-native';
+import ReviewModal from '@/components/event/ReviewModal';
+import { createEventReview, getMyReviewForEvent } from '@/lib/supabase/reviews';
+
+import SuggestSongsModal from "@/components/event/SuggestSongsModal";
+
+
 
 export type EventDetailsPageProps = Readonly<{
   event: Event;
@@ -159,6 +166,33 @@ export default function EventDetailsPage({
   const [access, setAccess] = useState<EventAccess | null>(null);
   const [accessLoading, setAccessLoading] = useState<boolean>(false);
   const [accessError, setAccessError] = useState<string | null>(null);
+
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState(false);
+
+  const [suggestSongsOpen, setSuggestSongsOpen] = useState(false);
+
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // If user isn't eligible, we can skip the check (optional)
+        // but leaving it is fine; RLS will still protect.
+        const existing = await getMyReviewForEvent(String(detailsEvent.id));
+        if (!cancelled) setHasReviewed(!!existing);
+      } catch {
+        if (!cancelled) setHasReviewed(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailsEvent.id]);
+
 
 
 
@@ -388,7 +422,7 @@ export default function EventDetailsPage({
             <Card variant="outlined" padding="md">
               <View className="flex-row items-start gap-x-2">
                 <View className="flex-1">
-                <AccessRow
+                  <AccessRow
                     done={Boolean(access?.steps.ticketsPurchased)}
                     label="Tickets Purchased"
                   />
@@ -451,13 +485,37 @@ export default function EventDetailsPage({
           </View>
 
           {access?.canUseCheckedInActions ? (
-            <View className="px-5 mt-4 flex-row w-full items-stretch gap-x-3">
-            <ActionChip className="flex-1 justify-center" bg="bg-black" icon="music" label="Suggest Songs" />
-            <ActionChip className="flex-1 justify-center" bg="bg-indigo-600" icon="camera" label="Take Story" />
-            <ActionChip className="flex-1 justify-center" bg="bg-amber-400" icon="gift" label="Give Reward" darkText />
-          </View>
-          
+            <View className="px-5 mt-4 flex-row items-center gap-x-1">
+              <View className="flex-1">
+                <Pressable
+                  onPress={() => setSuggestSongsOpen(true)}
+                  className="active:opacity-90"
+                >
+                  <ActionChip bg="bg-black" icon="music" label="Suggest Songs" />
+                </Pressable>
+
+              </View>
+              <View>
+                <ActionChip bg="bg-indigo-600" icon="camera" label="Take Story" />
+              </View>
+              <View className="flex-1">
+                <Pressable
+                  onPress={() => {
+                    if (hasReviewed) {
+                      Alert.alert('Review already submitted', 'You can only review this event once.');
+                      return;
+                    }
+                    setReviewOpen(true);
+                  }}
+                  disabled={hasReviewed}
+                  className={hasReviewed ? 'opacity-60' : 'active:opacity-90'}
+                >
+                  <ActionChip bg="bg-amber-400" icon="star" label={hasReviewed ? 'Reviewed' : 'Give a Review'} darkText />
+                </Pressable>
+              </View>
+            </View>
           ) : null}
+
 
 
           <View className="px-5 mt-4">
@@ -686,6 +744,44 @@ export default function EventDetailsPage({
           </View>
         ) : null}
       </View>
+      <ReviewModal
+        visible={reviewOpen}
+        title="Rate Your Experience"
+        subtitle={`How was your experience at ${detailsEvent.title}?`}
+        onClose={() => setReviewOpen(false)}
+        submitting={reviewSubmitting}
+        accentColor="#6B7280"
+        onSubmit={async ({ rating, comment }) => {
+          if (reviewSubmitting) return;
+
+          try {
+            setReviewSubmitting(true);
+
+            await createEventReview({
+              eventId: String(detailsEvent.id),
+              rating,
+              comment,
+              // reservationId: access?.reservationId ?? null, // only if your access object has it
+            });
+
+            setHasReviewed(true);
+            setReviewOpen(false);
+            Alert.alert('Thanks!', 'Your review has been submitted.');
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            Alert.alert('Could not submit review', msg);
+          } finally {
+            setReviewSubmitting(false);
+          }
+        }}
+      />
+      <SuggestSongsModal
+        visible={suggestSongsOpen}
+        eventId={String(detailsEvent.id)}
+        eventTitle={String(detailsEvent.title ?? "")}
+        onClose={() => setSuggestSongsOpen(false)}
+      />
+
     </SafeAreaView>
   );
 }
