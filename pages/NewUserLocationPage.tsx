@@ -12,7 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 
 type Props = Readonly<{
-  onDone: () => Promise<void>;
+  onDone: (location?: string, locationServicesEnabled?: boolean) => Promise<void>;
 }>;
 
 const cx = (...c: Array<string | false | null | undefined>) =>
@@ -25,12 +25,13 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
 
   const handleSkip = async (): Promise<void> => {
     if (loading) return;
-    await onDone();
+    await onDone(undefined, false);
   };
 
   const handleSomewhereElse = async (): Promise<void> => {
     if (loading) return;
-    await onDone();
+    // TODO: Could open a city picker here in the future
+    await onDone(undefined, false);
   };
 
   const handleCurrentLocation = async (): Promise<void> => {
@@ -56,10 +57,26 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      // You can send this to your backend or store it later.
-      console.log('New user location:', position.coords);
+      // Reverse geocode to get city name
+      let locationString: string | undefined;
+      try {
+        const [address] = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
 
-      await onDone();
+        if (address) {
+          const parts = [address.city, address.region].filter(Boolean);
+          locationString = parts.join(', ') || undefined;
+        }
+      } catch (geocodeErr) {
+        console.warn('Reverse geocoding failed:', geocodeErr);
+        // Still proceed - location services are enabled even without the string
+      }
+
+      console.log('New user location:', position.coords, locationString);
+
+      await onDone(locationString, true);
     } catch (e) {
       console.warn('Location permission / fetch error:', e);
       setError('Something went wrong while getting your location. Please try again or skip.');
@@ -87,7 +104,7 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
           Where are you making plans?
         </Text>
 
-        {/* Big “hero” card (replace with Image later if you want) */}
+        {/* Big "hero" card */}
         <View className="mt-8 rounded-3xl bg-gray200 overflow-hidden h-[360px] items-center justify-center">
           <Feather name="map-pin" size={40} color="#0B0B15" />
           <Text className="mt-3 text-base text-gray700">Use your current city</Text>

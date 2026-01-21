@@ -13,14 +13,17 @@ const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).jo
 
 export type ReservationsPageProps = Readonly<{
   /**
+   * Initial tab to show ('active' or 'past')
+   */
+  initialTab?: SegKey;
+  /**
    * Lifted routing hook (same pattern you used elsewhere).
-   * Your router can interpret this however you want.
    */
   route?: (r: { name: 'reservationDetails'; reservationId: string }) => void;
 }>;
 
-export default function ReservationsPage({ route }: ReservationsPageProps): ReactElement {
-  const [tab, setTab] = useState<SegKey>('active');
+export default function ReservationsPage({ initialTab = 'active', route }: ReservationsPageProps): ReactElement {
+  const [tab, setTab] = useState<SegKey>(initialTab);
   const insets = useSafeAreaInsets();
   const bottomPad = (insets.bottom || 0) + 96;
 
@@ -29,6 +32,11 @@ export default function ReservationsPage({ route }: ReservationsPageProps): Reac
 
   const [active, setActive] = useState<ReadonlyArray<Reservation>>([]);
   const [past, setPast] = useState<ReadonlyArray<Reservation>>([]);
+
+  // Update tab when initialTab prop changes
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +48,6 @@ export default function ReservationsPage({ route }: ReservationsPageProps): Reac
 
         const res = await getMyReservations();
 
-        // Map from MyReservation -> ReservationCard props shape
         const mapToCard = (r: any): Reservation => ({
           id: String(r.id),
           title: String(r.title ?? ''),
@@ -132,11 +139,9 @@ export default function ReservationsPage({ route }: ReservationsPageProps): Reac
                     reservation={r}
                     onPressReservation={openReservationDetails}
                     onPressSuggestSongs={(id) => {
-                      // optional
                       console.log('[ReservationsPage] Suggest songs', id);
                     }}
                     onPressAddToWallet={(id) => {
-                      // optional
                       console.log('[ReservationsPage] Add to wallet', id);
                     }}
                   />

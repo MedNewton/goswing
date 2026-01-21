@@ -44,19 +44,19 @@ type Route =
   | { name: 'root' }
   | { name: 'eventDetails'; event: Event; initialTab?: 'about' | 'offers' | 'upcoming' }
   | {
-      name: 'checkout';
-      event: Event;
-      eventId: string;
-      ticketTypes: ReadonlyArray<TicketType>;
-      quantities: TicketQuantities;
-      eventSnapshot?: {
-        title: string;
-        imageUrl?: string | null;
-        startsAtIso?: string | null;
-        venue?: string | null;
-        city?: string | null;
-      };
-    }
+    name: 'checkout';
+    event: Event;
+    eventId: string;
+    ticketTypes: ReadonlyArray<TicketType>;
+    quantities: TicketQuantities;
+    eventSnapshot?: {
+      title: string;
+      imageUrl?: string | null;
+      startsAtIso?: string | null;
+      venue?: string | null;
+      city?: string | null;
+    };
+  }
   | { name: 'reservationDetails'; reservationId: string };
 
 function errorMessage(e: unknown): string {
@@ -100,6 +100,7 @@ export default function HomePage(): ReactElement {
   const [allEvents, setAllEvents] = useState<ReadonlyArray<Event>>([]);
   const [eventsLoading, setEventsLoading] = useState<boolean>(true);
   const [eventsError, setEventsError] = useState<string | null>(null);
+  const [reservationsInitialTab, setReservationsInitialTab] = useState<'active' | 'past'>('active');
 
   const fav = useEventFavorites({
     supabase,
@@ -108,23 +109,23 @@ export default function HomePage(): ReactElement {
 
   useEffect(() => {
     let cancelled = false;
-  
+
     (async () => {
       if (!isSignedIn) return;
-  
+
       // Wait until Clerk can actually produce the Supabase JWT
       const token = await getToken({ template: 'supabase' });
       if (cancelled) return;
-  
+
       if (!token) {
         console.log('debug_auth_context skipped: no supabase token yet');
         return;
       }
-  
+
       const { data, error: rpcError } = await supabase.rpc('debug_auth_context');
       if (!cancelled) console.log('debug_auth_context', { data, error: rpcError });
     })();
-  
+
     return () => {
       cancelled = true;
     };
@@ -184,12 +185,12 @@ export default function HomePage(): ReactElement {
     loading
       ? 'Locating…'
       : error
-      ? user.city ?? 'Unknown'
-      : city
-      ? region
-        ? `${city}, ${region}`
+        ? user.city ?? 'Unknown'
         : city
-      : user.city ?? 'Unknown';
+          ? region
+            ? `${city}, ${region}`
+            : city
+          : user.city ?? 'Unknown';
 
   const eventsForUIWithFav: ReadonlyArray<Event> = useMemo(() => {
     return filteredEvents.map((ev) => ({
@@ -223,17 +224,30 @@ export default function HomePage(): ReactElement {
         />
       );
 
-    if (bottomTab === 'reservations')
+    if (bottomTab === 'reservations') {
       return (
         <ReservationsPage
+          initialTab={reservationsInitialTab}
           route={(r) => {
-            // r is { name: 'reservationDetails'; reservationId: string }
             setRoute(r);
           }}
         />
       );
+    }
 
-    if (bottomTab === 'profile') return <ProfilePage />;
+    if (bottomTab === 'profile') {
+      return (
+        <ProfilePage
+          onNavigateToReservations={(tab) => {
+            setReservationsInitialTab(tab);
+            setBottomTab('reservations');
+          }}
+          onNavigateToSaved={() => {
+            setBottomTab('saved');
+          }}
+        />
+      );
+    }
 
     if (bottomTab !== 'home') {
       return (
@@ -269,7 +283,7 @@ export default function HomePage(): ReactElement {
           userName={user.name}
           greeting="Good evening"
           locationLabel={locationLabel}
-          onPressNotifications={() => {}}
+          onPressNotifications={() => { }}
           onPressLocation={refresh}
         />
 
@@ -281,8 +295,8 @@ export default function HomePage(): ReactElement {
               setQuery(t);
               setPickedEventId(null);
             }}
-            onSubmit={() => {}}
-            onPressFilter={() => {}}
+            onSubmit={() => { }}
+            onPressFilter={() => { }}
             initialFilters={filters}
             onApplyFilters={(f: Partial<FiltersPayload>) => {
               setFilters(f);
@@ -319,18 +333,18 @@ export default function HomePage(): ReactElement {
                   events={
                     pickedEventId
                       ? (() => {
-                          const idx = eventsForUIWithFav.findIndex(
-                            (e) => String(e.id) === String(pickedEventId),
-                          );
-                          if (idx <= 0) return eventsForUIWithFav;
+                        const idx = eventsForUIWithFav.findIndex(
+                          (e) => String(e.id) === String(pickedEventId),
+                        );
+                        if (idx <= 0) return eventsForUIWithFav;
 
-                          const picked = eventsForUIWithFav[idx];
-                          return [
-                            picked,
-                            ...eventsForUIWithFav.slice(0, idx),
-                            ...eventsForUIWithFav.slice(idx + 1),
-                          ];
-                        })()
+                        const picked = eventsForUIWithFav[idx];
+                        return [
+                          picked,
+                          ...eventsForUIWithFav.slice(0, idx),
+                          ...eventsForUIWithFav.slice(idx + 1),
+                        ];
+                      })()
                       : eventsForUIWithFav
                   }
                   onPressEvent={(id: string) => openEventDetails(id)}

@@ -12,7 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useUser } from '@clerk/clerk-expo';
 
 type Props = Readonly<{
-  onSubmit: () => Promise<void>;
+  onSubmit: (phone: string) => Promise<void>;  // <-- Changed: now accepts phone
   onSkip: () => Promise<void>;
 }>;
 
@@ -41,11 +41,10 @@ export default function PhoneCollectPage({ onSubmit, onSkip }: Props): ReactElem
         });
       } catch (err) {
         console.warn('Failed to save phone to Clerk unsafeMetadata:', err);
-        // We still proceed with onboarding
       }
     }
 
-    await onSubmit();
+    await onSubmit(normalized);  // <-- Pass phone to parent
   };
 
   return (
