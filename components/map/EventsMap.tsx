@@ -19,6 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Event, ID } from '@/types/domain';
 import FullscreenMap, { type FullItem } from '@/components/map/FullScreenMap';
+import StoryViewerModal from '@/components/event/StoryViewerModal';
+import { getStoryCountForEvent } from '@/lib/supabase/stories';
 
 export type FiltersPayload = Readonly<{
   sortBy: 'best' | 'date' | 'price';
@@ -298,6 +300,10 @@ export default function EventsMap({
   const anim = useRef(new Animated.Value(0)).current;
   const closingRef = useRef(false);
 
+  // Story viewer
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [selectedStoryCount, setSelectedStoryCount] = useState(0);
+
   const runTo = (toValue: 0 | 1, cb?: () => void) => {
     Animated.timing(anim, {
       toValue,
@@ -312,6 +318,15 @@ export default function EventsMap({
   const openSheet = (item: FullItem) => {
     closingRef.current = false;
     setSelected(item);
+    setSelectedStoryCount(0); // Reset while loading
+
+    // Fetch story count for this event
+    getStoryCountForEvent(String(item.id)).then((count) => {
+      setSelectedStoryCount(count);
+    }).catch(() => {
+      setSelectedStoryCount(0);
+    });
+
     if (!sheetVisible) {
       setSheetVisible(true);
       requestAnimationFrame(() => runTo(1));
@@ -570,24 +585,29 @@ export default function EventsMap({
                   <Text style={{ color: '#FFFFFF', fontWeight: '800', letterSpacing: 1.2 }}>LIVE</Text>
                 </View>
 
-                <Pressable
-                  onPress={() => {
-                    // TODO: open stories for selected.id
-                  }}
-                  accessibilityRole="button"
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    right: 12,
-                    backgroundColor: 'rgba(11,11,21,0.7)',
-                    borderRadius: 8,
-                    padding: 8,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Feather name="eye" size={18} color="#FFFFFF" />
-                </Pressable>
+                {selectedStoryCount > 0 && (
+                  <Pressable
+                    onPress={() => setStoryViewerOpen(true)}
+                    accessibilityRole="button"
+                    style={{
+                      position: 'absolute',
+                      top: 12,
+                      right: 12,
+                      backgroundColor: 'rgba(11,11,21,0.7)',
+                      borderRadius: 8,
+                      paddingVertical: 8,
+                      paddingHorizontal: 10,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Feather name="eye" size={18} color="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '600' }}>
+                      {selectedStoryCount}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
 
               <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
@@ -677,6 +697,16 @@ export default function EventsMap({
           ) : null}
         </Animated.View>
       </Modal>
+
+      {/* Story Viewer Modal */}
+      {selected && (
+        <StoryViewerModal
+          visible={storyViewerOpen}
+          eventId={String(selected.id)}
+          eventTitle={selected.title}
+          onClose={() => setStoryViewerOpen(false)}
+        />
+      )}
     </>
   );
 }

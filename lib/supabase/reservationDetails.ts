@@ -28,6 +28,7 @@ export type ReservationDetails = Readonly<{
   dateLabel: string;
   timeLabel: string;
   venueLabel: string;
+  eventStartsAt: string | null; // ISO date string for calendar functionality
 
   orderDateLabel: string;
   totalTicketsNumber: number;
@@ -354,6 +355,7 @@ export async function getReservationDetails(params: {
     dateLabel,
     timeLabel,
     venueLabel,
+    eventStartsAt: startsAt,
 
     orderDateLabel,
     totalTicketsNumber,

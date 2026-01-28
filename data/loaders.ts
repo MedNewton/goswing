@@ -9,6 +9,7 @@ export function getEvents(): ReadonlyArray<Event> {
     id: String(e.id) as ID,
     title: String(e.title ?? ''),
     organizer: String(e.organizer ?? ''),
+    organizerId: e.organizerId ?? undefined,
     imageUrl: String(e.imageUrl ?? ''),
     startsAtIso: String(e.startsAtIso ?? ''),
     venue: String(e.venue ?? ''),

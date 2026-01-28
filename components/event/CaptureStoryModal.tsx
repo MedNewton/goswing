@@ -17,6 +17,7 @@ export type CaptureStoryModalProps = Readonly<
     eventTitle?: string | null;
     onClose: () => void;
     onPickPhoto?: () => Promise<string | null> | string | null;
+    onTakePhoto?: () => Promise<string | null> | string | null;
     onShare: (payload: { photoUri: string; caption: string }) => void;
     accentColor?: ColorValue;
   } & Omit<ViewProps, 'children'>
@@ -74,6 +75,7 @@ export default function CaptureStoryModal({
   eventTitle,
   onClose,
   onPickPhoto,
+  onTakePhoto,
   onShare,
   accentColor = '#6B7280',
   ...rest
@@ -96,13 +98,20 @@ export default function CaptureStoryModal({
       const result = typeof onPickPhoto === 'function' ? await onPickPhoto() : null;
       if (typeof result === 'string' && result.length > 0) {
         setPhotoUri(result);
-      } else {
-        // Fallback demo: mark as “chosen” with a blank placeholder
-        // Remove this else-branch once a real picker is wired.
-        setPhotoUri('placeholder://chosen');
       }
     } catch {
       // ignore picker errors for now
+    }
+  };
+
+  const handleTakePhoto = async (): Promise<void> => {
+    try {
+      const result = typeof onTakePhoto === 'function' ? await onTakePhoto() : null;
+      if (typeof result === 'string' && result.length > 0) {
+        setPhotoUri(result);
+      }
+    } catch {
+      // ignore camera errors for now
     }
   };
 
@@ -140,13 +149,15 @@ export default function CaptureStoryModal({
             {photoUri ? (
               <View className="w-full items-center">
                 <View className="w-full h-40 rounded-2xl bg-gray200 overflow-hidden items-center justify-center">
-                  {photoUri.startsWith('placeholder://') ? (
-                    <Feather name="image" size={36} color="#6B7280" />
-                  ) : (
-                    <Image source={{ uri: photoUri }} className="w-full h-full" resizeMode="cover" />
-                  )}
+                  <Image source={{ uri: photoUri }} className="w-full h-full" resizeMode="cover" />
                 </View>
-                <Text className="mt-3 text-gray600">Preview</Text>
+                <Pressable
+                  onPress={() => setPhotoUri(null)}
+                  className="mt-3 flex-row items-center gap-x-1"
+                >
+                  <Feather name="refresh-cw" size={14} color="#6B7280" />
+                  <Text className="text-gray600">Change photo</Text>
+                </Pressable>
               </View>
             ) : (
               <>
@@ -154,13 +165,22 @@ export default function CaptureStoryModal({
                 <Text className="mt-3 text-gray600 text-center">
                   Capture a moment from the event
                 </Text>
-                <Pressable
-                  onPress={handlePick}
-                  className="mt-5 flex-row items-center gap-x-2 rounded-2xl border border-gray300 bg-white px-4 py-2 active:opacity-90"
-                >
-                  <Feather name="upload" size={16} color="#6B7280" />
-                  <Text className="text-gray800 font-medium">Choose Photo</Text>
-                </Pressable>
+                <View className="mt-5 flex-row items-center gap-x-3">
+                  <Pressable
+                    onPress={handleTakePhoto}
+                    className="flex-row items-center gap-x-2 rounded-2xl bg-indigo-600 px-4 py-2.5 active:opacity-90"
+                  >
+                    <Feather name="camera" size={16} color="#FFFFFF" />
+                    <Text className="text-white font-medium">Take Photo</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handlePick}
+                    className="flex-row items-center gap-x-2 rounded-2xl border border-gray300 bg-white px-4 py-2.5 active:opacity-90"
+                  >
+                    <Feather name="image" size={16} color="#6B7280" />
+                    <Text className="text-gray800 font-medium">Library</Text>
+                  </Pressable>
+                </View>
               </>
             )}
           </View>

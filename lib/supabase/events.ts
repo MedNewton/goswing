@@ -23,12 +23,14 @@ type DbVenue = {
 };
 
 type DbOrganizer = {
+  id: string | null;
   name: string | null;
 };
 
 type DbEventRow = {
   id: string;
   external_id: string | null;
+  organizer_id: string | null;
   title: string | null;
   hero_image_url: string | null;
   starts_at: string | null;
@@ -97,6 +99,7 @@ function mapRowToEvent(row: DbEventRow): Event {
 
     title: String(row.title ?? ''),
     organizer: String(row.organizers?.name ?? ''),
+    organizerId: row.organizer_id ?? row.organizers?.id ?? undefined,
     imageUrl: String(row.hero_image_url ?? ''),
     startsAtIso: row.starts_at ? new Date(row.starts_at).toISOString() : new Date().toISOString(),
 
@@ -127,13 +130,14 @@ export async function getPublishedEvents(): Promise<ReadonlyArray<Event>> {
       `
       id,
       external_id,
+      organizer_id,
       title,
       hero_image_url,
       starts_at,
       status,
       is_free,
       min_price_cents,
-      organizers:organizer_id ( name ),
+      organizers:organizer_id ( id, name ),
       venues:venue_id ( name, city, country_code, lat, lng, venue_type ),
       event_tags ( tags:tag_id ( type, slug ) )
     `

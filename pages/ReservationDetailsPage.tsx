@@ -44,6 +44,7 @@ export type ReservationDetails = Readonly<{
   dateLabel: string; // "Aug 30, 2025"
   timeLabel: string; // "6:00 PM"
   venueLabel: string; // "Central Park, NYC"
+  eventStartsAt: string | null; // ISO date string for calendar functionality
 
   orderDateLabel: string; // "Aug 25, 2025"
   totalTicketsNumber: number; // 3

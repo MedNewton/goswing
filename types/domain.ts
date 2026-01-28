@@ -173,6 +173,7 @@ export type Event = Readonly<{
   externalId?: string;
   title: string;
   organizer: string;
+  organizerId?: string;
   imageUrl: string;
   startsAtIso: string;
   venue: string;

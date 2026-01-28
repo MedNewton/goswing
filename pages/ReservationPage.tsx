@@ -138,12 +138,6 @@ export default function ReservationsPage({ initialTab = 'active', route }: Reser
                     key={r.id}
                     reservation={r}
                     onPressReservation={openReservationDetails}
-                    onPressSuggestSongs={(id) => {
-                      console.log('[ReservationsPage] Suggest songs', id);
-                    }}
-                    onPressAddToWallet={(id) => {
-                      console.log('[ReservationsPage] Add to wallet', id);
-                    }}
                   />
                 ))
               )}

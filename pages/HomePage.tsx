@@ -20,6 +20,7 @@ import EventDetailsPage from '@/pages/EventDetailsPage';
 import ProfilePage from '@/pages/ProfilePage';
 import CheckoutPage from '@/pages/CheckoutPage';
 import ReservationDetailsRoutePage from '@/pages/ReservationDetailsRoutePage';
+import OrganizerProfilePage from '@/pages/OrganizerProfilePage';
 
 import { getCategories, getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
@@ -43,6 +44,7 @@ const cx = (...classes: ReadonlyArray<string | null | undefined | false>): strin
 type Route =
   | { name: 'root' }
   | { name: 'eventDetails'; event: Event; initialTab?: 'about' | 'offers' | 'upcoming' }
+  | { name: 'organizerProfile'; organizerId: string; organizerName?: string }
   | {
     name: 'checkout';
     event: Event;
@@ -379,6 +381,9 @@ export default function HomePage(): ReactElement {
           event={route.event}
           initialTab={route.initialTab}
           onBack={closeOverlay}
+          onOpenOrganizer={({ organizerId, organizerName }) => {
+            setRoute({ name: 'organizerProfile', organizerId, organizerName });
+          }}
           onBook={(payload) => {
             setRoute({
               name: 'checkout',
@@ -389,6 +394,12 @@ export default function HomePage(): ReactElement {
               eventSnapshot: payload.eventSnapshot,
             });
           }}
+        />
+      ) : route.name === 'organizerProfile' ? (
+        <OrganizerProfilePage
+          organizerId={route.organizerId}
+          organizerName={route.organizerName}
+          onBack={closeOverlay}
         />
       ) : route.name === 'reservationDetails' ? (
         <ReservationDetailsRoutePage

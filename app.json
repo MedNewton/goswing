@@ -21,7 +21,9 @@
         "backgroundColor": "#0B0B15"
       },
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "GoSwing uses your location to show nearby events and experiences."
+        "NSLocationWhenInUseUsageDescription": "GoSwing uses your location to show nearby events and experiences.",
+        "NSCalendarsUsageDescription": "GoSwing needs calendar access to add event reminders to your calendar.",
+        "NSCalendarsFullAccessUsageDescription": "GoSwing needs calendar access to add event reminders to your calendar."
       },
       "config": {
         "googleMapsApiKey": "AIzaSyAElJiLEaPb1Qg-XjzE8WmjuxrQJkFsw4w"
@@ -30,7 +32,11 @@
     "android": {
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -69,19 +75,21 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-location"
+      "expo-location",
+      "expo-calendar"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "0cadf90f-07f5-463f-9804-023438b6cdc5"
+        "projectId": "c8935135-acf0-4784-aad6-b9a045c51191"
       },
       "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_bWFqb3ItYmF0LTQ1LmNsZXJrLmFjY291bnRzLmRldiQ",
       "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAElJiLEaPb1Qg-XjzE8WmjuxrQJkFsw4w",
       "EXPO_PUBLIC_SUPABASE_URL": "https://dqozfaxehrkgwipkztok.supabase.co",
       "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_oB4etZ1uejhVnHcobzjwXQ_vVGwufhj"
-    }
+    },
+    "owner": "medthemoorish"
   }
 }

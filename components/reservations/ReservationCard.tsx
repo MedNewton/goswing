@@ -49,29 +49,17 @@ export type Reservation = Readonly<{
 export type ReservationCardProps = Readonly<{
   reservation: Reservation;
   onPressReservation?: (reservationId: string) => void;
-  onPressSuggestSongs?: (reservationId: string) => void;
-  onPressAddToWallet?: (reservationId: string) => void;
 }>;
 
 export default function ReservationCard({
   reservation,
   onPressReservation,
-  onPressSuggestSongs,
-  onPressAddToWallet,
 }: ReservationCardProps): ReactElement {
   const QRCode = useMemo(() => tryGetQrComponent(), []);
 
   const handleOpenDetails = useCallback(() => {
     onPressReservation?.(String(reservation.id));
   }, [onPressReservation, reservation.id]);
-
-  const handleSuggestSongs = useCallback(() => {
-    onPressSuggestSongs?.(String(reservation.id));
-  }, [onPressSuggestSongs, reservation.id]);
-
-  const handleAddToWallet = useCallback(() => {
-    onPressAddToWallet?.(String(reservation.id));
-  }, [onPressAddToWallet, reservation.id]);
 
   const Row = ({
     icon,
@@ -146,37 +134,18 @@ export default function ReservationCard({
           </>
         ) : null}
 
-        <View className="mt-4 gap-y-3">
+        <View className="mt-4">
           <Pressable
             accessibilityRole="button"
             onPress={(e) => {
               e.stopPropagation?.();
-              handleSuggestSongs();
+              handleOpenDetails();
             }}
             className="h-11 rounded-2xl border border-gray300 px-3 flex-row items-center justify-center gap-x-2 active:opacity-90"
           >
-            <Feather name="music" size={16} color="#111827" />
-            <Text className="text-gray900">Suggest Songs for Event</Text>
+            <Feather name="external-link" size={16} color="#111827" />
+            <Text className="text-gray900">View Details</Text>
           </Pressable>
-
-          <View className="flex-row gap-x-3">
-            <GhostIconBtn
-              icon="download"
-              label="Add to Wallet"
-              onPress={(e) => {
-                e.stopPropagation?.();
-                handleAddToWallet();
-              }}
-            />
-            <GhostIconBtn
-              icon="external-link"
-              label="View Details"
-              onPress={(e) => {
-                e.stopPropagation?.();
-                handleOpenDetails();
-              }}
-            />
-          </View>
         </View>
       </Card>
     </Pressable>
@@ -234,23 +203,3 @@ function MiniIcon({ action, label }: { action: keyof typeof Feather.glyphMap; la
   );
 }
 
-function GhostIconBtn({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: keyof typeof Feather.glyphMap;
-  label: string;
-  onPress?: (e: any) => void;
-}): ReactElement {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      className="flex-1 h-11 rounded-2xl border border-gray300 px-3 flex-row items-center justify-center gap-x-2 active:opacity-90"
-    >
-      <Feather name={icon} size={16} color="#111827" />
-      <Text className="text-gray900">{label}</Text>
-    </Pressable>
-  );
-}

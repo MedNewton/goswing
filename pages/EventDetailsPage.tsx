@@ -20,6 +20,11 @@ import ReviewModal from '@/components/event/ReviewModal';
 import { createEventReview, getMyReviewForEvent } from '@/lib/supabase/reviews';
 
 import SuggestSongsModal from "@/components/event/SuggestSongsModal";
+import CaptureStoryModal from '@/components/event/CaptureStoryModal';
+import { createEventStory, getMyStoryForEvent, getStoriesWithUserInfo, type EventStoryWithUser } from '@/lib/supabase/stories';
+import * as ImagePicker from 'expo-image-picker';
+import StoriesHeroSlider from '@/components/event/StoriesHeroSlider';
+import StoryViewerModal from '@/components/event/StoryViewerModal';
 
 
 
@@ -27,6 +32,7 @@ export type EventDetailsPageProps = Readonly<{
   event: Event;
   initialTab?: 'about' | 'offers' | 'upcoming';
   onBack?: () => void;
+  onOpenOrganizer?: (payload: { organizerId: string; organizerName?: string }) => void;
 
   // Preferred: parent routes using this payload
   onBook?: (payload: {
@@ -146,6 +152,7 @@ export default function EventDetailsPage({
   onBack,
   onBook,
   route,
+  onOpenOrganizer,
 }: EventDetailsPageProps): ReactElement {
   const insets = useSafeAreaInsets();
 
@@ -173,6 +180,13 @@ export default function EventDetailsPage({
 
   const [suggestSongsOpen, setSuggestSongsOpen] = useState(false);
 
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [storySubmitting, setStorySubmitting] = useState(false);
+  const [hasStory, setHasStory] = useState(false);
+  const [eventStories, setEventStories] = useState<ReadonlyArray<EventStoryWithUser>>([]);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const canOpenOrganizer = Boolean(onOpenOrganizer && detailsEvent.organizerId);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -192,6 +206,40 @@ export default function EventDetailsPage({
       cancelled = true;
     };
   }, [detailsEvent.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const existing = await getMyStoryForEvent(String(detailsEvent.id));
+        if (!cancelled) setHasStory(!!existing);
+      } catch {
+        if (!cancelled) setHasStory(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailsEvent.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const stories = await getStoriesWithUserInfo(String(detailsEvent.id));
+        if (!cancelled) setEventStories(stories);
+      } catch {
+        if (!cancelled) setEventStories([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailsEvent.id, hasStory]);
 
 
 
@@ -391,19 +439,29 @@ export default function EventDetailsPage({
     <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
       <View className="flex-1">
         <View className="relative" style={{ width: SCREEN_WIDTH, height: HERO_HEIGHT }}>
-          {detailsEvent.imageUrl ? (
-            <Image source={{ uri: detailsEvent.imageUrl }} className="w-full h-full" resizeMode="cover" />
-          ) : (
-            <View className="w-full h-full bg-gray200" />
-          )}
+          <StoriesHeroSlider
+            heroImageUrl={detailsEvent.imageUrl}
+            stories={eventStories}
+            height={HERO_HEIGHT}
+          />
 
-          <View className="absolute left-3 top-3 flex-row items-center">
+          <View className="absolute left-3 flex-row items-center z-30" style={{ top: insets.top - 14 }}>
             <CircleIcon onPress={onBack}>
               <Feather name="chevron-left" size={20} color="#111827" />
             </CircleIcon>
           </View>
 
-          <View className="absolute right-3 top-3 flex-row items-center gap-x-2">
+          <View className="absolute right-3 flex-row items-center gap-x-2 z-30" style={{ top: insets.top - 14 }}>
+            {eventStories.length > 0 && (
+              <Pressable
+                onPress={() => setStoryViewerOpen(true)}
+                className="h-9 px-3 rounded-full bg-white/95 flex-row items-center justify-center border border-gray200 gap-x-1.5"
+                hitSlop={10}
+              >
+                <Feather name="eye" size={16} color="#111827" />
+                <Text className="text-sm font-semibold text-gray900">{eventStories.length}</Text>
+              </Pressable>
+            )}
             <CircleIcon onPress={() => { }}>
               <Feather name="heart" size={18} color="#111827" />
             </CircleIcon>
@@ -496,7 +554,12 @@ export default function EventDetailsPage({
 
               </View>
               <View>
-                <ActionChip bg="bg-indigo-600" icon="camera" label="Take Story" />
+                <Pressable
+                  onPress={() => setStoryOpen(true)}
+                  className="active:opacity-90"
+                >
+                  <ActionChip bg="bg-indigo-600" icon="camera" label="Share Story" />
+                </Pressable>
               </View>
               <View className="flex-1">
                 <Pressable
@@ -519,27 +582,40 @@ export default function EventDetailsPage({
 
 
           <View className="px-5 mt-4">
-            <Card variant="outlined" padding="md">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-x-3">
-                  <View className="h-10 w-10 rounded-full bg-gray200 items-center justify-center">
-                    <Text className="text-gray800 font-medium">
-                      {String(detailsEvent.organizer || 'OR').slice(0, 2).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text className="text-gray900 font-medium">{detailsEvent.organizer}</Text>
-                    <View className="flex-row items-center gap-x-1">
-                      <Feather name="star" size={14} color="#F59E0B" />
-                      <Text className="text-xs text-gray600">4.8 · 1.2k followers</Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!canOpenOrganizer}
+              onPress={() => {
+                if (!detailsEvent.organizerId || !onOpenOrganizer) return;
+                onOpenOrganizer({
+                  organizerId: detailsEvent.organizerId,
+                  organizerName: detailsEvent.organizer,
+                });
+              }}
+              className={canOpenOrganizer ? 'active:opacity-90' : 'opacity-80'}
+            >
+              <Card variant="outlined" padding="md">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-x-3">
+                    <View className="h-10 w-10 rounded-full bg-gray200 items-center justify-center">
+                      <Text className="text-gray800 font-medium">
+                        {String(detailsEvent.organizer || 'OR').slice(0, 2).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View>
+                      <Text className="text-gray900 font-medium">{detailsEvent.organizer}</Text>
+                      <View className="flex-row items-center gap-x-1">
+                        <Feather name="star" size={14} color="#F59E0B" />
+                        <Text className="text-xs text-gray600">4.8 · 1.2k followers</Text>
+                      </View>
                     </View>
                   </View>
+                  <Pressable className="rounded-full border border-gray300 px-3 py-1.5 bg-white">
+                    <Text className="text-sm text-gray800">Follow</Text>
+                  </Pressable>
                 </View>
-                <Pressable className="rounded-full border border-gray300 px-3 py-1.5 bg-white">
-                  <Text className="text-sm text-gray800">Follow</Text>
-                </Pressable>
-              </View>
-            </Card>
+              </Card>
+            </Pressable>
           </View>
 
           <View className="px-5 mt-5">
@@ -781,7 +857,80 @@ export default function EventDetailsPage({
         eventTitle={String(detailsEvent.title ?? "")}
         onClose={() => setSuggestSongsOpen(false)}
       />
+      <CaptureStoryModal
+        visible={storyOpen}
+        eventTitle={String(detailsEvent.title ?? "")}
+        onClose={() => setStoryOpen(false)}
+        onTakePhoto={async () => {
+          const permission = await ImagePicker.requestCameraPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert('Permission required', 'Please allow access to your camera.');
+            return null;
+          }
 
+          const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.8,
+          });
+
+          if (result.canceled || !result.assets?.[0]?.uri) {
+            return null;
+          }
+
+          return result.assets[0].uri;
+        }}
+        onPickPhoto={async () => {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert('Permission required', 'Please allow access to your photo library.');
+            return null;
+          }
+
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.8,
+          });
+
+          if (result.canceled || !result.assets?.[0]?.uri) {
+            return null;
+          }
+
+          return result.assets[0].uri;
+        }}
+        onShare={async ({ photoUri, caption }) => {
+          if (storySubmitting) return;
+
+          try {
+            setStorySubmitting(true);
+
+            await createEventStory({
+              eventId: String(detailsEvent.id),
+              photoUri,
+              caption,
+            });
+
+            setHasStory(true);
+            setStoryOpen(false);
+            Alert.alert('Story shared!', 'Your story is now visible to event attendees.');
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            Alert.alert('Could not share story', msg);
+          } finally {
+            setStorySubmitting(false);
+          }
+        }}
+        accentColor="#4F46E5"
+      />
+
+      <StoryViewerModal
+        visible={storyViewerOpen}
+        eventId={String(detailsEvent.id)}
+        eventTitle={detailsEvent.title}
+        onClose={() => setStoryViewerOpen(false)}
+      />
     </SafeAreaView>
   );
 }
