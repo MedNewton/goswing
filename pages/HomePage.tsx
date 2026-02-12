@@ -22,11 +22,11 @@ import CheckoutPage from '@/pages/CheckoutPage';
 import ReservationDetailsRoutePage from '@/pages/ReservationDetailsRoutePage';
 import OrganizerProfilePage from '@/pages/OrganizerProfilePage';
 
-import { getCategories, getUser } from '@/data/loaders';
+import { getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
 import { useCurrentCity } from '@/hooks/useCurrentCity';
 import { applyFiltersToEvents } from '@/components/filters/filters';
-import type { FiltersPayload } from '@/components/filters/FiltersDrawer';
+import { VENUE_TYPES, type FiltersPayload } from '@/components/filters/FiltersDrawer';
 
 import { getPublishedEvents } from '@/lib/supabase/events';
 import type { TicketQuantities, TicketType } from '@/components/blocks/TicketQuantitySheet';
@@ -77,14 +77,12 @@ export default function HomePage(): ReactElement {
     return <Text>Missing auth session</Text>;
   }
 
-  const categories = getCategories();
   const { city, region, loading, error, refresh } = useCurrentCity();
 
   const [bottomTab, setBottomTab] = useState<BottomTabKey>('home');
   const [route, setRoute] = useState<Route>({ name: 'root' });
 
   const [query, setQuery] = useState<string>('');
-  const [activeCats, setActiveCats] = useState<ReadonlyArray<string>>([]);
   const [activeTab, setActiveTab] = useState<HomeTabKey>('map');
   const [whenKey, setWhenKey] = useState<WhenKey | null>(null);
 
@@ -165,22 +163,26 @@ export default function HomePage(): ReactElement {
   };
 
   const toggleCategory = (key: string, next: boolean): void => {
-    setActiveCats((prev) => (next ? [...prev, key] : prev.filter((k) => k !== key)));
+    setFilters((prev) => {
+      const current = prev.venueTypes ?? [];
+      const exists = current.includes(key);
+      if (next && !exists) return { ...prev, venueTypes: [...current, key] };
+      if (!next && exists) return { ...prev, venueTypes: current.filter((k) => k !== key) };
+      return prev;
+    });
   };
 
   const filteredEvents: ReadonlyArray<Event> = useMemo(() => {
-    return applyFiltersToEvents(allEvents, query, activeCats, filters);
-  }, [allEvents, query, activeCats, filters]);
+    return applyFiltersToEvents(allEvents, query, [], filters);
+  }, [allEvents, query, filters]);
 
   const catItems: ReadonlyArray<CategoryItem> = useMemo(
     () =>
-      categories.map((c) => ({
-        key: c.key,
-        label: c.label,
-        emoji: c.emoji,
-        disabled: Boolean(c.disabled),
+      VENUE_TYPES.map((label) => ({
+        key: label,
+        label,
       })),
-    [categories],
+    [],
   );
 
   const locationLabel =
@@ -319,7 +321,7 @@ export default function HomePage(): ReactElement {
         <View className="mt-5">
           <CategoriesSlider
             categories={catItems}
-            activeKeys={activeCats}
+            activeKeys={filters.venueTypes ?? []}
             onToggle={toggleCategory}
             singleSelect={false}
           />

@@ -39,7 +39,7 @@ export type FiltersDrawerProps = Readonly<{
   onReset?: () => void;
 }>;
 
-const VENUE_TYPES = [
+export const VENUE_TYPES = [
   'Restaurant','Brasserie','Bistro','Bar','Pub','Lounge','Guinguette','Taverne',
   'Rooftop','Discothèque','Club','Cabaret',
 ] as const;

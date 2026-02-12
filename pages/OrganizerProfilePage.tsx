@@ -11,7 +11,9 @@ import {
   Alert,
   RefreshControl,
   Animated,
+  type DimensionValue,
 } from 'react-native';
+import { Pressable as RNPressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 
@@ -90,7 +92,7 @@ function SkeletonBox({
   rounded = 'md',
   className = '',
 }: {
-  width?: number | string;
+  width?: DimensionValue;
   height: number;
   rounded?: 'sm' | 'md' | 'lg' | 'full';
   className?: string;
@@ -190,27 +192,44 @@ function StatItem({
   );
 }
 
-function TabPill({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}): ReactElement {
+function TabPill({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void; }): ReactElement {
   return (
-    <Pressable
-      onPress={onPress}
-      className={cx(
-        'px-2 py-1.5 rounded-full flex-1 items-center',
-        selected ? 'bg-white border border-gray300 shadow-sm' : '',
-      )}
+    <RNPressable
+      onPress={(e) => {
+        if (e) e.stopPropagation();
+        onPress();
+      }}
+      // By using 'style' instead of 'className', we bypass the href-checking interop
+      style={[
+        {
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          borderRadius: 9999,
+          flex: 1,
+          alignItems: 'center',
+          backgroundColor: selected ? 'white' : 'transparent',
+        },
+        selected && {
+          borderWidth: 1,
+          borderColor: '#D1D5DB', // gray300
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 2,
+        }
+      ]}
     >
-      <Text className={selected ? 'text-sm text-black font-semibold' : 'text-sm text-gray600'}>
+      <Text
+        style={{
+          fontSize: 14,
+          fontWeight: selected ? '600' : '400',
+          color: selected ? 'black' : '#4B5563'
+        }}
+      >
         {label}
       </Text>
-    </Pressable>
+    </RNPressable>
   );
 }
 
@@ -617,7 +636,7 @@ export default function OrganizerProfilePage({
           {coverUri ? (
             <Image source={{ uri: coverUri }} className="h-full w-full" resizeMode="cover" />
           ) : (
-            <View className="h-full w-full bg-gradient-to-b from-gray300 to-gray200" />
+            <View className="h-full w-full bg-gray200" />
           )}
           <View className="absolute inset-0 bg-black/50" />
 
