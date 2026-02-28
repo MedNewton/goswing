@@ -61,6 +61,97 @@ type Route =
   }
   | { name: 'reservationDetails'; reservationId: string };
 
+function filterByWhenKey(events: ReadonlyArray<Event>, key: WhenKey): ReadonlyArray<Event> {
+  const now = new Date();
+
+  function startOfDay(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  function endOfDay(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  }
+  function startOfWeekMon(d: Date): Date {
+    const x = new Date(d);
+    const day = x.getDay();
+    const diff = (day + 6) % 7;
+    x.setDate(x.getDate() - diff);
+    return startOfDay(x);
+  }
+
+  let rangeStart: Date;
+  let rangeEnd: Date;
+
+  switch (key) {
+    case 'tonight':
+      rangeStart = now;
+      rangeEnd = endOfDay(now);
+      break;
+    case 'tomorrow': {
+      const t = new Date(now);
+      t.setDate(now.getDate() + 1);
+      rangeStart = startOfDay(t);
+      rangeEnd = endOfDay(t);
+      break;
+    }
+    case 'this_week': {
+      rangeStart = startOfWeekMon(now);
+      const end = new Date(rangeStart);
+      end.setDate(rangeStart.getDate() + 6);
+      rangeEnd = endOfDay(end);
+      break;
+    }
+    case 'this_weekend': {
+      const weekStart = startOfWeekMon(now);
+      const sat = new Date(weekStart);
+      sat.setDate(weekStart.getDate() + 5);
+      rangeStart = startOfDay(sat);
+      const sun = new Date(sat);
+      sun.setDate(sat.getDate() + 1);
+      rangeEnd = endOfDay(sun);
+      break;
+    }
+    case 'next_week': {
+      const thisWeekStart = startOfWeekMon(now);
+      const nextWeekStart = new Date(thisWeekStart);
+      nextWeekStart.setDate(thisWeekStart.getDate() + 7);
+      rangeStart = startOfDay(nextWeekStart);
+      const nextWeekEnd = new Date(nextWeekStart);
+      nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+      rangeEnd = endOfDay(nextWeekEnd);
+      break;
+    }
+    case 'next_weekend': {
+      const thisWeekStart = startOfWeekMon(now);
+      const nextSat = new Date(thisWeekStart);
+      nextSat.setDate(thisWeekStart.getDate() + 12);
+      rangeStart = startOfDay(nextSat);
+      const nextSun = new Date(nextSat);
+      nextSun.setDate(nextSat.getDate() + 1);
+      rangeEnd = endOfDay(nextSun);
+      break;
+    }
+    case 'next_month': {
+      rangeStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      rangeEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
+      break;
+    }
+    case 'next_year': {
+      rangeStart = new Date(now.getFullYear() + 1, 0, 1);
+      rangeEnd = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999);
+      break;
+    }
+    default:
+      return events;
+  }
+
+  return events.filter((e) => {
+    if (!e.startsAtIso) return false;
+    const d = new Date(e.startsAtIso);
+    if (Number.isNaN(d.getTime())) return false;
+    return d >= rangeStart && d <= rangeEnd;
+  });
+}
+
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return 'Something went wrong.';
@@ -85,6 +176,10 @@ export default function HomePage(): ReactElement {
   const [query, setQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<HomeTabKey>('map');
   const [whenKey, setWhenKey] = useState<WhenKey | null>(null);
+
+  const handleWhenChange = (key: WhenKey | null): void => {
+    setWhenKey(key);
+  };
 
   const [filters, setFilters] = useState<Partial<FiltersPayload>>({
     sortBy: 'best',
@@ -173,8 +268,14 @@ export default function HomePage(): ReactElement {
   };
 
   const filteredEvents: ReadonlyArray<Event> = useMemo(() => {
-    return applyFiltersToEvents(allEvents, query, [], filters);
-  }, [allEvents, query, filters]);
+    let result = applyFiltersToEvents(allEvents, query, [], filters);
+
+    if (whenKey) {
+      result = filterByWhenKey(result, whenKey);
+    }
+
+    return result;
+  }, [allEvents, query, filters, whenKey]);
 
   const catItems: ReadonlyArray<CategoryItem> = useMemo(
     () =>
@@ -315,7 +416,7 @@ export default function HomePage(): ReactElement {
         </View>
 
         <View className="mt-5">
-          <WhenSlider activeKey={whenKey} onChange={(key) => setWhenKey(key)} />
+          <WhenSlider activeKey={whenKey} onChange={handleWhenChange} />
         </View>
 
         <View className="mt-5">
@@ -383,6 +484,8 @@ export default function HomePage(): ReactElement {
           event={route.event}
           initialTab={route.initialTab}
           onBack={closeOverlay}
+          isFavorite={fav.isFavorite(String(route.event.id))}
+          onToggleFavorite={handleToggleFavorite}
           onOpenOrganizer={({ organizerId, organizerName }) => {
             setRoute({ name: 'organizerProfile', organizerId, organizerName });
           }}

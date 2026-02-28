@@ -243,7 +243,7 @@ async function getEventStats(organizerId: string): Promise<{
 // CHECK IF USER IS FOLLOWING
 // ============================================
 
-async function checkIsFollowing(organizerId: string): Promise<boolean> {
+export async function checkIsFollowing(organizerId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from("organizer_follows")
     .select("id")
@@ -486,4 +486,83 @@ export async function getSimilarOrganizers(
   results.sort((a, b) => b.eventCount - a.eventCount);
 
   return results.slice(0, 5);
+}
+
+// ============================================
+// LIGHTWEIGHT ORGANIZER SUMMARY FOR EVENT PAGE
+// ============================================
+
+export type OrganizerSummary = Readonly<{
+  logoUrl: string | null;
+  followerCount: number;
+  avgRating: number;
+  isFollowing: boolean;
+  cancellationPolicy: string | null;
+  refundPolicy: string | null;
+}>;
+
+export async function getOrganizerSummaryForEvent(
+  organizerId: string,
+): Promise<OrganizerSummary | null> {
+  const id = asString(organizerId).trim();
+  if (!id) return null;
+
+  const { data: org, error } = await supabase
+    .from("organizers")
+    .select("logo_url, cancellation_policy, refund_policy")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !org) return null;
+
+  const [followerCount, eventStats, isFollowing] = await Promise.all([
+    getFollowerCount(id),
+    getEventStats(id),
+    checkIsFollowing(id),
+  ]);
+
+  return {
+    logoUrl: normalizeNullableString(org.logo_url),
+    followerCount,
+    avgRating: eventStats.avgRating,
+    isFollowing,
+    cancellationPolicy: normalizeNullableString(org.cancellation_policy),
+    refundPolicy: normalizeNullableString(org.refund_policy),
+  };
+}
+
+// ============================================
+// LIST FOLLOWED ORGANIZERS (for SavedPage)
+// ============================================
+
+export type FollowedOrganizer = Readonly<{
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  followedAt: string;
+}>;
+
+export async function listFollowedOrganizers(): Promise<ReadonlyArray<FollowedOrganizer>> {
+  const { data, error } = await supabase
+    .from("organizer_follows")
+    .select(`
+      created_at,
+      organizers:organizer_id ( id, name, logo_url )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .map((row: any) => {
+      const org = row.organizers;
+      if (!org?.id) return null;
+      return {
+        id: asString(org.id),
+        name: asString(org.name),
+        logoUrl: normalizeNullableString(org.logo_url),
+        followedAt: asString(row.created_at),
+      };
+    })
+    .filter((o): o is FollowedOrganizer => o !== null);
 }

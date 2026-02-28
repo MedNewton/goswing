@@ -1,11 +1,13 @@
 // app/(tabs)/saved.tsx  (SavedPage)
-import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import {
   View,
   Text,
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Image,
+  Alert,
   type ViewProps,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -17,6 +19,11 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@clerk/clerk-expo';
 
 import { listFavoriteEvents } from '@/lib/supabase/saved';
+import {
+  listFollowedOrganizers,
+  unfollowOrganizer,
+  type FollowedOrganizer,
+} from '@/lib/supabase/organizers';
 
 export type SavedPageProps = Readonly<
   {
@@ -72,14 +79,13 @@ export default function SavedPage({
   const [loading, setLoading] = useState<boolean>(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  const savedOrganizers: ReadonlyArray<{ id: string; name: string }> = useMemo(
-    () => [
-      { id: 'org_1', name: 'Blue Note Entertainment' },
-      { id: 'org_2', name: 'Photography Academy' },
-    ],
-    [],
-  );
+  // Organizers tab state
+  const [followedOrgs, setFollowedOrgs] = useState<ReadonlyArray<FollowedOrganizer>>([]);
+  const [orgsLoading, setOrgsLoading] = useState<boolean>(false);
+  const [orgsError, setOrgsError] = useState<string | null>(null);
+  const [unfollowingIds, setUnfollowingIds] = useState<Set<string>>(new Set());
 
+  // Fetch saved events
   useEffect(() => {
     if (tab !== 'events') return;
 
@@ -134,6 +140,65 @@ export default function SavedPage({
     };
   }, [tab, userId]);
 
+  // Fetch followed organizers
+  useEffect(() => {
+    if (tab !== 'organizers') return;
+
+    let mounted = true;
+
+    (async () => {
+      try {
+        setOrgsLoading(true);
+        setOrgsError(null);
+
+        const orgs = await listFollowedOrganizers();
+
+        if (!mounted) return;
+        setFollowedOrgs(orgs);
+      } catch (e: any) {
+        if (!mounted) return;
+        setOrgsError(e?.message ? String(e.message) : 'Failed to load followed organizers.');
+        setFollowedOrgs([]);
+      } finally {
+        if (!mounted) return;
+        setOrgsLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tab]);
+
+  const handleUnfollow = useCallback(async (orgId: string, orgName: string) => {
+    Alert.alert(
+      'Unfollow',
+      `Are you sure you want to unfollow ${orgName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unfollow',
+          style: 'destructive',
+          onPress: async () => {
+            setUnfollowingIds((prev) => new Set(prev).add(orgId));
+            try {
+              await unfollowOrganizer(orgId);
+              setFollowedOrgs((prev) => prev.filter((o) => o.id !== orgId));
+            } catch (e: any) {
+              Alert.alert('Error', e?.message ?? 'Could not unfollow.');
+            } finally {
+              setUnfollowingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(orgId);
+                return next;
+              });
+            }
+          },
+        },
+      ],
+    );
+  }, []);
+
   const bottomPad = (insets.bottom || 0) + 88;
 
   const handlePressEvent = (eventId: string): void => {
@@ -164,7 +229,7 @@ export default function SavedPage({
             onPress={() => setTab('events')}
           />
           <SegBtn
-            label={`Organizers (${savedOrganizers.length})`}
+            label={`Organizers (${followedOrgs.length})`}
             icon={
               <Feather
                 name="users"
@@ -216,26 +281,69 @@ export default function SavedPage({
             <View style={{ height: (insets.bottom || 0) + 24 }} />
           </ScrollView>
         ) : (
-          <View className="rounded-2xl border border-gray200 bg-white p-4">
-            {savedOrganizers.map((o) => (
-              <View
-                key={o.id}
-                className="flex-row items-center justify-between px-2 py-3 border-b border-gray100 last:border-b-0"
-              >
-                <View className="flex-row items-center gap-x-2">
-                  <Feather name="user" size={18} color="#6B7280" />
-                  <Text className="text-gray800">{o.name}</Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {}}
-                  className="rounded-full px-3 py-1 bg-gray100 border border-gray200"
-                >
-                  <Text className="text-sm text-gray700">Following</Text>
-                </Pressable>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: bottomPad }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {orgsLoading ? (
+              <View className="py-8 items-center justify-center">
+                <ActivityIndicator />
+                <Text className="mt-3 text-gray500">Loading followed organizers…</Text>
               </View>
-            ))}
-          </View>
+            ) : orgsError ? (
+              <View className="rounded-2xl border border-gray200 bg-white p-4">
+                <Text className="text-gray800 font-medium">Could not load organizers</Text>
+                <Text className="text-gray500 mt-2">{orgsError}</Text>
+              </View>
+            ) : followedOrgs.length === 0 ? (
+              <View className="rounded-2xl border border-gray200 bg-white p-4">
+                <Text className="text-gray800 font-medium">No followed organizers yet</Text>
+                <Text className="text-gray500 mt-2">
+                  Follow organizers from event pages to see them here.
+                </Text>
+              </View>
+            ) : (
+              <View className="rounded-2xl border border-gray200 bg-white p-4 gap-y-0">
+                {followedOrgs.map((o) => (
+                  <View
+                    key={o.id}
+                    className="flex-row items-center justify-between px-2 py-3 border-b border-gray100"
+                  >
+                    <View className="flex-row items-center gap-x-3 flex-1">
+                      {o.logoUrl ? (
+                        <Image
+                          source={{ uri: o.logoUrl }}
+                          className="h-9 w-9 rounded-full"
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View className="h-9 w-9 rounded-full bg-gray200 items-center justify-center">
+                          <Feather name="user" size={18} color="#6B7280" />
+                        </View>
+                      )}
+                      <Text className="text-gray800 flex-1" numberOfLines={1}>{o.name}</Text>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => handleUnfollow(o.id, o.name)}
+                      disabled={unfollowingIds.has(o.id)}
+                      className={cx(
+                        'rounded-full px-3 py-1.5 border',
+                        unfollowingIds.has(o.id) ? 'bg-gray100 border-gray200 opacity-50' : 'bg-black border-black',
+                      )}
+                    >
+                      <Text className={cx('text-sm', unfollowingIds.has(o.id) ? 'text-gray500' : 'text-white')}>
+                        {unfollowingIds.has(o.id) ? 'Unfollowing…' : 'Following'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View style={{ height: (insets.bottom || 0) + 24 }} />
+          </ScrollView>
         )}
       </View>
     </View>

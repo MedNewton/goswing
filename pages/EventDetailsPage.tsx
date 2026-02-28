@@ -1,6 +1,6 @@
 // pages/EventDetailsPage.tsx
-import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
-import { Dimensions, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { ActivityIndicator, Dimensions, Image, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +14,13 @@ import Badge from '@/components/ui/Badge';
 import type { Event } from '@/types/domain';
 import * as EventsApi from '@/lib/supabase/events';
 import { getEventAccess, type EventAccess } from '@/lib/supabase/eventAccess';
+import {
+  getOrganizerSummaryForEvent,
+  followOrganizer,
+  unfollowOrganizer,
+  type OrganizerSummary,
+} from '@/lib/supabase/organizers';
+import type { MiniEventRow } from '@/lib/supabase/events';
 
 import { Alert } from 'react-native';
 import ReviewModal from '@/components/event/ReviewModal';
@@ -33,6 +40,8 @@ export type EventDetailsPageProps = Readonly<{
   initialTab?: 'about' | 'offers' | 'upcoming';
   onBack?: () => void;
   onOpenOrganizer?: (payload: { organizerId: string; organizerName?: string }) => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (eventId: string, next: boolean) => void;
 
   // Preferred: parent routes using this payload
   onBook?: (payload: {
@@ -83,6 +92,21 @@ function formatDateTime(iso?: string | null): { date: string; time: string } | n
   return { date, time };
 }
 
+function formatDateShort(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const date = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${date} · ${time}`;
+}
+
+function formatPriceCents(cents: number, currency: string): string {
+  if (cents === 0) return 'Free';
+  const symbol = currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
+  return `${symbol}${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+}
+
 function pickDetailsFetcher(): ((id: string) => Promise<Event>) | null {
   const api: any = EventsApi as any;
   if (typeof api.getEventDetailsById === 'function') return api.getEventDetailsById;
@@ -125,6 +149,11 @@ async function persistCheckoutDraft(draft: unknown): Promise<void> {
   }
 }
 
+function formatFollowerCount(count: number): string {
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+  return String(count);
+}
+
 function AccessRow({
   done,
   label,
@@ -153,6 +182,8 @@ export default function EventDetailsPage({
   onBook,
   route,
   onOpenOrganizer,
+  isFavorite: isFavedProp = false,
+  onToggleFavorite,
 }: EventDetailsPageProps): ReactElement {
   const insets = useSafeAreaInsets();
 
@@ -187,14 +218,36 @@ export default function EventDetailsPage({
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const canOpenOrganizer = Boolean(onOpenOrganizer && detailsEvent.organizerId);
 
+  // Organizer summary (logo, follower count, follow state, policies)
+  const [orgSummary, setOrgSummary] = useState<OrganizerSummary | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  // "More from organizer" events
+  const [orgEvents, setOrgEvents] = useState<ReadonlyArray<MiniEventRow>>([]);
+
+  // Similar events
+  const [similarEvents, setSimilarEvents] = useState<ReadonlyArray<MiniEventRow>>([]);
+
+  // Upcoming events (for Upcoming tab)
+  const [upcomingEvents, setUpcomingEvents] = useState<ReadonlyArray<MiniEventRow & { venue?: string | null }>>([]);
+  const [upcomingViewMode, setUpcomingViewMode] = useState<'list' | 'calendar'>('list');
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+
+  // Fetch ticket types eagerly (for Offers tab)
+  const [offersTicketTypes, setOffersTicketTypes] = useState<ReadonlyArray<TicketType>>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+
 
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        // If user isn't eligible, we can skip the check (optional)
-        // but leaving it is fine; RLS will still protect.
         const existing = await getMyReviewForEvent(String(detailsEvent.id));
         if (!cancelled) setHasReviewed(!!existing);
       } catch {
@@ -241,9 +294,6 @@ export default function EventDetailsPage({
     };
   }, [detailsEvent.id, hasStory]);
 
-
-
-
   useEffect(() => {
     setDetailsEvent(event);
     setDetailsError(null);
@@ -253,6 +303,7 @@ export default function EventDetailsPage({
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  // Fetch full event details (now works with getEventDetailsById)
   useEffect(() => {
     let cancelled = false;
 
@@ -357,8 +408,161 @@ export default function EventDetailsPage({
     };
   }, [detailsEvent.id]);
 
+  // Fetch organizer summary
+  useEffect(() => {
+    let cancelled = false;
+    const orgId = detailsEvent.organizerId;
+    if (!orgId) return;
+
+    (async () => {
+      try {
+        const summary = await getOrganizerSummaryForEvent(orgId);
+        if (!cancelled && summary) {
+          setOrgSummary(summary);
+          setIsFollowing(summary.isFollowing);
+        }
+      } catch {
+        // non-critical
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [detailsEvent.organizerId]);
+
+  // Fetch "More from organizer" events
+  useEffect(() => {
+    let cancelled = false;
+    const orgId = detailsEvent.organizerId;
+    if (!orgId) return;
+
+    (async () => {
+      try {
+        const events = await EventsApi.getEventsByOrganizer(orgId, String(detailsEvent.id));
+        if (!cancelled) setOrgEvents(events);
+      } catch {
+        if (!cancelled) setOrgEvents([]);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [detailsEvent.organizerId, detailsEvent.id]);
+
+  // Fetch similar events
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const events = await EventsApi.getSimilarEvents(
+          String(detailsEvent.id),
+          detailsEvent.category,
+        );
+        if (!cancelled) setSimilarEvents(events);
+      } catch {
+        if (!cancelled) setSimilarEvents([]);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [detailsEvent.id, detailsEvent.category]);
+
+  // Fetch upcoming events (for Upcoming tab)
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const events = await EventsApi.getUpcomingEventsByVenueOrOrganizer(
+          detailsEvent.venueId,
+          detailsEvent.organizerId,
+          String(detailsEvent.id),
+        );
+        if (!cancelled) setUpcomingEvents(events);
+      } catch {
+        if (!cancelled) setUpcomingEvents([]);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [detailsEvent.venueId, detailsEvent.organizerId, detailsEvent.id]);
+
+  // Fetch ticket types eagerly for Offers tab
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setOffersLoading(true);
+        const types = await EventsApi.getTicketTypesForEvent(String(detailsEvent.id));
+        if (!cancelled) setOffersTicketTypes(types);
+      } catch {
+        if (!cancelled) setOffersTicketTypes([]);
+      } finally {
+        if (!cancelled) setOffersLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [detailsEvent.id]);
+
+  // Follow / Unfollow handler
+  const handleFollowToggle = useCallback(async () => {
+    const orgId = detailsEvent.organizerId;
+    if (!orgId || followLoading) return;
+
+    setFollowLoading(true);
+    const wasFollowing = isFollowing;
+    setIsFollowing(!wasFollowing); // optimistic
+
+    try {
+      if (wasFollowing) {
+        await unfollowOrganizer(orgId);
+      } else {
+        await followOrganizer(orgId);
+      }
+      // Update summary follower count
+      setOrgSummary((prev) =>
+        prev
+          ? { ...prev, followerCount: prev.followerCount + (wasFollowing ? -1 : 1), isFollowing: !wasFollowing }
+          : prev,
+      );
+    } catch {
+      setIsFollowing(wasFollowing); // revert
+    } finally {
+      setFollowLoading(false);
+    }
+  }, [detailsEvent.organizerId, isFollowing, followLoading]);
 
   const dt = useMemo(() => formatDateTime(detailsEvent.startsAtIso), [detailsEvent.startsAtIso]);
+
+  // Favorite toggle
+  const handleFavoriteToggle = useCallback(() => {
+    onToggleFavorite?.(String(detailsEvent.id), !isFavedProp);
+  }, [onToggleFavorite, detailsEvent.id, isFavedProp]);
+
+  // Share handler
+  const handleShare = useCallback(async () => {
+    const title = detailsEvent.title;
+    const venue = detailsEvent.venue;
+    const city = detailsEvent.city;
+    const dateStr = dt ? `${dt.date} at ${dt.time}` : '';
+    const location = [venue, city].filter(Boolean).join(', ');
+
+    const message = [
+      title,
+      dateStr ? `Date: ${dateStr}` : null,
+      location ? `Location: ${location}` : null,
+      detailsEvent.priceLabel ? `Price: ${detailsEvent.priceLabel}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    try {
+      await Share.share({ message, title });
+    } catch {
+      // user cancelled or share failed
+    }
+  }, [detailsEvent, dt]);
   const bottomPad = (insets.bottom || 0) + 140;
 
   const selectedCount = useMemo(() => sumSelected(quantities, ticketTypes), [quantities, ticketTypes]);
@@ -435,6 +639,27 @@ export default function EventDetailsPage({
     });
   };
 
+  // Calendar helpers
+  const upcomingDatesSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const ev of upcomingEvents) {
+      if (ev.startsAtIso) {
+        const d = new Date(ev.startsAtIso);
+        set.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+      }
+    }
+    return set;
+  }, [upcomingEvents]);
+
+  const filteredUpcomingEvents = useMemo(() => {
+    if (!selectedCalendarDate) return upcomingEvents;
+    return upcomingEvents.filter((ev) => {
+      if (!ev.startsAtIso) return false;
+      const d = new Date(ev.startsAtIso);
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` === selectedCalendarDate;
+    });
+  }, [upcomingEvents, selectedCalendarDate]);
+
   return (
     <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
       <View className="flex-1">
@@ -462,10 +687,14 @@ export default function EventDetailsPage({
                 <Text className="text-sm font-semibold text-gray900">{eventStories.length}</Text>
               </Pressable>
             )}
-            <CircleIcon onPress={() => { }}>
-              <Feather name="heart" size={18} color="#111827" />
+            <CircleIcon onPress={handleFavoriteToggle}>
+              {isFavedProp ? (
+                <Text style={{ fontSize: 18, color: '#EF4444' }}>♥</Text>
+              ) : (
+                <Feather name="heart" size={18} color="#111827" />
+              )}
             </CircleIcon>
-            <CircleIcon onPress={() => { }}>
+            <CircleIcon onPress={handleShare}>
               <Feather name="share-2" size={18} color="#111827" />
             </CircleIcon>
           </View>
@@ -581,6 +810,7 @@ export default function EventDetailsPage({
 
 
 
+          {/* ===== ORGANIZER CARD ===== */}
           <View className="px-5 mt-4">
             <Pressable
               accessibilityRole="button"
@@ -597,27 +827,52 @@ export default function EventDetailsPage({
               <Card variant="outlined" padding="md">
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center gap-x-3">
-                    <View className="h-10 w-10 rounded-full bg-gray200 items-center justify-center">
-                      <Text className="text-gray800 font-medium">
-                        {String(detailsEvent.organizer || 'OR').slice(0, 2).toUpperCase()}
-                      </Text>
-                    </View>
+                    {orgSummary?.logoUrl ? (
+                      <Image
+                        source={{ uri: orgSummary.logoUrl }}
+                        className="h-10 w-10 rounded-full"
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="h-10 w-10 rounded-full bg-gray200 items-center justify-center">
+                        <Text className="text-gray800 font-medium">
+                          {String(detailsEvent.organizer || 'OR').slice(0, 2).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
                     <View>
                       <Text className="text-gray900 font-medium">{detailsEvent.organizer}</Text>
                       <View className="flex-row items-center gap-x-1">
                         <Feather name="star" size={14} color="#F59E0B" />
-                        <Text className="text-xs text-gray600">4.8 · 1.2k followers</Text>
+                        <Text className="text-xs text-gray600">
+                          {orgSummary
+                            ? `${orgSummary.avgRating > 0 ? orgSummary.avgRating.toFixed(1) : '–'} · ${formatFollowerCount(orgSummary.followerCount)} followers`
+                            : '–'}
+                        </Text>
                       </View>
                     </View>
                   </View>
-                  <Pressable className="rounded-full border border-gray300 px-3 py-1.5 bg-white">
-                    <Text className="text-sm text-gray800">Follow</Text>
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleFollowToggle();
+                    }}
+                    disabled={followLoading}
+                    className={cx(
+                      'rounded-full border px-3 py-1.5',
+                      isFollowing ? 'bg-black border-black' : 'bg-white border-gray300',
+                    )}
+                  >
+                    <Text className={cx('text-sm', isFollowing ? 'text-white' : 'text-gray800')}>
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </Text>
                   </Pressable>
                 </View>
               </Card>
             </Pressable>
           </View>
 
+          {/* ===== TABS ===== */}
           <View className="px-5 mt-5">
             <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
               <TabPill label="About" selected={activeTab === 'about'} onPress={() => setActiveTab('about')} />
@@ -626,40 +881,29 @@ export default function EventDetailsPage({
             </View>
           </View>
 
+          {/* ===== ABOUT TAB ===== */}
           {activeTab === 'about' && (
             <>
               <View className="px-5 mt-4">
                 <Text className="text-base font-semibold text-black">About This Event</Text>
                 <Text className="text-gray700 mt-2">
-                  Experience the underground techno scene with international DJs in Paris&apos; most iconic
-                  club venue.
+                  {detailsEvent.description || 'No description available.'}
                 </Text>
-
-                <Text className="text-sm font-semibold text-black mt-4">What&apos;s Included</Text>
-                <View className="mt-2 gap-y-1">
-                  {[
-                    'Live performances by 5+ artists',
-                    'Food and beverage vendors',
-                    'Free WiFi throughout venue',
-                    'Professional sound and lighting',
-                  ].map((t) => (
-                    <Text key={t} className="text-gray700">
-                      • {t}
-                    </Text>
-                  ))}
-                </View>
               </View>
 
               <View className="px-5 mt-6">
-                <Text className="text-base font-semibold text-black">Attendees (420)</Text>
+                <Text className="text-base font-semibold text-black">Attendees ({detailsEvent.attendeesExtraCount ?? 0})</Text>
                 <View className="mt-2 flex-row items-center flex-wrap gap-2">
-                  {['U1', 'U2', 'U3', 'U4', 'U5'].map((u) => (
-                    <Badge key={u} label={u} variant="soft" tone="gray" size="sm" />
+                  {(detailsEvent.attendees ?? []).slice(0, 5).map((u) => (
+                    <Badge key={u.id} label={u.initials} variant="soft" tone="gray" size="sm" />
                   ))}
-                  <Text className="text-gray600 ml-1">and 415 others</Text>
+                  {(detailsEvent.attendeesExtraCount ?? 0) > 0 && (
+                    <Text className="text-gray600 ml-1">and {detailsEvent.attendeesExtraCount} others</Text>
+                  )}
                 </View>
               </View>
 
+              {/* Cancellation & Refund Policy from organizer */}
               <View className="px-5 mt-6">
                 <View className="flex-row items-center gap-x-2">
                   <Feather name="shield" size={16} color="#6B7280" />
@@ -668,107 +912,252 @@ export default function EventDetailsPage({
                   </Text>
                 </View>
                 <View className="mt-2 gap-y-2">
-                  {[
-                    'Free cancellation up to 48 hours before the event',
-                    '50% refund for cancellations 24–48 hours before',
-                    'No refund for cancellations within 24 hours',
-                    'Event cancellation by organizer: Full refund guaranteed',
-                    'Weather-related cancellations: Reschedule or full refund',
-                  ].map((line) => (
-                    <Text key={line} className="text-gray700">
-                      • {line}
-                    </Text>
-                  ))}
+                  {orgSummary?.cancellationPolicy ? (
+                    <>
+                      <Text className="text-sm font-medium text-gray800 mt-1">Cancellation Policy</Text>
+                      <Text className="text-gray700">{orgSummary.cancellationPolicy}</Text>
+                    </>
+                  ) : null}
+                  {orgSummary?.refundPolicy ? (
+                    <>
+                      <Text className="text-sm font-medium text-gray800 mt-2">Refund Policy</Text>
+                      <Text className="text-gray700">{orgSummary.refundPolicy}</Text>
+                    </>
+                  ) : null}
+                  {!orgSummary?.cancellationPolicy && !orgSummary?.refundPolicy ? (
+                    <Text className="text-gray500">Contact the organizer for policy details.</Text>
+                  ) : null}
                 </View>
               </View>
 
-              <SectionHeader title={`More from ${event.organizer}`} action="View all" />
-              <View className="px-5 mt-2 gap-y-3">
-                {[{ t: 'Jazz Night Under Stars', p: '$45' }, { t: 'New Year Concert', p: '$80' }].map(
-                  (r) => (
-                    <Card
-                      key={r.t}
-                      variant="outlined"
-                      padding="md"
-                      className="flex-row items-center justify-between"
-                    >
-                      <View>
-                        <Text className="text-gray900 font-medium">{r.t}</Text>
-                        <View className="mt-1 flex-row items-center gap-x-1">
-                          <Feather name="calendar" size={12} color="#6B7280" />
-                          <Text className="text-xs text-gray600">Dec 28, 2024 · 8:00 PM</Text>
+              {/* More from organizer */}
+              {orgEvents.length > 0 && (
+                <>
+                  <SectionHeader title={`More from ${detailsEvent.organizer}`} action="View all" />
+                  <View className="px-5 mt-2 gap-y-3">
+                    {orgEvents.map((ev) => (
+                      <Card
+                        key={ev.id}
+                        variant="outlined"
+                        padding="md"
+                        className="flex-row items-center justify-between"
+                      >
+                        <View className="flex-1 pr-3">
+                          <Text className="text-gray900 font-medium" numberOfLines={1}>{ev.title}</Text>
+                          <View className="mt-1 flex-row items-center gap-x-1">
+                            <Feather name="calendar" size={12} color="#6B7280" />
+                            <Text className="text-xs text-gray600">{formatDateShort(ev.startsAtIso)}</Text>
+                          </View>
                         </View>
-                      </View>
-                      <Badge label={r.p} variant="solid" tone="brand" size="sm" className="rounded-full" />
-                    </Card>
-                  )
-                )}
-              </View>
+                        {ev.priceLabel ? (
+                          <Badge label={ev.priceLabel} variant="solid" tone="brand" size="sm" className="rounded-full" />
+                        ) : null}
+                      </Card>
+                    ))}
+                  </View>
+                </>
+              )}
 
               <View className="mt-5 mx-5 border-t border-gray200" />
 
-              <View className="px-5 mt-4">
-                <Text className="text-base font-semibold text-black">Similar Events You Might Like</Text>
-                <View className="mt-3 gap-y-3">
-                  {[
-                    { t: 'Blues Festival Downtown', org: 'Blue Note Events', p: '$35' },
-                    { t: 'Rock Concert Series', org: 'Rock City Productions', p: '$55' },
-                    { t: 'Electronic Music Night', org: 'EDM Collective', p: '$40' },
-                  ].map((s) => (
-                    <Card
-                      key={s.t}
-                      variant="outlined"
-                      padding="md"
-                      className="flex-row items-center justify-between"
-                    >
-                      <View>
-                        <Text className="text-gray900 font-medium">{s.t}</Text>
-                        <Text className="text-xs text-gray500 mt-0.5">{s.org}</Text>
-                        <View className="mt-1 flex-row items-center gap-x-1">
-                          <Feather name="calendar" size={12} color="#6B7280" />
-                          <Text className="text-xs text-gray600">Dec 25, 2024</Text>
+              {/* Similar events */}
+              {similarEvents.length > 0 && (
+                <View className="px-5 mt-4">
+                  <Text className="text-base font-semibold text-black">Similar Events You Might Like</Text>
+                  <View className="mt-3 gap-y-3">
+                    {similarEvents.map((s) => (
+                      <Card
+                        key={s.id}
+                        variant="outlined"
+                        padding="md"
+                        className="flex-row items-center justify-between"
+                      >
+                        <View className="flex-1 pr-3">
+                          <Text className="text-gray900 font-medium" numberOfLines={1}>{s.title}</Text>
+                          <View className="mt-1 flex-row items-center gap-x-1">
+                            <Feather name="calendar" size={12} color="#6B7280" />
+                            <Text className="text-xs text-gray600">{formatDateShort(s.startsAtIso)}</Text>
+                          </View>
                         </View>
-                      </View>
-                      <Badge label={s.p} variant="solid" tone="brand" size="sm" className="rounded-full" />
-                    </Card>
-                  ))}
+                        {s.priceLabel ? (
+                          <Badge label={s.priceLabel} variant="solid" tone="brand" size="sm" className="rounded-full" />
+                        ) : null}
+                      </Card>
+                    ))}
+                  </View>
                 </View>
-              </View>
+              )}
+              {similarEvents.length === 0 && orgEvents.length === 0 && (
+                <View className="px-5 mt-4">
+                  <Text className="text-gray500">No similar events found.</Text>
+                </View>
+              )}
             </>
           )}
 
+          {/* ===== OFFERS TAB ===== */}
           {activeTab === 'offers' && (
             <View className="px-5 mt-5 gap-y-3">
-              {[
-                { name: 'Early Bird Ticket', price: '$25', desc: 'Limited stock · Ends soon' },
-                { name: 'VIP Pass', price: '$60', desc: 'Front row + lounge access' },
-                { name: 'Group Pack (4)', price: '$80', desc: 'Save more with friends' },
-              ].map((o) => (
-                <Card key={o.name} variant="outlined" padding="md" className="flex-row items-center justify-between">
-                  <View>
-                    <Text className="text-gray900 font-medium">{o.name}</Text>
-                    <Text className="text-xs text-gray500 mt-0.5">{o.desc}</Text>
-                  </View>
-                  <Badge label={o.price} variant="solid" tone="brand" size="sm" className="rounded-full" />
-                </Card>
-              ))}
+              {offersLoading ? (
+                <View className="items-center py-8">
+                  <ActivityIndicator size="small" color="#6B7280" />
+                  <Text className="text-gray500 mt-2">Loading ticket types…</Text>
+                </View>
+              ) : offersTicketTypes.length === 0 ? (
+                <View className="items-center py-8">
+                  <Text className="text-gray500">No ticket types available for this event.</Text>
+                </View>
+              ) : (
+                offersTicketTypes.map((tt) => (
+                  <Card key={tt.id} variant="outlined" padding="md">
+                    <View className="flex-row items-start justify-between">
+                      <View className="flex-1 pr-3">
+                        <Text className="text-gray900 font-semibold text-base">{tt.name}</Text>
+                        {tt.description ? (
+                          <Text className="text-gray600 text-sm mt-1">{tt.description}</Text>
+                        ) : null}
+                        {tt.benefits && tt.benefits.length > 0 && (
+                          <View className="mt-2 gap-y-1">
+                            {tt.benefits.map((b) => (
+                              <Text key={b} className="text-gray700 text-sm">• {b}</Text>
+                            ))}
+                          </View>
+                        )}
+                        {tt.inventory != null && (
+                          <Text className="text-xs text-gray500 mt-2">{tt.inventory} remaining</Text>
+                        )}
+                      </View>
+                      <View className="items-end">
+                        <Badge
+                          label={formatPriceCents(tt.priceCents, tt.currency)}
+                          variant="solid"
+                          tone="brand"
+                          size="sm"
+                          className="rounded-full"
+                        />
+                      </View>
+                    </View>
+                  </Card>
+                ))
+              )}
             </View>
           )}
 
+          {/* ===== UPCOMING TAB ===== */}
           {activeTab === 'upcoming' && (
-            <View className="px-5 mt-5 gap-y-3">
-              {[{ t: 'Sunset Set Vol. 2' }, { t: 'Afterparty Night' }].map((u) => (
-                <Card key={u.t} variant="outlined" padding="md" className="flex-row items-center justify-between">
-                  <View>
-                    <Text className="text-gray900 font-medium">{u.t}</Text>
-                    <View className="mt-1 flex-row items-center gap-x-1">
-                      <Feather name="calendar" size={12} color="#6B7280" />
-                      <Text className="text-xs text-gray600">Jan 14, 2025 · 9:00 PM</Text>
+            <View className="px-5 mt-5">
+              <Text className="text-base font-semibold text-black">
+                Upcoming Events
+              </Text>
+
+              {/* View mode toggle */}
+              <View className="flex-row items-center gap-x-2 mt-3">
+                <Pressable
+                  onPress={() => {
+                    setUpcomingViewMode('list');
+                    setSelectedCalendarDate(null);
+                  }}
+                  className={cx(
+                    'flex-row items-center gap-x-1 rounded-full px-3 py-1.5 border',
+                    upcomingViewMode === 'list' ? 'bg-black border-black' : 'bg-white border-gray300',
+                  )}
+                >
+                  <Feather name="list" size={14} color={upcomingViewMode === 'list' ? '#FFFFFF' : '#6B7280'} />
+                  <Text className={upcomingViewMode === 'list' ? 'text-white text-sm' : 'text-gray700 text-sm'}>List</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setUpcomingViewMode('calendar')}
+                  className={cx(
+                    'flex-row items-center gap-x-1 rounded-full px-3 py-1.5 border',
+                    upcomingViewMode === 'calendar' ? 'bg-black border-black' : 'bg-white border-gray300',
+                  )}
+                >
+                  <Feather name="calendar" size={14} color={upcomingViewMode === 'calendar' ? '#FFFFFF' : '#6B7280'} />
+                  <Text className={upcomingViewMode === 'calendar' ? 'text-white text-sm' : 'text-gray700 text-sm'}>Calendar</Text>
+                </Pressable>
+              </View>
+
+              {/* Calendar view */}
+              {upcomingViewMode === 'calendar' && (
+                <View className="mt-3">
+                  <Card variant="outlined" padding="md">
+                    <View className="flex-row items-center justify-between mb-3">
+                      <Pressable
+                        onPress={() =>
+                          setCalendarMonth((prev) => {
+                            const m = prev.month - 1;
+                            return m < 0
+                              ? { year: prev.year - 1, month: 11 }
+                              : { year: prev.year, month: m };
+                          })
+                        }
+                        className="rounded-xl bg-white border border-gray300 h-9 w-9 items-center justify-center"
+                      >
+                        <Feather name="chevron-left" size={18} color="#6B7280" />
+                      </Pressable>
+                      <Text className="text-base font-medium text-gray900">
+                        {new Date(calendarMonth.year, calendarMonth.month).toLocaleDateString(undefined, {
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </Text>
+                      <Pressable
+                        onPress={() =>
+                          setCalendarMonth((prev) => {
+                            const m = prev.month + 1;
+                            return m > 11
+                              ? { year: prev.year + 1, month: 0 }
+                              : { year: prev.year, month: m };
+                          })
+                        }
+                        className="rounded-xl bg-white border border-gray300 h-9 w-9 items-center justify-center"
+                      >
+                        <Feather name="chevron-right" size={18} color="#6B7280" />
+                      </Pressable>
                     </View>
-                  </View>
-                  <Badge label="Remind me" variant="soft" tone="gray" size="sm" className="rounded-full" />
-                </Card>
-              ))}
+
+                    <CalendarGrid
+                      year={calendarMonth.year}
+                      month={calendarMonth.month}
+                      eventDates={upcomingDatesSet}
+                      selectedDate={selectedCalendarDate}
+                      onSelectDate={setSelectedCalendarDate}
+                    />
+                  </Card>
+                </View>
+              )}
+
+              {/* Event list */}
+              <View className="mt-3 gap-y-3">
+                {(upcomingViewMode === 'calendar' ? filteredUpcomingEvents : upcomingEvents).length === 0 ? (
+                  <Text className="text-gray500 py-4">
+                    {selectedCalendarDate ? 'No events on this date.' : 'No upcoming events found.'}
+                  </Text>
+                ) : (
+                  (upcomingViewMode === 'calendar' ? filteredUpcomingEvents : upcomingEvents).map((u) => (
+                    <Card key={u.id} variant="outlined" padding="md" className="flex-row items-center justify-between">
+                      <View className="flex-1 pr-3">
+                        <Text className="text-gray900 font-medium" numberOfLines={1}>{u.title}</Text>
+                        <View className="mt-1 flex-row items-center gap-x-1">
+                          <Feather name="calendar" size={12} color="#6B7280" />
+                          <Text className="text-xs text-gray600">{formatDateShort(u.startsAtIso)}</Text>
+                        </View>
+                        {u.venue ? (
+                          <View className="mt-1 flex-row items-center gap-x-1">
+                            <Feather name="map-pin" size={12} color="#6B7280" />
+                            <Text className="text-xs text-gray600">{u.venue}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {u.priceLabel ? (
+                        <Badge label={u.priceLabel} variant="solid" tone="brand" size="sm" className="rounded-full" />
+                      ) : (
+                        <Badge label="Remind me" variant="soft" tone="gray" size="sm" className="rounded-full" />
+                      )}
+                    </Card>
+                  ))
+                )}
+              </View>
             </View>
           )}
         </ScrollView>
@@ -837,7 +1226,6 @@ export default function EventDetailsPage({
               eventId: String(detailsEvent.id),
               rating,
               comment,
-              // reservationId: access?.reservationId ?? null, // only if your access object has it
             });
 
             setHasReviewed(true);
@@ -1011,5 +1399,111 @@ function TabPill({
     >
       <Text className={selected ? 'text-brand font-medium' : 'text-gray700 font-medium'}>{label}</Text>
     </Pressable>
+  );
+}
+
+
+/* ===== CALENDAR GRID COMPONENT ===== */
+
+function CalendarGrid({
+  year,
+  month,
+  eventDates,
+  selectedDate,
+  onSelectDate,
+}: {
+  year: number;
+  month: number;
+  eventDates: Set<string>;
+  selectedDate: string | null;
+  onSelectDate: (date: string | null) => void;
+}): ReactElement {
+  const daysRow = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  const grid = useMemo(() => {
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    const cells: Array<{ day: number; inMonth: boolean; dateKey: string }> = [];
+
+    // Previous month padding
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const d = daysInPrevMonth - i;
+      const pm = month === 0 ? 11 : month - 1;
+      const py = month === 0 ? year - 1 : year;
+      cells.push({ day: d, inMonth: false, dateKey: `${py}-${pm}-${d}` });
+    }
+
+    // Current month
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push({ day: d, inMonth: true, dateKey: `${year}-${month}-${d}` });
+    }
+
+    // Next month padding
+    const remaining = 7 - (cells.length % 7);
+    if (remaining < 7) {
+      const nm = month === 11 ? 0 : month + 1;
+      const ny = month === 11 ? year + 1 : year;
+      for (let d = 1; d <= remaining; d++) {
+        cells.push({ day: d, inMonth: false, dateKey: `${ny}-${nm}-${d}` });
+      }
+    }
+
+    // Split into weeks
+    const weeks: Array<typeof cells> = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    return weeks;
+  }, [year, month]);
+
+  return (
+    <View>
+      <View className="flex-row justify-between mb-2">
+        {daysRow.map((d) => (
+          <Text key={d} className="w-10 text-center text-gray500 text-sm">
+            {d}
+          </Text>
+        ))}
+      </View>
+      {grid.map((row, i) => (
+        <View key={String(i)} className="flex-row justify-between mb-1">
+          {row.map((cell) => {
+            const hasEvent = eventDates.has(cell.dateKey);
+            const isSelected = selectedDate === cell.dateKey;
+
+            return (
+              <Pressable
+                key={cell.dateKey}
+                onPress={() => {
+                  if (!cell.inMonth) return;
+                  onSelectDate(isSelected ? null : cell.dateKey);
+                }}
+                className={cx(
+                  'h-10 w-10 rounded-xl items-center justify-center',
+                  isSelected ? 'bg-black' : '',
+                )}
+              >
+                <Text
+                  className={cx(
+                    cell.inMonth ? 'text-gray800' : 'text-gray300',
+                    isSelected ? 'text-white font-semibold' : '',
+                  )}
+                >
+                  {cell.day}
+                </Text>
+                {hasEvent && !isSelected && (
+                  <View className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-black" />
+                )}
+                {hasEvent && isSelected && (
+                  <View className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-white" />
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </View>
   );
 }

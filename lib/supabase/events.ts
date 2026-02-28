@@ -31,7 +31,10 @@ type DbEventRow = {
   id: string;
   external_id: string | null;
   organizer_id: string | null;
+  venue_id: string | null;
   title: string | null;
+  description: string | null;
+  category: string | null;
   hero_image_url: string | null;
   starts_at: string | null;
   status: string | null;
@@ -98,12 +101,15 @@ function mapRowToEvent(row: DbEventRow): Event {
     externalId: row.external_id ?? undefined,
 
     title: String(row.title ?? ''),
+    description: row.description ?? null,
     organizer: String(row.organizers?.name ?? ''),
     organizerId: row.organizer_id ?? row.organizers?.id ?? undefined,
     imageUrl: String(row.hero_image_url ?? ''),
     startsAtIso: row.starts_at ? new Date(row.starts_at).toISOString() : new Date().toISOString(),
 
     venue: String(venue?.name ?? ''),
+    venueId: row.venue_id ?? undefined,
+    category: row.category ?? null,
     city: venue?.city ?? undefined,
     countryCode: venue?.country_code ?? undefined,
     location: lat != null && lng != null ? { lat, lng } : undefined,
@@ -131,7 +137,10 @@ export async function getPublishedEvents(): Promise<ReadonlyArray<Event>> {
       id,
       external_id,
       organizer_id,
+      venue_id,
       title,
+      description,
+      category,
       hero_image_url,
       starts_at,
       status,
@@ -252,4 +261,214 @@ export async function getTicketTypesForEvent(eventUiId: string): Promise<Readonl
         benefits: parseBenefits(r.benefits),
       } satisfies TicketType;
     });
+}
+
+/* ---------------------------------------------
+   Single event detail (enables pickDetailsFetcher)
+---------------------------------------------- */
+
+const EVENT_DETAIL_SELECT = `
+  id,
+  external_id,
+  organizer_id,
+  venue_id,
+  title,
+  description,
+  category,
+  hero_image_url,
+  starts_at,
+  status,
+  is_free,
+  min_price_cents,
+  organizers:organizer_id ( id, name ),
+  venues:venue_id ( name, city, country_code, lat, lng, venue_type ),
+  event_tags ( tags:tag_id ( type, slug ) )
+`;
+
+export async function getEventDetailsById(eventUiId: string): Promise<Event> {
+  const dbId = await resolveEventDbId(eventUiId);
+  if (!dbId) throw new Error('Event not found');
+
+  const { data, error } = await supabase
+    .from('events')
+    .select(EVENT_DETAIL_SELECT)
+    .eq('id', dbId)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return mapRowToEvent(data as unknown as DbEventRow);
+}
+
+/* ---------------------------------------------
+   Events by same organizer (for "More from ...")
+---------------------------------------------- */
+
+export type MiniEventRow = Readonly<{
+  id: string;
+  title: string;
+  imageUrl: string | null;
+  startsAtIso: string | null;
+  priceLabel: string | null;
+}>;
+
+export async function getEventsByOrganizer(
+  organizerId: string,
+  excludeEventId?: string,
+  limit = 5,
+): Promise<ReadonlyArray<MiniEventRow>> {
+  let query = supabase
+    .from('events')
+    .select('id, title, hero_image_url, starts_at, is_free, min_price_cents')
+    .eq('organizer_id', organizerId)
+    .eq('status', 'published')
+    .order('starts_at', { ascending: true })
+    .limit(limit + 1);
+
+  if (excludeEventId) {
+    query = query.neq('id', excludeEventId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).slice(0, limit).map((r: any) => ({
+    id: String(r.id),
+    title: String(r.title ?? ''),
+    imageUrl: r.hero_image_url ?? null,
+    startsAtIso: r.starts_at ? new Date(r.starts_at).toISOString() : null,
+    priceLabel: computePriceLabel(Boolean(r.is_free), r.min_price_cents ?? 0),
+  }));
+}
+
+/* ---------------------------------------------
+   Similar events (same category or shared tags)
+---------------------------------------------- */
+
+export async function getSimilarEvents(
+  eventId: string,
+  category: string | null | undefined,
+  limit = 5,
+): Promise<ReadonlyArray<MiniEventRow>> {
+  // Try category match first
+  if (category) {
+    const { data, error } = await supabase
+      .from('events')
+      .select('id, title, hero_image_url, starts_at, is_free, min_price_cents')
+      .eq('status', 'published')
+      .eq('category', category)
+      .neq('id', eventId)
+      .order('starts_at', { ascending: true })
+      .limit(limit);
+
+    if (!error && data && data.length > 0) {
+      return data.map((r: any) => ({
+        id: String(r.id),
+        title: String(r.title ?? ''),
+        imageUrl: r.hero_image_url ?? null,
+        startsAtIso: r.starts_at ? new Date(r.starts_at).toISOString() : null,
+        priceLabel: computePriceLabel(Boolean(r.is_free), r.min_price_cents ?? 0),
+      }));
+    }
+  }
+
+  // Fallback: find events sharing the same tags
+  const { data: tagRows } = await supabase
+    .from('event_tags')
+    .select('tag_id')
+    .eq('event_id', eventId);
+
+  const tagIds = (tagRows ?? []).map((r: any) => r.tag_id);
+  if (tagIds.length === 0) return [];
+
+  const { data: matchingEventTags } = await supabase
+    .from('event_tags')
+    .select('event_id')
+    .in('tag_id', tagIds)
+    .neq('event_id', eventId);
+
+  const eventIds = [...new Set((matchingEventTags ?? []).map((r: any) => r.event_id))];
+  if (eventIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('events')
+    .select('id, title, hero_image_url, starts_at, is_free, min_price_cents')
+    .eq('status', 'published')
+    .in('id', eventIds.slice(0, limit))
+    .order('starts_at', { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((r: any) => ({
+    id: String(r.id),
+    title: String(r.title ?? ''),
+    imageUrl: r.hero_image_url ?? null,
+    startsAtIso: r.starts_at ? new Date(r.starts_at).toISOString() : null,
+    priceLabel: computePriceLabel(Boolean(r.is_free), r.min_price_cents ?? 0),
+  }));
+}
+
+/* ---------------------------------------------
+   Upcoming events from same venue or organizer
+---------------------------------------------- */
+
+export async function getUpcomingEventsByVenueOrOrganizer(
+  venueId: string | undefined,
+  organizerId: string | undefined,
+  excludeEventId?: string,
+  limit = 20,
+): Promise<ReadonlyArray<MiniEventRow & { venue?: string | null }>> {
+  const now = new Date().toISOString();
+
+  // Fetch from venue and organizer in parallel, then merge
+  const promises: Array<Promise<any[]>> = [];
+
+  if (venueId) {
+    let q = supabase
+      .from('events')
+      .select('id, title, hero_image_url, starts_at, is_free, min_price_cents, venues:venue_id ( name )')
+      .eq('status', 'published')
+      .eq('venue_id', venueId)
+      .gte('starts_at', now)
+      .order('starts_at', { ascending: true })
+      .limit(limit);
+
+    if (excludeEventId) q = q.neq('id', excludeEventId);
+    promises.push(q.then(({ data }) => data ?? []));
+  }
+
+  if (organizerId) {
+    let q = supabase
+      .from('events')
+      .select('id, title, hero_image_url, starts_at, is_free, min_price_cents, venues:venue_id ( name )')
+      .eq('status', 'published')
+      .eq('organizer_id', organizerId)
+      .gte('starts_at', now)
+      .order('starts_at', { ascending: true })
+      .limit(limit);
+
+    if (excludeEventId) q = q.neq('id', excludeEventId);
+    promises.push(q.then(({ data }) => data ?? []));
+  }
+
+  const results = await Promise.all(promises);
+  const allRows = results.flat();
+
+  // Deduplicate by id, keep earliest starts_at
+  const seen = new Map<string, any>();
+  for (const r of allRows) {
+    if (!seen.has(r.id)) seen.set(r.id, r);
+  }
+
+  const deduped = [...seen.values()]
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
+    .slice(0, limit);
+
+  return deduped.map((r: any) => ({
+    id: String(r.id),
+    title: String(r.title ?? ''),
+    imageUrl: r.hero_image_url ?? null,
+    startsAtIso: r.starts_at ? new Date(r.starts_at).toISOString() : null,
+    priceLabel: computePriceLabel(Boolean(r.is_free), r.min_price_cents ?? 0),
+    venue: (r.venues as any)?.name ?? null,
+  }));
 }

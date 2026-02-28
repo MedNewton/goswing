@@ -4,7 +4,7 @@ import SearchPageBody from '@/components/sections/SearchPage';
 
 export default function SearchPage(): ReactElement {
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
+    <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white pt-4">
       <SearchPageBody />
     </SafeAreaView>
   );

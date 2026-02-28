@@ -8,7 +8,7 @@ export type WhenSliderProps = Readonly<
   {
     title?: string;
     activeKey: WhenKey | null;
-    onChange: (key: WhenKey) => void;
+    onChange: (key: WhenKey | null) => void;
     className?: string;
     contentClassName?: string;
   } & Omit<ViewProps, 'children'>
@@ -57,7 +57,7 @@ export default function WhenSlider({
               variant="outline"
               tone={selected ? 'brand' : 'gray'}
               size="md"
-              onPress={() => onChange(it.key)}
+              onPress={() => onChange(selected ? null : it.key)}
             />
           );
         })}

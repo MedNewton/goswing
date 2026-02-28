@@ -172,15 +172,18 @@ export type Event = Readonly<{
   id: ID;
   externalId?: string;
   title: string;
+  description?: string | null;
   organizer: string;
   organizerId?: string;
   imageUrl: string;
   startsAtIso: string;
   venue: string;
+  venueId?: string;
   city?: string;
   countryCode?: string;
   priceLabel?: string;
   favorite?: boolean;
+  category?: string | null;
   categories?: ReadonlyArray<string>;
   attendees?: ReadonlyArray<Attendee>;
   attendeesExtraCount?: number;
