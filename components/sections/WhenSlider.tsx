@@ -2,7 +2,7 @@ import React, { type ReactElement } from 'react';
 import { View, Text, ScrollView, type ViewProps } from 'react-native';
 import Chip from '@/components/ui/Chip';
 
-export type WhenKey = 'tonight' | 'tomorrow' | 'this_week' | 'this_weekend' | 'next_week' | 'next_weekend' | 'next_month' | 'next_year';
+export type WhenKey = 'tonight' | 'tomorrow' | 'this_week' | 'this_weekend' | 'next_week' | 'next_weekend' | 'this_month';
 
 export type WhenSliderProps = Readonly<
   {
@@ -24,8 +24,7 @@ const items: ReadonlyArray<{ key: WhenKey; label: string }> = [
   { key: 'this_weekend', label: 'This Weekend' },
   { key: 'next_week',    label: 'Next Week' },
   { key: 'next_weekend', label: 'Next Weekend' },
-  { key: 'next_month',   label: 'Next Month' },
-  { key: 'next_year',    label: 'Next Year' },
+  { key: 'this_month',   label: 'This Month' },
 ] as const;
 
 export default function WhenSlider({

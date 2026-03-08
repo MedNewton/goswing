@@ -1,6 +1,6 @@
 // pages/EventDetailsPage.tsx
 import React, { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
-import { ActivityIndicator, Dimensions, Image, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Linking, Platform, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,6 +39,7 @@ export type EventDetailsPageProps = Readonly<{
   event: Event;
   initialTab?: 'about' | 'offers' | 'upcoming';
   onBack?: () => void;
+  onPressEvent?: (eventId: string) => void;
   onOpenOrganizer?: (payload: { organizerId: string; organizerName?: string }) => void;
   isFavorite?: boolean;
   onToggleFavorite?: (eventId: string, next: boolean) => void;
@@ -179,6 +180,7 @@ export default function EventDetailsPage({
   event,
   initialTab = 'about',
   onBack,
+  onPressEvent,
   onBook,
   route,
   onOpenOrganizer,
@@ -222,6 +224,10 @@ export default function EventDetailsPage({
   const [orgSummary, setOrgSummary] = useState<OrganizerSummary | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+
+  // Real attendees from DB
+  const [dbAttendees, setDbAttendees] = useState<EventsApi.EventAttendee[]>([]);
+  const [dbAttendeesTotal, setDbAttendeesTotal] = useState(0);
 
   // "More from organizer" events
   const [orgEvents, setOrgEvents] = useState<ReadonlyArray<MiniEventRow>>([]);
@@ -465,6 +471,28 @@ export default function EventDetailsPage({
 
     return () => { cancelled = true; };
   }, [detailsEvent.id, detailsEvent.category]);
+
+  // Fetch attendees from DB
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { attendees, totalCount } = await EventsApi.getEventAttendees(String(detailsEvent.id));
+        if (!cancelled) {
+          setDbAttendees(attendees);
+          setDbAttendeesTotal(totalCount);
+        }
+      } catch {
+        if (!cancelled) {
+          setDbAttendees([]);
+          setDbAttendeesTotal(0);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [detailsEvent.id]);
 
   // Fetch upcoming events (for Upcoming tab)
   useEffect(() => {
@@ -891,14 +919,92 @@ export default function EventDetailsPage({
                 </Text>
               </View>
 
+              {/* Get Directions */}
+              {detailsEvent.location ? (
+                <View className="px-5 mt-5">
+                  <Pressable
+                    onPress={() => {
+                      const { lat, lng } = detailsEvent.location!;
+                      const label = encodeURIComponent(
+                        `${detailsEvent.venue}${detailsEvent.city ? `, ${detailsEvent.city}` : ''}`,
+                      );
+                      const url = Platform.select({
+                        ios: `maps:0,0?q=${label}@${lat},${lng}`,
+                        default: `geo:${lat},${lng}?q=${lat},${lng}(${label})`,
+                      });
+                      Linking.openURL(url).catch(() => {});
+                    }}
+                    className="active:opacity-80"
+                    accessibilityRole="button"
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 10,
+                      paddingVertical: 14,
+                      borderRadius: 16,
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      backgroundColor: '#F9FAFB',
+                    }}
+                  >
+                    <Feather name="navigation" size={18} color="#0EA5E9" />
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#0B1220' }}>
+                      Get Directions
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#6B7280' }}>
+                      {detailsEvent.venue}{detailsEvent.city ? `, ${detailsEvent.city}` : ''}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
               <View className="px-5 mt-6">
-                <Text className="text-base font-semibold text-black">Attendees ({detailsEvent.attendeesExtraCount ?? 0})</Text>
+                <Text className="text-base font-semibold text-black">Attendees ({dbAttendeesTotal})</Text>
                 <View className="mt-2 flex-row items-center flex-wrap gap-2">
-                  {(detailsEvent.attendees ?? []).slice(0, 5).map((u) => (
-                    <Badge key={u.id} label={u.initials} variant="soft" tone="gray" size="sm" />
+                  {dbAttendees.slice(0, 8).map((u) => (
+                    <View
+                      key={u.userId}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: '#F3F4F6',
+                        borderRadius: 20,
+                        paddingRight: 10,
+                        gap: 6,
+                      }}
+                    >
+                      {u.avatarUrl ? (
+                        <Image
+                          source={{ uri: u.avatarUrl }}
+                          style={{ width: 28, height: 28, borderRadius: 14 }}
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 14,
+                            backgroundColor: '#D1D5DB',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#374151' }}>
+                            {u.initials}
+                          </Text>
+                        </View>
+                      )}
+                      <Text style={{ fontSize: 12, color: '#374151', fontWeight: '500' }} numberOfLines={1}>
+                        {u.displayName}
+                      </Text>
+                    </View>
                   ))}
-                  {(detailsEvent.attendeesExtraCount ?? 0) > 0 && (
-                    <Text className="text-gray600 ml-1">and {detailsEvent.attendeesExtraCount} others</Text>
+                  {dbAttendeesTotal > 8 && (
+                    <Text className="text-gray600 ml-1">+{dbAttendeesTotal - 8} others</Text>
+                  )}
+                  {dbAttendeesTotal === 0 && (
+                    <Text className="text-gray500">No attendees yet</Text>
                   )}
                 </View>
               </View>
@@ -933,26 +1039,45 @@ export default function EventDetailsPage({
               {/* More from organizer */}
               {orgEvents.length > 0 && (
                 <>
-                  <SectionHeader title={`More from ${detailsEvent.organizer}`} action="View all" />
+                  <SectionHeader title={`More from ${detailsEvent.organizer}`} />
                   <View className="px-5 mt-2 gap-y-3">
                     {orgEvents.map((ev) => (
-                      <Card
+                      <Pressable
                         key={ev.id}
-                        variant="outlined"
-                        padding="md"
-                        className="flex-row items-center justify-between"
+                        onPress={() => onPressEvent?.(ev.id)}
+                        className="active:opacity-80"
                       >
-                        <View className="flex-1 pr-3">
-                          <Text className="text-gray900 font-medium" numberOfLines={1}>{ev.title}</Text>
-                          <View className="mt-1 flex-row items-center gap-x-1">
-                            <Feather name="calendar" size={12} color="#6B7280" />
-                            <Text className="text-xs text-gray600">{formatDateShort(ev.startsAtIso)}</Text>
+                        <Card variant="outlined" padding="none" className="overflow-hidden rounded-2xl">
+                          <View style={{ flexDirection: 'row' }}>
+                            {ev.imageUrl ? (
+                              <Image
+                                source={{ uri: ev.imageUrl }}
+                                style={{ width: 80, height: 80 }}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View style={{ width: 80, height: 80, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                                <Feather name="calendar" size={24} color="#D1D5DB" />
+                              </View>
+                            )}
+                            <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
+                              <Text className="text-gray900 font-semibold" numberOfLines={1}>{ev.title}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                <Feather name="calendar" size={12} color="#6B7280" />
+                                <Text className="text-xs text-gray600">{formatDateShort(ev.startsAtIso)}</Text>
+                              </View>
+                              {ev.priceLabel ? (
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: '#0EA5E9', marginTop: 4 }}>
+                                  {ev.priceLabel}
+                                </Text>
+                              ) : null}
+                            </View>
+                            <View style={{ justifyContent: 'center', paddingRight: 12 }}>
+                              <Feather name="chevron-right" size={18} color="#D1D5DB" />
+                            </View>
                           </View>
-                        </View>
-                        {ev.priceLabel ? (
-                          <Badge label={ev.priceLabel} variant="solid" tone="brand" size="sm" className="rounded-full" />
-                        ) : null}
-                      </Card>
+                        </Card>
+                      </Pressable>
                     ))}
                   </View>
                 </>
@@ -966,23 +1091,42 @@ export default function EventDetailsPage({
                   <Text className="text-base font-semibold text-black">Similar Events You Might Like</Text>
                   <View className="mt-3 gap-y-3">
                     {similarEvents.map((s) => (
-                      <Card
+                      <Pressable
                         key={s.id}
-                        variant="outlined"
-                        padding="md"
-                        className="flex-row items-center justify-between"
+                        onPress={() => onPressEvent?.(s.id)}
+                        className="active:opacity-80"
                       >
-                        <View className="flex-1 pr-3">
-                          <Text className="text-gray900 font-medium" numberOfLines={1}>{s.title}</Text>
-                          <View className="mt-1 flex-row items-center gap-x-1">
-                            <Feather name="calendar" size={12} color="#6B7280" />
-                            <Text className="text-xs text-gray600">{formatDateShort(s.startsAtIso)}</Text>
+                        <Card variant="outlined" padding="none" className="overflow-hidden rounded-2xl">
+                          <View style={{ flexDirection: 'row' }}>
+                            {s.imageUrl ? (
+                              <Image
+                                source={{ uri: s.imageUrl }}
+                                style={{ width: 80, height: 80 }}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View style={{ width: 80, height: 80, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                                <Feather name="calendar" size={24} color="#D1D5DB" />
+                              </View>
+                            )}
+                            <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
+                              <Text className="text-gray900 font-semibold" numberOfLines={1}>{s.title}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                <Feather name="calendar" size={12} color="#6B7280" />
+                                <Text className="text-xs text-gray600">{formatDateShort(s.startsAtIso)}</Text>
+                              </View>
+                              {s.priceLabel ? (
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: '#0EA5E9', marginTop: 4 }}>
+                                  {s.priceLabel}
+                                </Text>
+                              ) : null}
+                            </View>
+                            <View style={{ justifyContent: 'center', paddingRight: 12 }}>
+                              <Feather name="chevron-right" size={18} color="#D1D5DB" />
+                            </View>
                           </View>
-                        </View>
-                        {s.priceLabel ? (
-                          <Badge label={s.priceLabel} variant="solid" tone="brand" size="sm" className="rounded-full" />
-                        ) : null}
-                      </Card>
+                        </Card>
+                      </Pressable>
                     ))}
                   </View>
                 </View>

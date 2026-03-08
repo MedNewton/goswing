@@ -1,7 +1,9 @@
 // pages/ReservationsPage.tsx
-import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 import SegmentedTabs, { type SegKey } from '@/components/reservations/SegmentedTabs';
 import ReservationCard, { type Reservation } from '@/components/reservations/ReservationCard';
@@ -10,6 +12,187 @@ import QuickActions from '@/components/reservations/QuickActions';
 import { getMyReservations } from '@/lib/supabase/myReservations';
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
+
+function generateAllReservationsHtml(reservations: ReadonlyArray<Reservation>): string {
+  const cards = reservations
+    .map((r, i) => {
+      const ticketRows = r.groups
+        .flatMap((g) =>
+          g.tickets.map(
+            (t) => `
+              <div class="ticket-row">
+                <span class="ticket-holder">${t.holder}</span>
+                <span class="ticket-type">${g.title}</span>
+                <span class="ticket-label">${t.qrLabel}</span>
+              </div>`,
+          ),
+        )
+        .join('');
+
+      return `
+        <div class="reservation" ${i > 0 ? 'style="page-break-before: always;"' : ''}>
+          <div class="res-header">
+            <h2>${r.title}</h2>
+            <span class="badge">${r.ticketsBadge}</span>
+          </div>
+
+          <div class="res-body">
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Date</span>
+                <span class="info-value">${r.dateLabel}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Time</span>
+                <span class="info-value">${r.timeLabel}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Venue</span>
+                <span class="info-value">${r.venueLabel}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Total</span>
+                <span class="info-value total">${r.totalAmount}</span>
+              </div>
+            </div>
+
+            ${ticketRows ? `
+            <div class="tickets-section">
+              <h3>Tickets</h3>
+              ${ticketRows}
+            </div>` : ''}
+
+            ${r.savedBadge ? `<div class="saved-badge">${r.savedBadge}</div>` : ''}
+          </div>
+
+          <div class="res-footer">Reservation ID: ${r.id}</div>
+        </div>`;
+    })
+    .join('\n');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Reservations - GoSwing</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      color: #111827;
+    }
+    .doc-header {
+      text-align: center;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    .doc-header h1 { font-size: 22px; font-weight: 700; }
+    .doc-header p { font-size: 13px; color: #6b7280; margin-top: 4px; }
+    .reservation {
+      background: white;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .res-header {
+      background: linear-gradient(135deg, #111827 0%, #374151 100%);
+      color: white;
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .res-header h2 { font-size: 17px; font-weight: 600; }
+    .badge {
+      background: rgba(255,255,255,0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .res-body { padding: 20px 24px; }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .info-item {}
+    .info-label {
+      display: block;
+      font-size: 11px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+    .info-value {
+      font-size: 14px;
+      font-weight: 500;
+      color: #111827;
+    }
+    .info-value.total { color: #059669; font-weight: 700; }
+    .tickets-section {
+      border-top: 1px dashed #e5e7eb;
+      padding-top: 14px;
+    }
+    .tickets-section h3 {
+      font-size: 12px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+    .ticket-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .ticket-holder { font-weight: 500; flex: 1; }
+    .ticket-type { color: #6b7280; margin: 0 12px; }
+    .ticket-label { color: #9ca3af; font-size: 12px; }
+    .saved-badge {
+      display: inline-block;
+      margin-top: 12px;
+      background: #ecfdf5;
+      color: #059669;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .res-footer {
+      text-align: center;
+      padding: 12px 24px;
+      background: #f9fafb;
+      font-size: 11px;
+      color: #9ca3af;
+    }
+    @media print {
+      body { background: white; padding: 0; }
+      .reservation { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="doc-header">
+    <h1>GoSwing</h1>
+    <p>My Reservations &bull; ${reservations.length} reservation${reservations.length !== 1 ? 's' : ''}</p>
+  </div>
+  ${cards}
+</body>
+</html>`;
+}
 
 export type ReservationsPageProps = Readonly<{
   /**
@@ -90,6 +273,32 @@ export default function ReservationsPage({ initialTab = 'active', route }: Reser
     );
   };
 
+  const handleDownloadAll = useCallback(async () => {
+    if (list.length === 0) {
+      Alert.alert('No reservations', 'There are no reservations to download.');
+      return;
+    }
+
+    try {
+      const html = generateAllReservationsHtml(list);
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'My Reservations - GoSwing',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert('PDF Generated', `Your reservations have been saved to:\n${uri}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert('Error', msg);
+    }
+  }, [list]);
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
       <ScrollView
@@ -144,7 +353,7 @@ export default function ReservationsPage({ initialTab = 'active', route }: Reser
             </View>
 
             <View className={cx('mt-5', 'px-4')}>
-              <QuickActions subtleBackground={tab === 'past'} />
+              <QuickActions subtleBackground={tab === 'past'} onDownloadAll={handleDownloadAll} />
             </View>
           </>
         )}

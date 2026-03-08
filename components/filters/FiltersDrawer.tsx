@@ -15,10 +15,13 @@ import { Feather } from '@expo/vector-icons';
 export type SortBy = 'best' | 'date' | 'price';
 export type DateQuick =
   | 'any'
+  | 'tonight'
   | 'today'
   | 'tomorrow'
   | 'this_week'
   | 'this_weekend'
+  | 'next_week'
+  | 'next_weekend'
   | 'this_month'
   | 'pick';
 
@@ -403,10 +406,12 @@ export default function FiltersDrawer({
               onChange={(k) => setDateQuick(k as DateQuick)}
               options={[
                 { key: 'any', label: 'Any' },
-                { key: 'today', label: 'Today' },
+                { key: 'tonight', label: 'Tonight' },
                 { key: 'tomorrow', label: 'Tomorrow' },
                 { key: 'this_week', label: 'This Week' },
                 { key: 'this_weekend', label: 'This Weekend' },
+                { key: 'next_week', label: 'Next Week' },
+                { key: 'next_weekend', label: 'Next Weekend' },
                 { key: 'this_month', label: 'This Month' },
                 { key: 'pick', label: 'Choose a Date' },
               ]}

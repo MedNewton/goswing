@@ -8,6 +8,7 @@ import TermsConsentModal from '@/components/auth/TermsConsentModal';
 import PhoneCollectPage from '@/pages/PhoneCollectPage';
 import NotificationOptInPage from '@/pages/NotificationOptInPage';
 import NewUserLocationPage from '@/pages/NewUserLocationPage';
+import InterestsSelectionPage from '@/pages/InterestsSelectionPage';
 
 import { initializeUserProfile, updateProfileFromOnboarding } from '@/lib/supabase/profile';
 
@@ -16,7 +17,7 @@ type Props = Readonly<{
   onCancel: () => Promise<void>;
 }>;
 
-type OnboardingStep = 'initializing' | 'terms' | 'phone' | 'notifications' | 'location';
+type OnboardingStep = 'initializing' | 'terms' | 'phone' | 'notifications' | 'location' | 'interests';
 
 export default function NewUserOnboardingGate({
   onDone,
@@ -146,14 +147,42 @@ export default function NewUserOnboardingGate({
     );
   }
 
-  // Step: Location (final step)
+  // Step: Location
+  if (step === 'location') {
+    return (
+      <NewUserLocationPage
+        onDone={async (location?: string, locationServicesEnabled?: boolean) => {
+          if (locationServicesEnabled !== undefined) {
+            setLocationEnabled(locationServicesEnabled);
+          }
+          // Save location data now, then move to interests
+          if (user?.id) {
+            try {
+              await updateProfileFromOnboarding({
+                userId: user.id,
+                phone: collectedPhone,
+                location: location ?? null,
+                pushNotificationsEnabled: pushEnabled,
+                locationServicesEnabled: locationServicesEnabled ?? locationEnabled,
+              });
+            } catch (err) {
+              console.error('Failed to save onboarding data:', err);
+            }
+          }
+          setStep('interests');
+        }}
+      />
+    );
+  }
+
+  // Step: Interests (final step)
   return (
-    <NewUserLocationPage
-      onDone={async (location?: string, locationServicesEnabled?: boolean) => {
-        if (locationServicesEnabled !== undefined) {
-          setLocationEnabled(locationServicesEnabled);
-        }
-        await handleFinalDone(location, locationServicesEnabled);
+    <InterestsSelectionPage
+      onDone={async () => {
+        await onDone();
+      }}
+      onSkip={async () => {
+        await onDone();
       }}
     />
   );

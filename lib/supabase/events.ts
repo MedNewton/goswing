@@ -472,3 +472,61 @@ export async function getUpcomingEventsByVenueOrOrganizer(
     venue: (r.venues as any)?.name ?? null,
   }));
 }
+
+/* ── Event attendees (users with confirmed reservations) ── */
+
+export type EventAttendee = Readonly<{
+  userId: string;
+  displayName: string;
+  initials: string;
+  avatarUrl: string | null;
+}>;
+
+export async function getEventAttendees(
+  eventId: string,
+  limit = 20,
+): Promise<{ attendees: EventAttendee[]; totalCount: number }> {
+  // Get distinct user_ids with confirmed reservations for this event
+  const { data, error } = await supabase
+    .from('reservations')
+    .select(`
+      user_id,
+      profiles!inner ( display_name, initials, avatar_url )
+    `)
+    .eq('event_id', eventId)
+    .in('status', ['confirmed', 'completed'])
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+
+  // Count total
+  const { count } = await supabase
+    .from('reservations')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .in('status', ['confirmed', 'completed']);
+
+  // Deduplicate by user_id
+  const seen = new Set<string>();
+  const attendees: EventAttendee[] = [];
+
+  for (const row of data ?? []) {
+    const uid = String((row as any).user_id);
+    if (seen.has(uid)) continue;
+    seen.add(uid);
+
+    const p = (row as any).profiles;
+    const displayName = String(p?.display_name ?? '').trim() || 'Attendee';
+    const initials = String(p?.initials ?? '').trim() ||
+      displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+
+    attendees.push({
+      userId: uid,
+      displayName,
+      initials,
+      avatarUrl: p?.avatar_url ?? null,
+    });
+  }
+
+  return { attendees, totalCount: count ?? attendees.length };
+}

@@ -20,6 +20,7 @@ import {
 } from '@/lib/supabase/checkout';
 
 import { supabase } from '@/lib/supabase';
+import { useProfile } from '@/hooks/profile/useProfile';
 
 type IncomingTicketType = Readonly<{
   id: string;
@@ -127,6 +128,7 @@ export default function CheckoutPage({
   onSeeReservations,
 }: CheckoutPageProps): ReactElement {
   const insets = useSafeAreaInsets();
+  const { profile } = useProfile();
 
   useEffect(() => {
     let cancelled = false;
@@ -161,6 +163,21 @@ export default function CheckoutPage({
     lastName: '',
   });
 
+  const [useSameAsBilling, setUseSameAsBilling] = useState(false);
+
+  // Sync billing from first attendee when checkbox is on
+  useEffect(() => {
+    if (!useSameAsBilling) return;
+    if (attendeeSlots.length === 0) return;
+    const first = attendeesByKey[attendeeSlots[0].key];
+    if (!first) return;
+    setBilling({
+      email: first.email,
+      firstName: first.firstName,
+      lastName: first.lastName,
+    });
+  }, [useSameAsBilling, attendeesByKey, attendeeSlots]);
+
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'apple' | 'google'>('card');
 
   const [cardNumber, setCardNumber] = useState('');
@@ -177,7 +194,7 @@ export default function CheckoutPage({
   const [successOpen, setSuccessOpen] = useState(false);
   const [successReservationId, setSuccessReservationId] = useState<string | null>(null);
 
-  
+
   useEffect(() => {
     setAttendeesByKey((cur) => {
       const next: AttendeeDraftMap = { ...cur };
@@ -202,6 +219,42 @@ export default function CheckoutPage({
       return next;
     });
   }, [attendeeSlots]);
+
+  // Auto-fill first attendee with user profile data
+  const profileFilledRef = React.useRef(false);
+  useEffect(() => {
+    if (profileFilledRef.current) return;
+    if (!profile) return;
+    if (attendeeSlots.length === 0) return;
+
+    const firstKey = attendeeSlots[0].key;
+    const cur = attendeesByKey[firstKey];
+    if (!cur) return;
+
+    // Only auto-fill if first attendee fields are all empty
+    const allEmpty = !cur.firstName && !cur.lastName && !cur.email && !cur.phoneNumber;
+    if (!allEmpty) return;
+
+    const nameParts = (profile.name ?? '').trim().split(/\s+/);
+    const firstName = nameParts[0] ?? '';
+    const lastName = nameParts.slice(1).join(' ') ?? '';
+    const email = profile.email ?? '';
+    const phone = profile.phone ?? '';
+
+    if (!firstName && !email) return;
+
+    profileFilledRef.current = true;
+    setAttendeesByKey((prev) => ({
+      ...prev,
+      [firstKey]: {
+        ...(prev[firstKey] ?? emptyAttendee()),
+        firstName: firstName || prev[firstKey]?.firstName || '',
+        lastName: lastName || prev[firstKey]?.lastName || '',
+        email: email || prev[firstKey]?.email || '',
+        phoneNumber: phone || prev[firstKey]?.phoneNumber || '',
+      },
+    }));
+  }, [profile, attendeeSlots, attendeesByKey]);
 
   const bumpQty = (ticketTypeId: string, delta: number) => {
     setQuantities((cur) => {
@@ -601,6 +654,26 @@ export default function CheckoutPage({
 
         {tab === 'payment' ? (
           <View className="px-5 pt-4 gap-y-4">
+            {/* Use same info as first attendee */}
+            {attendeeSlots.length > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setUseSameAsBilling((v) => !v)}
+                className="flex-row items-center gap-x-3"
+                hitSlop={10}
+              >
+                <View
+                  className={cx(
+                    'h-6 w-6 rounded-md border items-center justify-center',
+                    useSameAsBilling ? 'bg-black border-black' : 'bg-white border-gray300',
+                  )}
+                >
+                  {useSameAsBilling ? <Feather name="check" size={16} color="#fff" /> : null}
+                </View>
+                <Text className="text-sm text-gray800 flex-1">Use same info as first attendee for billing</Text>
+              </Pressable>
+            ) : null}
+
             {/* Billing */}
             <Card variant="outlined" padding="md">
               <Text className="text-base font-semibold text-black">Billing Information</Text>

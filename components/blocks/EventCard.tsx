@@ -104,7 +104,7 @@ export default function EventCard({
       className={cx('overflow-hidden', className)}
       {...rest}
     >
-      <View className="relative">
+      <Pressable onPress={() => onPress?.(String(event.id))} className="relative active:opacity-90">
         <Image
           source={{ uri: event.imageUrl }}
           className="h-48 w-full"
@@ -124,7 +124,10 @@ export default function EventCard({
             accessibilityRole="button"
             accessibilityLabel={event.favorite ? 'Remove from favorites' : 'Add to favorites'}
             hitSlop={10}
-            onPress={() => onToggleFavorite?.(String(event.id), !Boolean(event.favorite))}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onToggleFavorite?.(String(event.id), !Boolean(event.favorite));
+            }}
             className="active:opacity-90"
           >
             <IconButton
@@ -133,12 +136,11 @@ export default function EventCard({
               variant="ghost"
               tone="gray"
               size="md"
-              // keep this too (in case IconButton *does* handle presses)
               onPress={() => onToggleFavorite?.(String(event.id), !Boolean(event.favorite))}
             />
           </Pressable>
         </View>
-      </View>
+      </Pressable>
 
       <View className="p-4">
         <Pressable onPress={() => onPress?.(String(event.id))} className="active:opacity-90">

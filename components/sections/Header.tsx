@@ -31,7 +31,7 @@ export default function Header({
       className={cx('w-full px-6 pt-6 pb-2', className)}
     >
       <View className="flex-row items-center justify-between">
-        <Text className="text-3xl font-bold text-black flex-1 pr-4" numberOfLines={2}>
+        <Text className="text-3xl font-bold text-black flex-1 pr-4" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {greeting}, {userName}
         </Text>
 
@@ -39,7 +39,7 @@ export default function Header({
           accessibilityRole="button"
           onPress={onPressNotifications}
           hitSlop={12}
-          className="h-8 w-8 items-center justify-center rounded-full active:opacity-80"
+          className="h-8 w-8 mt-3 items-center justify-center rounded-full active:opacity-80"
         >
           <Feather name="bell" size={22} color="#111827" />
         </Pressable>

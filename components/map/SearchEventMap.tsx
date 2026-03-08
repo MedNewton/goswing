@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
+  Linking,
   Platform,
   View,
   Text,
@@ -19,6 +20,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Event, ID } from '@/types/domain';
 import FullscreenMap, { type FullItem } from '@/components/map/FullScreenMap';
 import type { FiltersPayload } from '@/components/filters/FiltersDrawer';
+import {
+  useNearbyPlaces,
+  CATEGORY_META,
+  type NearbyPlace,
+} from '@/components/map/nearbyPlaces';
 
 type LatLng = { lat: number; lng: number };
 
@@ -35,6 +41,11 @@ export type SearchEventMapProps = Readonly<{
 const isExpoGo = Constants.appOwnership === 'expo';
 const provider =
   Platform.OS === 'ios' ? (isExpoGo ? undefined : PROVIDER_GOOGLE) : PROVIDER_GOOGLE;
+
+/** Hide default Google Maps POIs so we render our own */
+const MAP_STYLE = [
+  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+];
 
 const DEFAULT_REGION: Region = {
   latitude: 33.5731,
@@ -122,6 +133,68 @@ export default function SearchEventMap({
     return () => {
       mounted = false;
     };
+  }, []);
+
+  // ── Nearby places (shared hook) ──
+  const { nearbyPlaces, fetchPlacesForRegion, handleRegionChangeComplete } = useNearbyPlaces();
+
+  useEffect(() => {
+    if (userLat == null || userLng == null) return;
+    fetchPlacesForRegion({
+      latitude: userLat,
+      longitude: userLng,
+      latitudeDelta: 0.054,
+      longitudeDelta: 0.054,
+    });
+  }, [userLat, userLng, fetchPlacesForRegion]);
+
+  // Place bottom sheet
+  const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
+  const [placeSheetVisible, setPlaceSheetVisible] = useState(false);
+  const placeAnim = useRef(new Animated.Value(0)).current;
+  const placeClosingRef = useRef(false);
+
+  const runPlaceAnim = (toValue: 0 | 1, cb?: () => void) => {
+    Animated.timing(placeAnim, {
+      toValue,
+      duration: toValue ? 260 : 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) cb?.();
+    });
+  };
+
+  const openPlaceSheet = useCallback((place: NearbyPlace) => {
+    placeClosingRef.current = false;
+    setSelectedPlace(place);
+    if (!placeSheetVisible) {
+      setPlaceSheetVisible(true);
+      requestAnimationFrame(() => runPlaceAnim(1));
+    } else {
+      runPlaceAnim(1);
+    }
+  }, [placeSheetVisible]);
+
+  const closePlaceSheet = useCallback(() => {
+    if (placeClosingRef.current) return;
+    placeClosingRef.current = true;
+    runPlaceAnim(0, () => {
+      setPlaceSheetVisible(false);
+      setSelectedPlace(null);
+      placeClosingRef.current = false;
+    });
+  }, []);
+
+  const placeTranslateY = placeAnim.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
+  const placeBackdropOpacity = placeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.45] });
+
+  const openPlaceInMaps = useCallback((place: NearbyPlace) => {
+    const url = Platform.select({
+      ios: `maps:0,0?q=${encodeURIComponent(place.name)}@${place.lat},${place.lng}`,
+      default: `geo:${place.lat},${place.lng}?q=${encodeURIComponent(place.name)}`,
+    });
+    Linking.openURL(url).catch(() => {});
   }, []);
 
   const items: ReadonlyArray<FullItem> = useMemo(() => {
@@ -292,6 +365,8 @@ export default function SearchEventMap({
           initialRegion={initialRegion}
           showsUserLocation={hasLocation}
           followsUserLocation={false}
+          customMapStyle={MAP_STYLE}
+          onRegionChangeComplete={handleRegionChangeComplete}
         >
           {circleCenter ? (
             <Circle
@@ -307,12 +382,108 @@ export default function SearchEventMap({
             <Marker
               key={String(c.id)}
               coordinate={{ latitude: c.lat, longitude: c.lng }}
-              title={c.title}
-              description={c.venue}
               onPress={() => openSheet(c)}
               tracksViewChanges={false}
-            />
+            >
+              <View style={{ alignItems: 'center' }}>
+                <View
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: '#FFFFFF',
+                    backgroundColor: '#0B0B15',
+                    overflow: 'hidden',
+                    shadowColor: '#000',
+                    shadowOpacity: 0.25,
+                    shadowRadius: 4,
+                    shadowOffset: { width: 0, height: 2 },
+                    elevation: 5,
+                  }}
+                >
+                  {c.imageUrl ? (
+                    <Image
+                      source={{ uri: c.imageUrl }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        flex: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Feather name="music" size={20} color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
+                <View
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderLeftWidth: 6,
+                    borderRightWidth: 6,
+                    borderTopWidth: 6,
+                    borderLeftColor: 'transparent',
+                    borderRightColor: 'transparent',
+                    borderTopColor: '#FFFFFF',
+                    marginTop: -1,
+                  }}
+                />
+              </View>
+            </Marker>
           ))}
+
+          {/* Nearby places from OpenStreetMap */}
+          {nearbyPlaces.map((place) => {
+            const meta = CATEGORY_META[place.category] ?? CATEGORY_META.restaurant;
+            return (
+              <Marker
+                key={`place-${place.id}`}
+                coordinate={{ latitude: place.lat, longitude: place.lng }}
+                onPress={() => openPlaceSheet(place)}
+                tracksViewChanges={false}
+              >
+                <View style={{ alignItems: 'center' }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: meta.color,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 2,
+                      borderColor: '#FFFFFF',
+                      shadowColor: '#000',
+                      shadowOpacity: 0.2,
+                      shadowRadius: 3,
+                      shadowOffset: { width: 0, height: 1 },
+                      elevation: 4,
+                    }}
+                  >
+                    <Feather name={meta.icon} size={16} color="#FFFFFF" />
+                  </View>
+                  <View
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderLeftWidth: 5,
+                      borderRightWidth: 5,
+                      borderTopWidth: 5,
+                      borderLeftColor: 'transparent',
+                      borderRightColor: 'transparent',
+                      borderTopColor: meta.color,
+                      marginTop: -1,
+                    }}
+                  />
+                </View>
+              </Marker>
+            );
+          })}
         </MapView>
 
         <Pressable
@@ -426,6 +597,116 @@ export default function SearchEventMap({
           onPressEvent?.(id, tab);
         }}
       />
+
+      {/* Place bottom sheet */}
+      <Modal visible={placeSheetVisible} transparent animationType="none" onRequestClose={closePlaceSheet}>
+        <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: placeBackdropOpacity }}>
+          <Pressable style={{ flex: 1 }} onPress={closePlaceSheet} accessibilityRole="button" />
+        </Animated.View>
+
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            transform: [{ translateY: placeTranslateY }],
+            backgroundColor: '#ffffff',
+            borderTopLeftRadius: 18,
+            borderTopRightRadius: 18,
+            paddingBottom: bottomPad,
+            shadowColor: '#000',
+            shadowOpacity: 0.15,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: -4 },
+            elevation: 8,
+          }}
+        >
+          {selectedPlace ? (() => {
+            const meta = CATEGORY_META[selectedPlace.category] ?? CATEGORY_META.restaurant;
+            return (
+              <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      backgroundColor: meta.color,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Feather name={meta.icon} size={22} color="#FFFFFF" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 18, fontWeight: '600', color: '#0B1220' }}>
+                      {selectedPlace.name}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: meta.color, fontWeight: '500', marginTop: 2 }}>
+                      {meta.label}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ gap: 8, marginBottom: 16 }}>
+                  {selectedPlace.address ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Feather name="map-pin" size={15} color="#6B7280" />
+                      <Text style={{ color: '#6B7280', fontSize: 14 }}>{selectedPlace.address}</Text>
+                    </View>
+                  ) : null}
+                  {selectedPlace.openingHours ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Feather name="clock" size={15} color="#6B7280" />
+                      <Text style={{ color: '#6B7280', fontSize: 14 }}>{selectedPlace.openingHours}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={{ height: 1, backgroundColor: '#E5E7EB', marginBottom: 14 }} />
+
+                <View style={{ flexDirection: 'row', gap: 12, marginBottom: 8 }}>
+                  <Pressable
+                    onPress={() => {
+                      openPlaceInMaps(selectedPlace);
+                      closePlaceSheet();
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: meta.color,
+                      paddingVertical: 12,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <Feather name="navigation" size={16} color="#FFFFFF" />
+                    <Text style={{ color: 'white', fontWeight: '600' }}>Get Directions</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={closePlaceSheet}
+                    style={{
+                      flex: 1,
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      backgroundColor: 'white',
+                      paddingVertical: 12,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ color: '#0B1220', fontWeight: '600' }}>Close</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })() : null}
+        </Animated.View>
+      </Modal>
 
       <Modal visible={visible} transparent animationType="none" onRequestClose={closeSheet}>
         <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: backdropOpacity }}>

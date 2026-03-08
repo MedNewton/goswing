@@ -9,7 +9,8 @@ export type TicketType = Readonly<{
   name: string;
   priceCents: number;
   currency: string; // "USD", "EUR", ...
-  // Optional: if you later pass inventory, we’ll respect it automatically.
+  description?: string | null;
+  benefits?: ReadonlyArray<string> | null;
   inventory?: number | null;
 }>;
 

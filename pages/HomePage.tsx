@@ -21,6 +21,7 @@ import ProfilePage from '@/pages/ProfilePage';
 import CheckoutPage from '@/pages/CheckoutPage';
 import ReservationDetailsRoutePage from '@/pages/ReservationDetailsRoutePage';
 import OrganizerProfilePage from '@/pages/OrganizerProfilePage';
+import NotificationsPage from '@/pages/NotificationsPage';
 
 import { getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
@@ -28,12 +29,14 @@ import { useCurrentCity } from '@/hooks/useCurrentCity';
 import { applyFiltersToEvents } from '@/components/filters/filters';
 import { VENUE_TYPES, type FiltersPayload } from '@/components/filters/FiltersDrawer';
 
-import { getPublishedEvents } from '@/lib/supabase/events';
+import LocationPicker from '@/components/blocks/LocationPicker';
+import { getPublishedEvents, getEventDetailsById } from '@/lib/supabase/events';
 import type { TicketQuantities, TicketType } from '@/components/blocks/TicketQuantitySheet';
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
+import { useProfile } from '@/hooks/profile/useProfile';
 
 
 import { useEventFavorites } from '@/hooks/useEventFavorites';
@@ -59,7 +62,8 @@ type Route =
       city?: string | null;
     };
   }
-  | { name: 'reservationDetails'; reservationId: string };
+  | { name: 'reservationDetails'; reservationId: string }
+  | { name: 'notifications' };
 
 function filterByWhenKey(events: ReadonlyArray<Event>, key: WhenKey): ReadonlyArray<Event> {
   const now = new Date();
@@ -130,14 +134,9 @@ function filterByWhenKey(events: ReadonlyArray<Event>, key: WhenKey): ReadonlyAr
       rangeEnd = endOfDay(nextSun);
       break;
     }
-    case 'next_month': {
-      rangeStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      rangeEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
-      break;
-    }
-    case 'next_year': {
-      rangeStart = new Date(now.getFullYear() + 1, 0, 1);
-      rangeEnd = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999);
+    case 'this_month': {
+      rangeStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      rangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       break;
     }
     default:
@@ -161,6 +160,16 @@ export default function HomePage(): ReactElement {
   const { isSignedIn, getToken } = useClerkAuth();
   const { user: clerkUser } = useAuth();
   const user = getUser();
+  const { profile } = useProfile();
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 18) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
+
+  const displayName = profile?.name || user.name;
 
   const userId: string = String(clerkUser?.id ?? '');
 
@@ -169,6 +178,9 @@ export default function HomePage(): ReactElement {
   }
 
   const { city, region, loading, error, refresh } = useCurrentCity();
+
+  const [locationOverride, setLocationOverride] = useState<string | null>(null);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
   const [bottomTab, setBottomTab] = useState<BottomTabKey>('home');
   const [route, setRoute] = useState<Route>({ name: 'root' });
@@ -286,8 +298,9 @@ export default function HomePage(): ReactElement {
     [],
   );
 
-  const locationLabel =
-    loading
+  const locationLabel = locationOverride
+    ? locationOverride
+    : loading
       ? 'Locating…'
       : error
         ? user.city ?? 'Unknown'
@@ -385,12 +398,25 @@ export default function HomePage(): ReactElement {
     return (
       <ScrollView contentContainerClassName={cx('pb-32')} showsVerticalScrollIndicator={false}>
         <Header
-          userName={user.name}
-          greeting="Good evening"
+          userName={displayName}
+          greeting={greeting}
           locationLabel={locationLabel}
-          onPressNotifications={() => { }}
-          onPressLocation={refresh}
+          onPressNotifications={() => setRoute({ name: 'notifications' })}
+          onPressLocation={() => setLocationPickerOpen((v) => !v)}
         />
+
+        {locationPickerOpen ? (
+          <View className="px-4 mt-2">
+            <LocationPicker
+              value={locationOverride}
+              onChange={(label) => {
+                setLocationOverride(label);
+                if (label) setLocationPickerOpen(false);
+              }}
+              events={allEvents}
+            />
+          </View>
+        ) : null}
 
         <View className="mt-3 px-4">
           <SearchBar
@@ -489,6 +515,17 @@ export default function HomePage(): ReactElement {
           onOpenOrganizer={({ organizerId, organizerName }) => {
             setRoute({ name: 'organizerProfile', organizerId, organizerName });
           }}
+          onPressEvent={async (eventId) => {
+            const local = allEvents.find((e) => String(e.id) === String(eventId));
+            if (local) {
+              setRoute({ name: 'eventDetails', event: local });
+              return;
+            }
+            try {
+              const ev = await getEventDetailsById(eventId);
+              setRoute({ name: 'eventDetails', event: ev });
+            } catch { /* ignore */ }
+          }}
           onBook={(payload) => {
             setRoute({
               name: 'checkout',
@@ -506,6 +543,8 @@ export default function HomePage(): ReactElement {
           organizerName={route.organizerName}
           onBack={closeOverlay}
         />
+      ) : route.name === 'notifications' ? (
+        <NotificationsPage onBack={closeOverlay} />
       ) : route.name === 'reservationDetails' ? (
         <ReservationDetailsRoutePage
           reservationId={route.reservationId}
