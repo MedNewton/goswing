@@ -10,6 +10,7 @@ import {
   type ColorValue,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export type ReviewPayload = Readonly<{
   rating: 1 | 2 | 3 | 4 | 5;
@@ -106,7 +107,7 @@ function GhostButton({
 
 export default function ReviewModal({
   visible,
-  title = 'Rate Your Experience',
+  title,
   subtitle,
   onClose,
   onSubmit,
@@ -115,6 +116,8 @@ export default function ReviewModal({
   submitting = false,
   ...rest
 }: ReviewModalProps): ReactElement {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t('event.review.title');
   const [rating, setRating] = useState<1 | 2 | 3 | 4 | 5 | 0>(0);
   const [comment, setComment] = useState<string>('');
 
@@ -133,7 +136,7 @@ export default function ReviewModal({
       <Pressable
         onPress={submitting ? undefined : onClose}
         className="flex-1 bg-black/40"
-        accessibilityHint="Close review dialog"
+        accessibilityHint={t('event.review.closeHint')}
       />
 
       <View
@@ -143,8 +146,8 @@ export default function ReviewModal({
       >
         <View className="px-5 pt-5 pb-2">
           <View className="flex-row items-start justify-between">
-            <Text className="text-2xl font-semibold text-black">{title}</Text>
-            <Pressable onPress={submitting ? undefined : onClose} accessibilityLabel="Close" hitSlop={12}>
+            <Text className="text-2xl font-semibold text-black">{resolvedTitle}</Text>
+            <Pressable onPress={submitting ? undefined : onClose} accessibilityLabel={t('event.review.closeA11y')} hitSlop={12}>
               <Feather name="x" size={20} color="#6B7280" />
             </Pressable>
           </View>
@@ -167,11 +170,11 @@ export default function ReviewModal({
         </View>
 
         <View className="px-5 mt-6">
-          <Text className="text-gray800 font-medium mb-2">Share your thoughts (optional)</Text>
+          <Text className="text-gray800 font-medium mb-2">{t('event.review.shareThoughts')}</Text>
           <TextInput
             value={comment}
             onChangeText={setComment}
-            placeholder="Tell us about your experience..."
+            placeholder={t('event.review.commentPlaceholder')}
             multiline
             numberOfLines={4}
             editable={!submitting}
@@ -181,9 +184,9 @@ export default function ReviewModal({
         </View>
 
         <View className="px-8 py-5 flex-row items-center justify-center gap-x-3">
-          <GhostButton label="Cancel" onPress={onClose} disabled={submitting} />
+          <GhostButton label={t('common.cancel')} onPress={onClose} disabled={submitting} />
           <SolidButton
-            label={submitting ? 'Submitting…' : 'Submit Review'}
+            label={submitting ? t('event.review.submitting') : t('event.review.submit')}
             icon="send"
             onPress={() => {
               if (!canSubmit) return;
@@ -196,7 +199,7 @@ export default function ReviewModal({
 
         <View className="px-5 pb-5">
           <Text className="text-center text-gray500">
-            Your review will help other users discover great events
+            {t('event.review.helpfulNote')}
           </Text>
         </View>
       </View>

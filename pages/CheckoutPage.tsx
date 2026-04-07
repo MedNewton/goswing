@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
@@ -128,6 +129,7 @@ export default function CheckoutPage({
   onSeeReservations,
 }: CheckoutPageProps): ReactElement {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { profile } = useProfile();
 
   useEffect(() => {
@@ -376,9 +378,9 @@ export default function CheckoutPage({
           <View className="w-full max-w-[420px] rounded-3xl bg-white px-6 py-6 border border-gray200">
             <View className="items-center">
               <Feather name="check-circle" size={72} color="#16A34A" />
-              <Text className="mt-4 text-xl font-semibold text-black text-center">Congratulations</Text>
+              <Text className="mt-4 text-xl font-semibold text-black text-center">{t('checkout.successTitle')}</Text>
               <Text className="mt-2 text-base text-gray700 text-center">
-                You have made a reservation for{'\n'}
+                {t('checkout.successBody')}{'\n'}
                 <Text className="font-semibold text-black">{event.title}</Text>
               </Text>
             </View>
@@ -388,7 +390,7 @@ export default function CheckoutPage({
               onPress={handleSeeReservations}
               className="mt-6 rounded-2xl py-4 items-center justify-center bg-black"
             >
-              <Text className="text-base font-semibold text-white">See my reservations</Text>
+              <Text className="text-base font-semibold text-white">{t('checkout.seeReservations')}</Text>
             </Pressable>
 
             <Pressable
@@ -396,7 +398,7 @@ export default function CheckoutPage({
               onPress={closeSuccess}
               className="mt-3 py-3 items-center justify-center"
             >
-              <Text className="text-base font-semibold text-gray700">Close</Text>
+              <Text className="text-base font-semibold text-gray700">{t('checkout.close')}</Text>
             </Pressable>
           </View>
         </View>
@@ -407,7 +409,7 @@ export default function CheckoutPage({
         <Pressable accessibilityRole="button" onPress={onBack} hitSlop={10} className="h-10 w-10 items-center justify-center">
           <Feather name="arrow-left" size={20} color="#111827" />
         </Pressable>
-        <Text className="ml-2 text-lg font-semibold text-black">Checkout</Text>
+        <Text className="ml-2 text-lg font-semibold text-black">{t('checkout.title')}</Text>
       </View>
 
       <View className="h-px bg-gray200" />
@@ -415,9 +417,9 @@ export default function CheckoutPage({
       {/* Tabs */}
       <View className="px-5 pt-3">
         <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
-          <TabPill label="Summary" selected={tab === 'summary'} onPress={() => setTab('summary')} />
-          <TabPill label="Attendees" selected={tab === 'attendees'} onPress={() => setTab('attendees')} />
-          <TabPill label="Payment" selected={tab === 'payment'} onPress={() => setTab('payment')} />
+          <TabPill label={t('checkout.tab.summary')} selected={tab === 'summary'} onPress={() => setTab('summary')} />
+          <TabPill label={t('checkout.tab.attendees')} selected={tab === 'attendees'} onPress={() => setTab('attendees')} />
+          <TabPill label={t('checkout.tab.payment')} selected={tab === 'payment'} onPress={() => setTab('payment')} />
         </View>
       </View>
 
@@ -436,7 +438,7 @@ export default function CheckoutPage({
             <Card variant="outlined" padding="md">
               <View className="flex-row items-center gap-x-2">
                 <Feather name="calendar" size={18} color="#111827" />
-                <Text className="text-base font-semibold text-black">Event Details</Text>
+                <Text className="text-base font-semibold text-black">{t('checkout.eventDetails')}</Text>
               </View>
 
               <Text className="mt-3 text-base text-black">{event.title}</Text>
@@ -468,9 +470,9 @@ export default function CheckoutPage({
             {/* Ticket summary card */}
             <Card variant="outlined" padding="md">
               <View className="flex-row items-center justify-between">
-                <Text className="text-base font-semibold text-black">Ticket Summary</Text>
+                <Text className="text-base font-semibold text-black">{t('checkout.ticketSummary')}</Text>
                 <Badge
-                  label={`${totals.totalTickets} ${totals.totalTickets === 1 ? 'ticket' : 'tickets'}`}
+                  label={`${totals.totalTickets} ${totals.totalTickets === 1 ? t('checkout.ticket') : t('checkout.tickets')}`}
                   variant="soft"
                   tone="gray"
                   size="sm"
@@ -480,7 +482,7 @@ export default function CheckoutPage({
 
               <View className="mt-4 gap-y-3">
                 {selection.length === 0 ? (
-                  <Text className="text-sm text-gray600">No tickets selected.</Text>
+                  <Text className="text-sm text-gray600">{t('checkout.noTicketsSelected')}</Text>
                 ) : (
                   selection.map((line) => {
                     const qty = clampInt(quantities[line.ticketTypeId] ?? 0, 0, 999);
@@ -489,7 +491,7 @@ export default function CheckoutPage({
                         <View className="flex-row items-start justify-between">
                           <View className="flex-1 pr-3">
                             <Text className="text-base font-medium text-black">{line.name}</Text>
-                            <Text className="text-sm text-gray500 mt-1">{formatMoneyCents(line.unitPriceCents, currency)} per ticket</Text>
+                            <Text className="text-sm text-gray500 mt-1">{t('checkout.perTicket', { price: formatMoneyCents(line.unitPriceCents, currency) })}</Text>
                           </View>
 
                           <Pressable
@@ -519,11 +521,11 @@ export default function CheckoutPage({
 
               <View className="mt-5 h-px bg-gray200" />
 
-              <Row label="Subtotal" value={formatMoneyCents(totals.subtotalCents, currency)} bold={false} />
-              <Row label="Service fees" value={formatMoneyCents(totals.serviceFeeCents, currency)} bold={false} subtle />
+              <Row label={t('checkout.subtotal')} value={formatMoneyCents(totals.subtotalCents, currency)} bold={false} />
+              <Row label={t('checkout.serviceFees')} value={formatMoneyCents(totals.serviceFeeCents, currency)} bold={false} subtle />
 
               <View className="mt-2" />
-              <Row label="Total" value={formatMoneyCents(totals.totalCents, currency)} bold />
+              <Row label={t('checkout.total')} value={formatMoneyCents(totals.totalCents, currency)} bold />
 
               <Pressable
                 accessibilityRole="button"
@@ -531,7 +533,7 @@ export default function CheckoutPage({
                 disabled={totals.totalTickets <= 0}
                 className={cx('mt-4 rounded-2xl py-4 items-center justify-center', totals.totalTickets > 0 ? 'bg-black' : 'bg-gray300')}
               >
-                <Text className={cx('text-base font-semibold', totals.totalTickets > 0 ? 'text-white' : 'text-gray700')}>Continue</Text>
+                <Text className={cx('text-base font-semibold', totals.totalTickets > 0 ? 'text-white' : 'text-gray700')}>{t('checkout.continue')}</Text>
               </Pressable>
             </Card>
           </View>
@@ -542,14 +544,14 @@ export default function CheckoutPage({
             <Card variant="outlined" padding="md">
               <View className="flex-row items-center gap-x-2">
                 <Feather name="user" size={18} color="#111827" />
-                <Text className="text-base font-semibold text-black">Attendee Information</Text>
+                <Text className="text-base font-semibold text-black">{t('checkout.attendeeInfo')}</Text>
               </View>
-              <Text className="text-sm text-gray600 mt-1">Please provide information for each ticket holder</Text>
+              <Text className="text-sm text-gray600 mt-1">{t('checkout.attendeeInfoSubtitle')}</Text>
             </Card>
 
             {attendeeSlots.length === 0 ? (
               <Card variant="outlined" padding="md">
-                <Text className="text-sm text-gray600">No tickets selected. Go back to Summary and add tickets.</Text>
+                <Text className="text-sm text-gray600">{t('checkout.noTicketsBack')}</Text>
               </Card>
             ) : (
               attendeeSlots.map((slot) => {
@@ -566,23 +568,23 @@ export default function CheckoutPage({
                     <View className="mt-4 gap-y-3">
                       <View className="flex-row gap-x-3">
                         <Field
-                          label="First Name *"
+                          label={t('checkout.firstName')}
                           value={v?.firstName ?? ''}
-                          onChangeText={(t) =>
+                          onChangeText={(val) =>
                             setAttendeesByKey((cur) => ({
                               ...cur,
-                              [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), firstName: t },
+                              [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), firstName: val },
                             }))
                           }
                           className="flex-1"
                         />
                         <Field
-                          label="Last Name *"
+                          label={t('checkout.lastName')}
                           value={v?.lastName ?? ''}
-                          onChangeText={(t) =>
+                          onChangeText={(val) =>
                             setAttendeesByKey((cur) => ({
                               ...cur,
-                              [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), lastName: t },
+                              [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), lastName: val },
                             }))
                           }
                           className="flex-1"
@@ -590,48 +592,48 @@ export default function CheckoutPage({
                       </View>
 
                       <Field
-                        label="Email *"
+                        label={t('checkout.email')}
                         value={v?.email ?? ''}
                         keyboardType="email-address"
                         autoCapitalize="none"
-                        onChangeText={(t) =>
+                        onChangeText={(val) =>
                           setAttendeesByKey((cur) => ({
                             ...cur,
-                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), email: t },
+                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), email: val },
                           }))
                         }
                       />
 
                       <Field
-                        label="Phone Number"
+                        label={t('checkout.phoneNumber')}
                         value={v?.phoneNumber ?? ''}
                         keyboardType="phone-pad"
-                        onChangeText={(t) =>
+                        onChangeText={(val) =>
                           setAttendeesByKey((cur) => ({
                             ...cur,
-                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), phoneNumber: t },
+                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), phoneNumber: val },
                           }))
                         }
                       />
 
                       <Field
-                        label="Dietary Restrictions"
+                        label={t('checkout.dietaryRestrictions')}
                         value={v?.dietaryRestrictions ?? ''}
-                        onChangeText={(t) =>
+                        onChangeText={(val) =>
                           setAttendeesByKey((cur) => ({
                             ...cur,
-                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), dietaryRestrictions: t },
+                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), dietaryRestrictions: val },
                           }))
                         }
                       />
 
                       <Field
-                        label="Emergency Contact"
+                        label={t('checkout.emergencyContact')}
                         value={v?.emergencyContact ?? ''}
-                        onChangeText={(t) =>
+                        onChangeText={(val) =>
                           setAttendeesByKey((cur) => ({
                             ...cur,
-                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), emergencyContact: t },
+                            [slot.key]: { ...(cur[slot.key] ?? emptyAttendee()), emergencyContact: val },
                           }))
                         }
                       />
@@ -647,7 +649,7 @@ export default function CheckoutPage({
               disabled={!attendeesValid}
               className={cx('rounded-2xl py-4 items-center justify-center', attendeesValid ? 'bg-black' : 'bg-gray300')}
             >
-              <Text className={cx('text-base font-semibold', attendeesValid ? 'text-white' : 'text-gray700')}>Continue to Payment</Text>
+              <Text className={cx('text-base font-semibold', attendeesValid ? 'text-white' : 'text-gray700')}>{t('checkout.continueToPayment')}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -670,33 +672,33 @@ export default function CheckoutPage({
                 >
                   {useSameAsBilling ? <Feather name="check" size={16} color="#fff" /> : null}
                 </View>
-                <Text className="text-sm text-gray800 flex-1">Use same info as first attendee for billing</Text>
+                <Text className="text-sm text-gray800 flex-1">{t('checkout.useSameAsBilling')}</Text>
               </Pressable>
             ) : null}
 
             {/* Billing */}
             <Card variant="outlined" padding="md">
-              <Text className="text-base font-semibold text-black">Billing Information</Text>
+              <Text className="text-base font-semibold text-black">{t('checkout.billingInfo')}</Text>
 
               <View className="mt-4 gap-y-3">
                 <Field
-                  label="Email *"
+                  label={t('checkout.email')}
                   value={billing.email}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  onChangeText={(t) => setBilling((cur) => ({ ...cur, email: t }))}
+                  onChangeText={(val) => setBilling((cur) => ({ ...cur, email: val }))}
                 />
                 <View className="flex-row gap-x-3">
                   <Field
-                    label="First Name *"
+                    label={t('checkout.firstName')}
                     value={billing.firstName}
-                    onChangeText={(t) => setBilling((cur) => ({ ...cur, firstName: t }))}
+                    onChangeText={(val) => setBilling((cur) => ({ ...cur, firstName: val }))}
                     className="flex-1"
                   />
                   <Field
-                    label="Last Name *"
+                    label={t('checkout.lastName')}
                     value={billing.lastName}
-                    onChangeText={(t) => setBilling((cur) => ({ ...cur, lastName: t }))}
+                    onChangeText={(val) => setBilling((cur) => ({ ...cur, lastName: val }))}
                     className="flex-1"
                   />
                 </View>
@@ -705,36 +707,36 @@ export default function CheckoutPage({
 
             {/* Payment method */}
             <Card variant="outlined" padding="md">
-              <Text className="text-base font-semibold text-black">Payment Method</Text>
+              <Text className="text-base font-semibold text-black">{t('checkout.paymentMethod')}</Text>
 
               <View className="mt-4">
-                <RadioRow selected={paymentMethod === 'card'} label="Credit/Debit Card" icon="credit-card" onPress={() => setPaymentMethod('card')} />
-                <RadioRow selected={paymentMethod === 'apple'} label="Apple Pay" icon="smartphone" onPress={() => setPaymentMethod('apple')} />
-                <RadioRow selected={paymentMethod === 'google'} label="Google Pay" icon="smartphone" onPress={() => setPaymentMethod('google')} />
+                <RadioRow selected={paymentMethod === 'card'} label={t('checkout.card')} icon="credit-card" onPress={() => setPaymentMethod('card')} />
+                <RadioRow selected={paymentMethod === 'apple'} label={t('checkout.applePay')} icon="smartphone" onPress={() => setPaymentMethod('apple')} />
+                <RadioRow selected={paymentMethod === 'google'} label={t('checkout.googlePay')} icon="smartphone" onPress={() => setPaymentMethod('google')} />
               </View>
 
               <View className="mt-4 gap-y-3">
-                <Field label="Card Number *" value={cardNumber} onChangeText={setCardNumber} keyboardType="number-pad" />
+                <Field label={t('checkout.cardNumber')} value={cardNumber} onChangeText={setCardNumber} keyboardType="number-pad" />
                 <View className="flex-row gap-x-3">
-                  <Field label="Expiry Date *" value={expiry} onChangeText={setExpiry} placeholder="MM/YY" className="flex-1" />
-                  <Field label="CVV *" value={cvv} onChangeText={setCvv} keyboardType="number-pad" className="flex-1" />
+                  <Field label={t('checkout.expiry')} value={expiry} onChangeText={setExpiry} placeholder={t('checkout.expiryPlaceholder')} className="flex-1" />
+                  <Field label={t('checkout.cvv')} value={cvv} onChangeText={setCvv} keyboardType="number-pad" className="flex-1" />
                 </View>
-                <Field label="ZIP Code *" value={zip} onChangeText={setZip} keyboardType="number-pad" />
+                <Field label={t('checkout.zip')} value={zip} onChangeText={setZip} keyboardType="number-pad" />
               </View>
             </Card>
 
             {/* Order summary */}
             <Card variant="outlined" padding="md">
-              <Text className="text-base font-semibold text-black">Order Summary</Text>
+              <Text className="text-base font-semibold text-black">{t('checkout.orderSummary')}</Text>
 
               <View className="mt-4">
                 <Row
-                  label={`Subtotal (${totals.totalTickets} ${totals.totalTickets === 1 ? 'ticket' : 'tickets'})`}
+                  label={t('checkout.subtotalWithCount', { count: totals.totalTickets, label: totals.totalTickets === 1 ? t('checkout.ticket') : t('checkout.tickets') })}
                   value={formatMoneyCents(totals.subtotalCents, currency)}
                 />
-                <Row label="Service fees" value={formatMoneyCents(totals.serviceFeeCents, currency)} subtle />
+                <Row label={t('checkout.serviceFees')} value={formatMoneyCents(totals.serviceFeeCents, currency)} subtle />
                 <View className="mt-2" />
-                <Row label="Total" value={formatMoneyCents(totals.totalCents, currency)} bold />
+                <Row label={t('checkout.total')} value={formatMoneyCents(totals.totalCents, currency)} bold />
               </View>
             </Card>
 
@@ -743,8 +745,8 @@ export default function CheckoutPage({
               <View className="flex-row items-center gap-x-3">
                 <Feather name="shield" size={18} color="#16A34A" />
                 <View className="flex-1">
-                  <Text className="text-base font-semibold text-black">Secure Checkout</Text>
-                  <Text className="text-sm text-gray600 mt-0.5">Your payment information is encrypted and secure</Text>
+                  <Text className="text-base font-semibold text-black">{t('checkout.secureCheckout')}</Text>
+                  <Text className="text-sm text-gray600 mt-0.5">{t('checkout.secureCheckoutSubtitle')}</Text>
                 </View>
               </View>
             </Card>
@@ -759,7 +761,7 @@ export default function CheckoutPage({
               >
                 {agreed ? <Feather name="check" size={16} color="#fff" /> : null}
               </View>
-              <Text className="text-sm text-gray800 flex-1">I agree to the Terms of Service and Privacy Policy</Text>
+              <Text className="text-sm text-gray800 flex-1">{t('checkout.agreeTerms')}</Text>
             </Pressable>
 
             {submitError ? (
@@ -800,11 +802,11 @@ export default function CheckoutPage({
             {submitting ? (
               <View className="flex-row items-center gap-x-2">
                 <ActivityIndicator color="#fff" />
-                <Text className="text-white text-base font-semibold">Creating reservation…</Text>
+                <Text className="text-white text-base font-semibold">{t('checkout.creating')}</Text>
               </View>
             ) : (
               <Text className={cx('text-base font-semibold', canComplete ? 'text-white' : 'text-gray700')}>
-                Complete Payment - {formatMoneyCents(totals.totalCents, currency)}
+                {t('checkout.completePayment', { total: formatMoneyCents(totals.totalCents, currency) })}
               </Text>
             )}
           </Pressable>

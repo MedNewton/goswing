@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Video, ResizeMode } from "expo-av";
 import { Feather } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import {
   getStoriesWithUserInfo,
   type EventStoryWithUser,
@@ -63,6 +64,7 @@ export default function StoryViewerModal({
   eventTitle,
   onClose,
 }: StoryViewerModalProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [stories, setStories] = useState<ReadonlyArray<EventStoryWithUser>>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +96,7 @@ export default function StoryViewerModal({
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load stories");
+          setError(e instanceof Error ? e.message : t("event.stories.couldNotLoad"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -256,7 +258,7 @@ export default function StoryViewerModal({
         {loading && (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator color="#FFFFFF" size="large" />
-            <Text className="text-white mt-4">Loading stories...</Text>
+            <Text className="text-white mt-4">{t("event.stories.loading")}</Text>
           </View>
         )}
 
@@ -265,14 +267,14 @@ export default function StoryViewerModal({
           <View className="flex-1 items-center justify-center px-6">
             <Feather name="alert-circle" size={48} color="#EF4444" />
             <Text className="text-white text-lg font-semibold mt-4">
-              Could not load stories
+              {t("event.stories.couldNotLoad")}
             </Text>
             <Text className="text-white/60 text-center mt-2">{error}</Text>
             <Pressable
               onPress={onClose}
               className="mt-6 px-6 py-3 rounded-full bg-white/10"
             >
-              <Text className="text-white font-medium">Close</Text>
+              <Text className="text-white font-medium">{t("event.stories.close")}</Text>
             </Pressable>
           </View>
         )}
@@ -282,16 +284,16 @@ export default function StoryViewerModal({
           <View className="flex-1 items-center justify-center px-6">
             <Feather name="camera-off" size={48} color="#6B7280" />
             <Text className="text-white text-lg font-semibold mt-4">
-              No stories yet
+              {t("event.stories.noneTitle")}
             </Text>
             <Text className="text-white/60 text-center mt-2">
-              Be the first to share a moment from this event!
+              {t("event.stories.noneSubtitle")}
             </Text>
             <Pressable
               onPress={onClose}
               className="mt-6 px-6 py-3 rounded-full bg-white/10"
             >
-              <Text className="text-white font-medium">Close</Text>
+              <Text className="text-white font-medium">{t("event.stories.close")}</Text>
             </Pressable>
           </View>
         )}
@@ -353,7 +355,7 @@ export default function StoryViewerModal({
                     className="text-white font-semibold"
                     numberOfLines={1}
                   >
-                    {currentStory.userName || "Anonymous"}
+                    {currentStory.userName || t("event.stories.anonymous")}
                   </Text>
                   <Text className="text-white/60 text-xs">
                     {formatTimeAgo(currentStory.createdAt)}

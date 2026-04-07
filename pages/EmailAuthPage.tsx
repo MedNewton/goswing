@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useSignIn, useSignUp } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
 type Props = Readonly<{
   onBack?: () => void;
@@ -29,6 +30,7 @@ export default function EmailAuthPage({
   onNewUser,
   onForgotPassword,
 }: Props): ReactElement {
+  const { t } = useTranslation();
   const { signIn, setActive: setActiveFromSignIn, isLoaded: signInLoaded } = useSignIn();
   const { signUp, setActive: setActiveFromSignUp, isLoaded: signUpLoaded } = useSignUp();
 
@@ -40,9 +42,9 @@ export default function EmailAuthPage({
 
   const validate = (): string | null => {
     const e = email.trim();
-    if (!e) return 'Please enter an email address.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return 'Please enter a valid email address.';
-    if (!password || password.length < 6) return 'Please enter a password (min 6 characters).';
+    if (!e) return t('emailAuth.errEmailRequired');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return t('emailAuth.errEmailInvalid');
+    if (!password || password.length < 6) return t('emailAuth.errPasswordShort');
     return null;
   };
 
@@ -55,7 +57,7 @@ export default function EmailAuthPage({
     }
 
     if (!signInLoaded || !signUpLoaded) {
-      setError('Authentication is still initializing. Please try again in a moment.');
+      setError(t('emailAuth.errInitializing'));
       return;
     }
 
@@ -79,7 +81,7 @@ export default function EmailAuthPage({
         }
 
         console.warn('Unexpected sign-in status:', attempt.status);
-        setError('We could not complete sign-in. Please try again.');
+        setError(t('emailAuth.errSignInGeneric'));
         return;
       } catch (err: any) {
         const firstCode: string | undefined = err?.errors?.[0]?.code;
@@ -87,9 +89,9 @@ export default function EmailAuthPage({
         // "identifier not found" → treat as NEW USER → go to sign-up
         if (firstCode !== 'form_identifier_not_found') {
           if (firstCode === 'form_password_incorrect') {
-            setError('Incorrect password. Please try again.');
+            setError(t('emailAuth.errIncorrectPassword'));
           } else {
-            setError('Something went wrong while signing in. Please try again.');
+            setError(t('emailAuth.errSignInUnknown'));
           }
           console.warn('Clerk sign-in error:', JSON.stringify(err, null, 2));
           return;
@@ -115,17 +117,17 @@ export default function EmailAuthPage({
           signUpAttempt.status,
           signUpAttempt
         );
-        setError('Could not complete sign up. Please try again.');
+        setError(t('emailAuth.errSignUpGeneric'));
       } catch (signUpErr: any) {
         console.warn('Clerk sign-up error:', JSON.stringify(signUpErr, null, 2));
         const firstCode: string | undefined = signUpErr?.errors?.[0]?.code;
 
         if (firstCode === 'form_password_pwned') {
-          setError('This password is too weak. Please choose a stronger one.');
+          setError(t('emailAuth.errPasswordWeak'));
         } else if (firstCode === 'form_identifier_exists') {
-          setError('This email is already in use. Try signing in instead.');
+          setError(t('emailAuth.errEmailExists'));
         } else {
-          setError('Could not create your account. Please try again.');
+          setError(t('emailAuth.errCouldNotCreate'));
         }
       }
     } finally {
@@ -151,7 +153,7 @@ export default function EmailAuthPage({
 
         <View className="flex-1 px-5">
           <Text className="text-3xl text-black font-semibold text-center mt-6">
-            Sign in or sign up
+            {t('emailAuth.title')}
           </Text>
 
           <View className="mt-8">
@@ -161,7 +163,7 @@ export default function EmailAuthPage({
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              placeholder="Email address"
+              placeholder={t('emailAuth.email')}
               placeholderTextColor="#9CA3AF"
               className="w-full rounded-2xl bg-gray100 px-4 py-4 text-gray900"
             />
@@ -173,7 +175,7 @@ export default function EmailAuthPage({
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
-                placeholder="Password"
+                placeholder={t('emailAuth.password')}
                 placeholderTextColor="#9CA3AF"
                 className="flex-1 px-2 py-4 text-gray900"
               />
@@ -189,7 +191,7 @@ export default function EmailAuthPage({
 
           <View className="items-end mt-3">
             <Pressable onPress={() => onForgotPassword?.(email.trim())}>
-              <Text className="text-base text-black">Forgot password?</Text>
+              <Text className="text-base text-black">{t('emailAuth.forgot')}</Text>
             </Pressable>
           </View>
 
@@ -210,7 +212,7 @@ export default function EmailAuthPage({
             {submitting ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text className="text-white text-base font-semibold">Continue</Text>
+              <Text className="text-white text-base font-semibold">{t('emailAuth.continue')}</Text>
             )}
           </Pressable>
         </View>

@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useCallback, type ReactElement } from 'react';
 import { View, Text, ActivityIndicator, Alert, Platform, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import * as Calendar from 'expo-calendar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -551,6 +552,7 @@ export default function ReservationDetailsRoutePage({
   reservationId,
   onBack,
 }: ReservationDetailsRoutePageProps): ReactElement {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<ReservationDetails | null>(null);
@@ -560,7 +562,7 @@ export default function ReservationDetailsRoutePage({
 
     const ticket = details.tickets.find((t) => t.id === ticketId);
     if (!ticket) {
-      Alert.alert('Error', 'Ticket not found.');
+      Alert.alert(t('common.error'), t('reservationDetailsRoute.ticketNotFound'));
       return;
     }
 
@@ -581,22 +583,22 @@ export default function ReservationDetailsRoutePage({
 
       await Share.share({
         message,
-        title: `Ticket for ${details.eventTitle}`,
+        title: t('reservationDetailsRoute.shareTitle', { title: details.eventTitle }),
       });
     } catch (err) {
       // User cancelled sharing - this is not an error
       if ((err as any)?.message !== 'User did not share') {
-        Alert.alert('Error', asMsg(err));
+        Alert.alert(t('common.error'), asMsg(err));
       }
     }
-  }, [details]);
+  }, [details, t]);
 
   const handleDownloadTicket = useCallback(async (ticketId: string) => {
     if (!details) return;
 
     const ticket = details.tickets.find((t) => t.id === ticketId);
     if (!ticket) {
-      Alert.alert('Error', 'Ticket not found.');
+      Alert.alert(t('common.error'), t('reservationDetailsRoute.ticketNotFound'));
       return;
     }
 
@@ -627,18 +629,18 @@ export default function ReservationDetailsRoutePage({
         });
       } else {
         Alert.alert(
-          'PDF Generated',
-          `Your ticket has been saved to:\n${uri}`,
+          t('reservationDetailsRoute.pdfGenerated'),
+          t('reservationDetailsRoute.pdfSavedTicket', { uri }),
         );
       }
     } catch (err) {
-      Alert.alert('Error', asMsg(err));
+      Alert.alert(t('common.error'), asMsg(err));
     }
-  }, [details]);
+  }, [details, t]);
 
   const handleDownloadAll = useCallback(async () => {
     if (!details || details.tickets.length === 0) {
-      Alert.alert('Error', 'No tickets available to download.');
+      Alert.alert(t('common.error'), t('reservationDetailsRoute.noTickets'));
       return;
     }
 
@@ -670,14 +672,14 @@ export default function ReservationDetailsRoutePage({
         });
       } else {
         Alert.alert(
-          'PDF Generated',
-          `Your tickets have been saved to:\n${uri}`,
+          t('reservationDetailsRoute.pdfGenerated'),
+          t('reservationDetailsRoute.pdfSavedTickets', { uri }),
         );
       }
     } catch (err) {
-      Alert.alert('Error', asMsg(err));
+      Alert.alert(t('common.error'), asMsg(err));
     }
-  }, [details]);
+  }, [details, t]);
 
   const handleAddToCalendar = useCallback(async () => {
     if (!details) return;
@@ -688,8 +690,8 @@ export default function ReservationDetailsRoutePage({
 
       if (status !== 'granted') {
         Alert.alert(
-          'Permission Required',
-          'Calendar access is needed to add this event. Please enable it in your device settings.',
+          t('reservationDetailsRoute.permissionRequired'),
+          t('reservationDetailsRoute.calendarPermission'),
         );
         return;
       }
@@ -697,14 +699,14 @@ export default function ReservationDetailsRoutePage({
       // Get default calendar
       const calendarId = await getDefaultCalendarId();
       if (!calendarId) {
-        Alert.alert('Error', 'Could not find a writable calendar on your device.');
+        Alert.alert(t('common.error'), t('reservationDetailsRoute.noWritableCalendar'));
         return;
       }
 
       // Parse event date
       const startDate = details.eventStartsAt ? new Date(details.eventStartsAt) : null;
       if (!startDate || !Number.isFinite(startDate.getTime())) {
-        Alert.alert('Error', 'Event date is not available.');
+        Alert.alert(t('common.error'), t('reservationDetailsRoute.eventDateUnavailable'));
         return;
       }
 
@@ -730,11 +732,14 @@ export default function ReservationDetailsRoutePage({
         ],
       });
 
-      Alert.alert('Success', `"${details.eventTitle}" has been added to your calendar.`);
+      Alert.alert(
+        t('reservationDetailsRoute.success'),
+        t('reservationDetailsRoute.eventAdded', { title: details.eventTitle }),
+      );
     } catch (err) {
-      Alert.alert('Error', asMsg(err));
+      Alert.alert(t('common.error'), asMsg(err));
     }
-  }, [details]);
+  }, [details, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -764,7 +769,7 @@ export default function ReservationDetailsRoutePage({
       <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
         <View className="flex-1 items-center justify-center px-6">
           <ActivityIndicator />
-          <Text className="mt-3 text-gray600">Loading reservation…</Text>
+          <Text className="mt-3 text-gray600">{t('reservationDetailsRoute.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -774,8 +779,8 @@ export default function ReservationDetailsRoutePage({
     return (
       <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-gray900 font-semibold">Could not load reservation</Text>
-          <Text className="text-gray600 mt-2 text-center">{error ?? 'Missing details.'}</Text>
+          <Text className="text-gray900 font-semibold">{t('reservationDetailsRoute.couldNotLoad')}</Text>
+          <Text className="text-gray600 mt-2 text-center">{error ?? t('reservationDetailsRoute.missingDetails')}</Text>
 
           {/* Simple back fallback */}
           <Text
@@ -783,7 +788,7 @@ export default function ReservationDetailsRoutePage({
             className="mt-4 text-brand font-medium"
             accessibilityRole="button"
           >
-            Go back
+            {t('reservationDetailsRoute.goBack')}
           </Text>
         </View>
       </SafeAreaView>

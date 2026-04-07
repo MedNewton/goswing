@@ -1,23 +1,24 @@
 import React, { type ReactElement } from 'react';
 import { View, Text } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 export default function AboutSection(): ReactElement {
+  const { t } = useTranslation();
+  const items = [
+    t('event.about.included1'),
+    t('event.about.included2'),
+    t('event.about.included3'),
+    t('event.about.included4'),
+  ];
   return (
     <View className="px-2 mt-4">
-      <Text className="text-base font-semibold text-black">About This Event</Text>
-      <Text className="text-gray700 mt-2">
-        Experience the underground techno scene with international DJs in Paris&apos; most iconic club venue.
-      </Text>
+      <Text className="text-base font-semibold text-black">{t('event.about.title')}</Text>
+      <Text className="text-gray700 mt-2">{t('event.about.body')}</Text>
 
-      <Text className="text-sm font-semibold text-black mt-4">What&apos;s Included</Text>
+      <Text className="text-sm font-semibold text-black mt-4">{t('event.about.whatsIncluded')}</Text>
       <View className="mt-2 gap-y-1">
-        {[
-          'Live performances by 5+ artists',
-          'Food and beverage vendors',
-          'Free WiFi throughout venue',
-          'Professional sound and lighting',
-        ].map((t) => (
-          <Text key={t} className="text-gray700">• {t}</Text>
+        {items.map((line) => (
+          <Text key={line} className="text-gray700">• {line}</Text>
         ))}
       </View>
     </View>

@@ -19,6 +19,7 @@ import { Pressable as RNPressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
+import { useTranslation } from 'react-i18next';
 
 import Card from '@/components/ui/Card';
 import {
@@ -282,6 +283,7 @@ function MetricItem({
 }
 
 function OrganizerEventCard({ item }: { item: OrganizerEvent }): ReactElement {
+  const { t } = useTranslation();
   const dt = useMemo(() => formatDateTime(item.startsAt), [item.startsAt]);
 
   return (
@@ -303,14 +305,14 @@ function OrganizerEventCard({ item }: { item: OrganizerEvent }): ReactElement {
           <Text className="text-base font-semibold text-black" numberOfLines={2}>{item.title}</Text>
           <View className="mt-1 flex-row items-center gap-x-2">
             <Feather name="calendar" size={14} color="#6B7280" />
-            <Text className="text-sm text-gray600">{dt?.date ?? 'TBA'}</Text>
+            <Text className="text-sm text-gray600">{dt?.date ?? t('organizer.eventCard.dateTba')}</Text>
             <Feather name="clock" size={14} color="#6B7280" />
             <Text className="text-sm text-gray600">{dt?.time ?? ''}</Text>
           </View>
           <View className="mt-1 flex-row items-center gap-x-2">
             <Feather name="map-pin" size={14} color="#6B7280" />
             <Text className="text-sm text-gray600" numberOfLines={1}>
-              {item.venue ?? 'Venue TBA'}
+              {item.venue ?? t('organizer.eventCard.venueTba')}
               {item.city ? `, ${item.city}` : ''}
             </Text>
           </View>
@@ -348,7 +350,8 @@ function StarRating({ rating, size = 14 }: { rating: number; size?: number }): R
 }
 
 function ReviewCard({ review }: { review: OrganizerReview }): ReactElement {
-  const name = review.userName ?? 'Anonymous';
+  const { t } = useTranslation();
+  const name = review.userName ?? t('organizer.reviews.anonymous');
   const initials = getInitials(name);
 
   return (
@@ -375,7 +378,7 @@ function ReviewCard({ review }: { review: OrganizerReview }): ReactElement {
       </View>
 
       <Text className="text-sm text-gray700 mt-3" numberOfLines={4}>
-        {review.comment ?? 'No comment provided.'}
+        {review.comment ?? t('organizer.reviews.noComment')}
       </Text>
       {review.eventTitle ? (
         <View className="mt-3 self-start rounded-full border border-gray200 px-3 py-1 bg-gray50">
@@ -387,6 +390,7 @@ function ReviewCard({ review }: { review: OrganizerReview }): ReactElement {
 }
 
 function SimilarOrganizerCard({ organizer }: { organizer: SimilarOrganizer }): ReactElement {
+  const { t } = useTranslation();
   const initials = getInitials(organizer.name);
   return (
     <Card variant="outlined" padding="md" className="mt-3">
@@ -422,7 +426,7 @@ function SimilarOrganizerCard({ organizer }: { organizer: SimilarOrganizer }): R
           </View>
         </View>
         <Pressable className="rounded-full border border-gray300 px-4 py-2 bg-white ml-2">
-          <Text className="text-sm font-medium text-gray800">Follow</Text>
+          <Text className="text-sm font-medium text-gray800">{t('organizer.follow')}</Text>
         </Pressable>
       </View>
     </Card>
@@ -439,6 +443,7 @@ export default function OrganizerProfilePage({
   onBack,
 }: OrganizerProfilePageProps): ReactElement {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<OrganizerTab>('about');
   const [organizer, setOrganizer] = useState<OrganizerWithStats | null>(null);
@@ -584,20 +589,18 @@ export default function OrganizerProfilePage({
     loadOrganizer(true);
   }, [loadOrganizer]);
 
-  const displayName = organizer?.name ?? organizerName ?? 'Organizer';
+  const displayName = organizer?.name ?? organizerName ?? t('organizer.fallbackName');
   const initials = getInitials(displayName);
   const coverUri = organizer?.coverImageUrl ?? null;
   const logoUri = organizer?.logoUrl ?? null;
-  const tagline =
-    organizer?.tagline ??
-    'Creating unforgettable experiences through music, art, and community gatherings';
+  const tagline = organizer?.tagline ?? t('organizer.fallbackTagline');
   const establishedLabel = organizer?.establishedYear
-    ? `Est. ${organizer.establishedYear}`
+    ? t('organizer.established', { year: organizer.establishedYear })
     : null;
 
   const stats = organizer?.stats;
   const ratingValue = Number.isFinite(stats?.avgRating ?? NaN) ? (stats?.avgRating ?? 0).toFixed(1) : '0.0';
-  const reviewsLabel = `${formatCompactNumber(stats?.reviewCount ?? 0)} reviews`;
+  const reviewsLabel = t('organizer.stats.reviews', { count: formatCompactNumber(stats?.reviewCount ?? 0) });
   const eventsValue = formatCompactNumber(stats?.eventCount ?? 0);
   const followersValue = formatCompactNumber(stats?.followerCount ?? 0);
   const successValue = `${(stats?.successRate ?? 0).toFixed(0)}%`;
@@ -606,7 +609,7 @@ export default function OrganizerProfilePage({
     ? organizer?.countryCode
       ? `${organizer.city}, ${organizer.countryCode}`
       : organizer.city
-    : 'Location not set';
+    : t('organizer.locationNotSet');
 
   const handleToggleFollow = async (): Promise<void> => {
     if (!organizerId) return;
@@ -620,7 +623,7 @@ export default function OrganizerProfilePage({
       }
     } catch (e: unknown) {
       setIsFollowing(!next);
-      Alert.alert('Follow failed', errorMessage(e));
+      Alert.alert(t('organizer.followFailed'), errorMessage(e));
     }
   };
 
@@ -702,11 +705,11 @@ export default function OrganizerProfilePage({
             <View className="flex-row items-center justify-between py-3 px-2 rounded-2xl bg-gray50 border border-gray100">
               <StatItem icon="star" iconColor="#FBBF24" value={ratingValue} label={reviewsLabel} />
               <View className="w-px h-8 bg-gray200" />
-              <StatItem icon="calendar" value={eventsValue} label="events" />
+              <StatItem icon="calendar" value={eventsValue} label={t('organizer.stats.events')} />
               <View className="w-px h-8 bg-gray200" />
-              <StatItem icon="users" value={followersValue} label="followers" />
+              <StatItem icon="users" value={followersValue} label={t('organizer.stats.followers')} />
               <View className="w-px h-8 bg-gray200" />
-              <StatItem icon="trending-up" value={successValue} label="success" />
+              <StatItem icon="trending-up" value={successValue} label={t('organizer.stats.success')} />
             </View>
           </View>
 
@@ -725,7 +728,7 @@ export default function OrganizerProfilePage({
                 color={isFollowing ? '#EF4444' : '#FFFFFF'}
               />
               <Text className={isFollowing ? 'text-gray800 font-semibold' : 'text-white font-semibold'}>
-                {isFollowing ? 'Following' : 'Follow'}
+                {isFollowing ? t('organizer.following') : t('organizer.follow')}
               </Text>
             </Pressable>
             <Pressable className="h-12 w-12 rounded-full border border-gray200 items-center justify-center bg-white">
@@ -745,7 +748,7 @@ export default function OrganizerProfilePage({
               <Text className="text-sm text-gray700">{locationLabel}</Text>
             </View>
             <Pressable className="flex-row items-center gap-x-1">
-              <Text className="text-sm text-gray900 font-medium">View on Map</Text>
+              <Text className="text-sm text-gray900 font-medium">{t('organizer.viewOnMap')}</Text>
               <Feather name="chevron-right" size={14} color="#374151" />
             </Pressable>
           </View>
@@ -753,11 +756,11 @@ export default function OrganizerProfilePage({
           {/* Tabs */}
           <View className="px-5 mt-5">
             <View className="flex-row items-center rounded-full bg-gray100 p-1">
-              <TabPill label="About" selected={activeTab === 'about'} onPress={() => setActiveTab('about')} />
-              <TabPill label="Events" selected={activeTab === 'events'} onPress={() => setActiveTab('events')} />
-              <TabPill label="Gallery" selected={activeTab === 'gallery'} onPress={() => setActiveTab('gallery')} />
-              <TabPill label="Reviews" selected={activeTab === 'reviews'} onPress={() => setActiveTab('reviews')} />
-              <TabPill label="Similar" selected={activeTab === 'similar'} onPress={() => setActiveTab('similar')} />
+              <TabPill label={t('organizer.tabs.about')} selected={activeTab === 'about'} onPress={() => setActiveTab('about')} />
+              <TabPill label={t('organizer.tabs.events')} selected={activeTab === 'events'} onPress={() => setActiveTab('events')} />
+              <TabPill label={t('organizer.tabs.gallery')} selected={activeTab === 'gallery'} onPress={() => setActiveTab('gallery')} />
+              <TabPill label={t('organizer.tabs.reviews')} selected={activeTab === 'reviews'} onPress={() => setActiveTab('reviews')} />
+              <TabPill label={t('organizer.tabs.similar')} selected={activeTab === 'similar'} onPress={() => setActiveTab('similar')} />
             </View>
           </View>
 
@@ -770,13 +773,13 @@ export default function OrganizerProfilePage({
           ) : error ? (
             <View className="px-5 mt-6">
               <Card variant="outlined" padding="md">
-                <Text className="text-gray900 font-semibold">Could not load organizer</Text>
+                <Text className="text-gray900 font-semibold">{t('organizer.error.title')}</Text>
                 <Text className="text-gray500 mt-2">{error}</Text>
                 <Pressable
                   onPress={() => loadOrganizer()}
                   className="mt-4 self-start px-4 py-2 rounded-full bg-black"
                 >
-                  <Text className="text-white font-medium">Try Again</Text>
+                  <Text className="text-white font-medium">{t('organizer.error.tryAgain')}</Text>
                 </Pressable>
               </Card>
             </View>
@@ -789,21 +792,20 @@ export default function OrganizerProfilePage({
               {activeTab === 'about' && (
                 <View className="px-5 mt-4">
                   <Card variant="outlined" padding="md" className="mb-4">
-                    <Text className="text-base font-semibold text-black">About</Text>
+                    <Text className="text-base font-semibold text-black">{t('organizer.about.title')}</Text>
                     <Text className="text-sm text-gray700 mt-2 leading-5">
-                      {organizer?.about ??
-                        'This organizer has not added a detailed description yet.'}
+                      {organizer?.about ?? t('organizer.about.fallback')}
                     </Text>
                   </Card>
 
                   <Card variant="outlined" padding="md" className="mb-4">
-                    <Text className="text-base font-semibold text-black">Contact Information</Text>
+                    <Text className="text-base font-semibold text-black">{t('organizer.contact.title')}</Text>
                     <InfoRow icon="phone" label={organizer?.phone ?? '+1 (000) 000-0000'} />
                     <InfoRow icon="mail" label={organizer?.email ?? 'hello@example.com'} />
                     <InfoRow icon="globe" label={organizer?.websiteUrl ?? 'www.example.com'} />
 
                     <View className="mt-4 pt-3 border-t border-gray100">
-                      <Text className="text-sm font-semibold text-gray700">Social Media</Text>
+                      <Text className="text-sm font-semibold text-gray700">{t('organizer.contact.socialMedia')}</Text>
                       <InfoRow
                         icon="instagram"
                         label={organizer?.instagramHandle ?? '@organizer'}
@@ -816,7 +818,7 @@ export default function OrganizerProfilePage({
                   </Card>
 
                   <Card variant="outlined" padding="md" className="mb-4">
-                    <Text className="text-base font-semibold text-black">Specialties</Text>
+                    <Text className="text-base font-semibold text-black">{t('organizer.specialties.title')}</Text>
                     <View className="flex-row flex-wrap mt-3">
                       {(organizer?.specialties ?? ['Live Music', 'Cultural Events']).map((s) => (
                         <Chip key={s} label={s} />
@@ -825,36 +827,34 @@ export default function OrganizerProfilePage({
                   </Card>
 
                   <Card variant="outlined" padding="md" className="mb-4">
-                    <Text className="text-base font-semibold text-black">Performance Metrics</Text>
+                    <Text className="text-base font-semibold text-black">{t('organizer.metrics.title')}</Text>
                     <View className="flex-row mt-4">
                       <MetricItem
                         icon="users"
-                        label="Total Attendees"
+                        label={t('organizer.metrics.totalAttendees')}
                         value={`${formatCompactNumber(stats?.totalAttendees ?? 0)}+`}
                       />
                       <MetricItem
                         icon="message-circle"
-                        label="Response Time"
+                        label={t('organizer.metrics.responseTime')}
                         value={
                           organizer?.responseTimeHours
                             ? `< ${Math.round(organizer.responseTimeHours)}h`
-                            : 'N/A'
+                            : t('organizer.metrics.notAvailable')
                         }
                       />
                     </View>
                   </Card>
 
                   <Card variant="outlined" padding="md" className="mb-4">
-                    <Text className="text-base font-semibold text-black">Policies</Text>
-                    <Text className="text-sm font-medium text-gray800 mt-3">Cancellation</Text>
+                    <Text className="text-base font-semibold text-black">{t('organizer.policies.title')}</Text>
+                    <Text className="text-sm font-medium text-gray800 mt-3">{t('organizer.policies.cancellation')}</Text>
                     <Text className="text-sm text-gray600 mt-1 leading-5">
-                      {organizer?.cancellationPolicy ??
-                        'Tickets can be canceled up to 48 hours before the event for a full refund.'}
+                      {organizer?.cancellationPolicy ?? t('organizer.policies.cancellationFallback')}
                     </Text>
-                    <Text className="text-sm font-medium text-gray800 mt-4">Refund</Text>
+                    <Text className="text-sm font-medium text-gray800 mt-4">{t('organizer.policies.refund')}</Text>
                     <Text className="text-sm text-gray600 mt-1 leading-5">
-                      {organizer?.refundPolicy ??
-                        'Refunds are processed within 5-7 business days to the original payment method.'}
+                      {organizer?.refundPolicy ?? t('organizer.policies.refundFallback')}
                     </Text>
                   </Card>
                 </View>
@@ -865,22 +865,22 @@ export default function OrganizerProfilePage({
                 <View className="px-5 mt-4">
                   <Pressable className="rounded-xl border border-gray200 py-3 items-center flex-row justify-center gap-x-2 bg-white active:bg-gray50">
                     <Feather name="calendar" size={18} color="#374151" />
-                    <Text className="text-base text-gray800 font-medium">View Event Calendar</Text>
+                    <Text className="text-base text-gray800 font-medium">{t('organizer.events.viewCalendar')}</Text>
                   </Pressable>
 
                   {events.loading ? (
                     <>
-                      <Text className="text-lg font-semibold text-black mt-6">Upcoming Events</Text>
+                      <Text className="text-lg font-semibold text-black mt-6">{t('organizer.events.upcoming')}</Text>
                       <EventCardSkeleton />
                       <EventCardSkeleton />
                     </>
                   ) : (
                     <>
                       <Text className="text-lg font-semibold text-black mt-6">
-                        Upcoming Events ({events.upcoming.length})
+                        {t('organizer.events.upcomingCount', { count: events.upcoming.length })}
                       </Text>
                       {events.upcoming.length === 0 ? (
-                        <Text className="text-sm text-gray500 mt-3">No upcoming events scheduled.</Text>
+                        <Text className="text-sm text-gray500 mt-3">{t('organizer.events.upcomingEmpty')}</Text>
                       ) : (
                         events.upcoming.map((ev) => <OrganizerEventCard key={ev.id} item={ev} />)
                       )}
@@ -888,17 +888,17 @@ export default function OrganizerProfilePage({
                       <View className="h-px bg-gray200 my-6" />
 
                       <Text className="text-lg font-semibold text-black">
-                        Past Events ({events.past.length})
+                        {t('organizer.events.past', { count: events.past.length })}
                       </Text>
                       {events.past.length === 0 ? (
-                        <Text className="text-sm text-gray500 mt-3">No past events.</Text>
+                        <Text className="text-sm text-gray500 mt-3">{t('organizer.events.pastEmpty')}</Text>
                       ) : (
                         events.past.slice(0, 5).map((ev) => <OrganizerEventCard key={ev.id} item={ev} />)
                       )}
                       {events.past.length > 5 && (
                         <Pressable className="mt-4 py-3 items-center">
                           <Text className="text-sm text-gray800 font-medium">
-                            View All Past Events ({events.past.length})
+                            {t('organizer.events.viewAllPast', { count: events.past.length })}
                           </Text>
                         </Pressable>
                       )}
@@ -915,7 +915,7 @@ export default function OrganizerProfilePage({
                   ) : gallery.items.length === 0 ? (
                     <View className="items-center py-8">
                       <Feather name="image" size={32} color="#D1D5DB" />
-                      <Text className="text-sm text-gray500 mt-3">No gallery images yet.</Text>
+                      <Text className="text-sm text-gray500 mt-3">{t('organizer.gallery.empty')}</Text>
                     </View>
                   ) : (
                     <View className="flex-row flex-wrap justify-between">
@@ -946,7 +946,7 @@ export default function OrganizerProfilePage({
                                   </View>
                                   <View className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/60 flex-row items-center">
                                     <Feather name="video" size={11} color="#FFFFFF" />
-                                    <Text className="text-white text-[10px] font-semibold ml-1">VIDEO</Text>
+                                    <Text className="text-white text-[10px] font-semibold ml-1">{t('organizer.gallery.videoBadge')}</Text>
                                   </View>
                                 </>
                               ) : null}
@@ -970,7 +970,7 @@ export default function OrganizerProfilePage({
                   ) : reviews.items.length === 0 ? (
                     <View className="items-center py-8">
                       <Feather name="message-square" size={32} color="#D1D5DB" />
-                      <Text className="text-sm text-gray500 mt-3">No reviews yet.</Text>
+                      <Text className="text-sm text-gray500 mt-3">{t('organizer.reviews.empty')}</Text>
                     </View>
                   ) : (
                     reviews.items.map((r) => <ReviewCard key={r.id} review={r} />)
@@ -989,7 +989,7 @@ export default function OrganizerProfilePage({
                   ) : similar.items.length === 0 ? (
                     <View className="items-center py-8">
                       <Feather name="users" size={32} color="#D1D5DB" />
-                      <Text className="text-sm text-gray500 mt-3">No similar organizers found.</Text>
+                      <Text className="text-sm text-gray500 mt-3">{t('organizer.similar.empty')}</Text>
                     </View>
                   ) : (
                     similar.items.map((org) => <SimilarOrganizerCard key={org.id} organizer={org} />)

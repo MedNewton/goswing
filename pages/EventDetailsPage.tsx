@@ -4,6 +4,7 @@ import { ActivityIndicator, Dimensions, Image, Linking, Platform, Pressable, Scr
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 import TicketQuantitySheet, {
   type TicketQuantities,
@@ -188,6 +189,7 @@ export default function EventDetailsPage({
   onToggleFavorite,
 }: EventDetailsPageProps): ReactElement {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<'about' | 'offers' | 'upcoming'>(initialTab);
 
@@ -739,33 +741,33 @@ export default function EventDetailsPage({
                 <View className="flex-1">
                   <AccessRow
                     done={Boolean(access?.steps.ticketsPurchased)}
-                    label="Tickets Purchased"
+                    label={t('eventDetails.ticketsPurchased')}
                   />
                   <AccessRow
                     done={Boolean(access?.steps.reservationConfirmed)}
-                    label="Reservation confirmed"
+                    label={t('eventDetails.reservationConfirmed')}
                   />
                   <AccessRow
                     done={Boolean(access?.steps.checkedIn)}
-                    label="Checked In"
+                    label={t('eventDetails.checkedIn')}
                   />
 
                   {accessLoading ? (
-                    <Text className="text-xs text-gray500 mt-2">Checking your reservation…</Text>
+                    <Text className="text-xs text-gray500 mt-2">{t('eventDetails.checkingReservation')}</Text>
                   ) : null}
 
                   {accessError ? (
                     <Text className="text-xs text-red-600 mt-2">
-                      Could not verify access: {accessError}
+                      {t('eventDetails.couldNotVerify', { error: accessError })}
                     </Text>
                   ) : null}
 
 
                   {detailsLoading ? (
-                    <Text className="text-xs text-gray500 mt-2">Loading full event details…</Text>
+                    <Text className="text-xs text-gray500 mt-2">{t('eventDetails.loadingDetails')}</Text>
                   ) : null}
                   {detailsError ? (
-                    <Text className="text-xs text-red-600 mt-2">Could not load full details: {detailsError}</Text>
+                    <Text className="text-xs text-red-600 mt-2">{t('eventDetails.couldNotLoadDetails', { error: detailsError })}</Text>
                   ) : null}
                 </View>
               </View>
@@ -806,7 +808,7 @@ export default function EventDetailsPage({
                   onPress={() => setSuggestSongsOpen(true)}
                   className="active:opacity-90"
                 >
-                  <ActionChip bg="bg-black" icon="music" label="Suggest Songs" />
+                  <ActionChip bg="bg-black" icon="music" label={t('eventDetails.suggestSongs')} />
                 </Pressable>
 
               </View>
@@ -815,14 +817,14 @@ export default function EventDetailsPage({
                   onPress={() => setStoryOpen(true)}
                   className="active:opacity-90"
                 >
-                  <ActionChip bg="bg-indigo-600" icon="camera" label="Share Story" />
+                  <ActionChip bg="bg-indigo-600" icon="camera" label={t('eventDetails.shareStory')} />
                 </Pressable>
               </View>
               <View className="flex-1">
                 <Pressable
                   onPress={() => {
                     if (hasReviewed) {
-                      Alert.alert('Review already submitted', 'You can only review this event once.');
+                      Alert.alert(t('eventDetails.alreadyReviewedTitle'), t('eventDetails.alreadyReviewedMessage'));
                       return;
                     }
                     setReviewOpen(true);
@@ -830,7 +832,7 @@ export default function EventDetailsPage({
                   disabled={hasReviewed}
                   className={hasReviewed ? 'opacity-60' : 'active:opacity-90'}
                 >
-                  <ActionChip bg="bg-amber-400" icon="star" label={hasReviewed ? 'Reviewed' : 'Give a Review'} darkText />
+                  <ActionChip bg="bg-amber-400" icon="star" label={hasReviewed ? t('eventDetails.reviewed') : t('eventDetails.giveReview')} darkText />
                 </Pressable>
               </View>
             </View>
@@ -874,7 +876,7 @@ export default function EventDetailsPage({
                         <Feather name="star" size={14} color="#F59E0B" />
                         <Text className="text-xs text-gray600">
                           {orgSummary
-                            ? `${orgSummary.avgRating > 0 ? orgSummary.avgRating.toFixed(1) : '–'} · ${formatFollowerCount(orgSummary.followerCount)} followers`
+                            ? t('eventDetails.followers', { rating: orgSummary.avgRating > 0 ? orgSummary.avgRating.toFixed(1) : '–', count: formatFollowerCount(orgSummary.followerCount) })
                             : '–'}
                         </Text>
                       </View>
@@ -892,7 +894,7 @@ export default function EventDetailsPage({
                     )}
                   >
                     <Text className={cx('text-sm', isFollowing ? 'text-white' : 'text-gray800')}>
-                      {isFollowing ? 'Following' : 'Follow'}
+                      {isFollowing ? t('organizer.following') : t('organizer.follow')}
                     </Text>
                   </Pressable>
                 </View>
@@ -903,9 +905,9 @@ export default function EventDetailsPage({
           {/* ===== TABS ===== */}
           <View className="px-5 mt-5">
             <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
-              <TabPill label="About" selected={activeTab === 'about'} onPress={() => setActiveTab('about')} />
-              <TabPill label="Offers" selected={activeTab === 'offers'} onPress={() => setActiveTab('offers')} />
-              <TabPill label="Upcoming" selected={activeTab === 'upcoming'} onPress={() => setActiveTab('upcoming')} />
+              <TabPill label={t('event.tabs.about')} selected={activeTab === 'about'} onPress={() => setActiveTab('about')} />
+              <TabPill label={t('event.tabs.offers')} selected={activeTab === 'offers'} onPress={() => setActiveTab('offers')} />
+              <TabPill label={t('event.tabs.upcoming')} selected={activeTab === 'upcoming'} onPress={() => setActiveTab('upcoming')} />
             </View>
           </View>
 
@@ -913,9 +915,9 @@ export default function EventDetailsPage({
           {activeTab === 'about' && (
             <>
               <View className="px-5 mt-4">
-                <Text className="text-base font-semibold text-black">About This Event</Text>
+                <Text className="text-base font-semibold text-black">{t('eventDetails.aboutTitle')}</Text>
                 <Text className="text-gray700 mt-2">
-                  {detailsEvent.description || 'No description available.'}
+                  {detailsEvent.description || t('eventDetails.noDescription')}
                 </Text>
               </View>
 
@@ -950,7 +952,7 @@ export default function EventDetailsPage({
                   >
                     <Feather name="navigation" size={18} color="#0EA5E9" />
                     <Text style={{ fontSize: 15, fontWeight: '600', color: '#0B1220' }}>
-                      Get Directions
+                      {t('eventDetails.getDirections')}
                     </Text>
                     <Text style={{ fontSize: 13, color: '#6B7280' }}>
                       {detailsEvent.venue}{detailsEvent.city ? `, ${detailsEvent.city}` : ''}
@@ -960,7 +962,7 @@ export default function EventDetailsPage({
               ) : null}
 
               <View className="px-5 mt-6">
-                <Text className="text-base font-semibold text-black">Attendees ({dbAttendeesTotal})</Text>
+                <Text className="text-base font-semibold text-black">{t('eventDetails.attendees', { count: dbAttendeesTotal })}</Text>
                 <View className="mt-2 flex-row items-center flex-wrap gap-2">
                   {dbAttendees.slice(0, 8).map((u) => (
                     <View
@@ -1001,10 +1003,10 @@ export default function EventDetailsPage({
                     </View>
                   ))}
                   {dbAttendeesTotal > 8 && (
-                    <Text className="text-gray600 ml-1">+{dbAttendeesTotal - 8} others</Text>
+                    <Text className="text-gray600 ml-1">{t('eventDetails.othersSuffix', { count: dbAttendeesTotal - 8 })}</Text>
                   )}
                   {dbAttendeesTotal === 0 && (
-                    <Text className="text-gray500">No attendees yet</Text>
+                    <Text className="text-gray500">{t('eventDetails.noAttendees')}</Text>
                   )}
                 </View>
               </View>
@@ -1014,24 +1016,24 @@ export default function EventDetailsPage({
                 <View className="flex-row items-center gap-x-2">
                   <Feather name="shield" size={16} color="#6B7280" />
                   <Text className="text-base font-semibold text-black">
-                    Cancellation & Refund Policy
+                    {t('eventDetails.policiesTitle')}
                   </Text>
                 </View>
                 <View className="mt-2 gap-y-2">
                   {orgSummary?.cancellationPolicy ? (
                     <>
-                      <Text className="text-sm font-medium text-gray800 mt-1">Cancellation Policy</Text>
+                      <Text className="text-sm font-medium text-gray800 mt-1">{t('eventDetails.cancellationPolicy')}</Text>
                       <Text className="text-gray700">{orgSummary.cancellationPolicy}</Text>
                     </>
                   ) : null}
                   {orgSummary?.refundPolicy ? (
                     <>
-                      <Text className="text-sm font-medium text-gray800 mt-2">Refund Policy</Text>
+                      <Text className="text-sm font-medium text-gray800 mt-2">{t('eventDetails.refundPolicy')}</Text>
                       <Text className="text-gray700">{orgSummary.refundPolicy}</Text>
                     </>
                   ) : null}
                   {!orgSummary?.cancellationPolicy && !orgSummary?.refundPolicy ? (
-                    <Text className="text-gray500">Contact the organizer for policy details.</Text>
+                    <Text className="text-gray500">{t('eventDetails.noPolicies')}</Text>
                   ) : null}
                 </View>
               </View>
@@ -1039,7 +1041,7 @@ export default function EventDetailsPage({
               {/* More from organizer */}
               {orgEvents.length > 0 && (
                 <>
-                  <SectionHeader title={`More from ${detailsEvent.organizer}`} />
+                  <SectionHeader title={t('eventDetails.moreFromOrganizer', { name: detailsEvent.organizer })} />
                   <View className="px-5 mt-2 gap-y-3">
                     {orgEvents.map((ev) => (
                       <Pressable
@@ -1088,7 +1090,7 @@ export default function EventDetailsPage({
               {/* Similar events */}
               {similarEvents.length > 0 && (
                 <View className="px-5 mt-4">
-                  <Text className="text-base font-semibold text-black">Similar Events You Might Like</Text>
+                  <Text className="text-base font-semibold text-black">{t('eventDetails.similarTitle')}</Text>
                   <View className="mt-3 gap-y-3">
                     {similarEvents.map((s) => (
                       <Pressable
@@ -1133,7 +1135,7 @@ export default function EventDetailsPage({
               )}
               {similarEvents.length === 0 && orgEvents.length === 0 && (
                 <View className="px-5 mt-4">
-                  <Text className="text-gray500">No similar events found.</Text>
+                  <Text className="text-gray500">{t('eventDetails.noSimilar')}</Text>
                 </View>
               )}
             </>
@@ -1145,11 +1147,11 @@ export default function EventDetailsPage({
               {offersLoading ? (
                 <View className="items-center py-8">
                   <ActivityIndicator size="small" color="#6B7280" />
-                  <Text className="text-gray500 mt-2">Loading ticket types…</Text>
+                  <Text className="text-gray500 mt-2">{t('eventDetails.loadingTicketTypes')}</Text>
                 </View>
               ) : offersTicketTypes.length === 0 ? (
                 <View className="items-center py-8">
-                  <Text className="text-gray500">No ticket types available for this event.</Text>
+                  <Text className="text-gray500">{t('eventDetails.noTicketTypes')}</Text>
                 </View>
               ) : (
                 offersTicketTypes.map((tt) => (
@@ -1168,7 +1170,7 @@ export default function EventDetailsPage({
                           </View>
                         )}
                         {tt.inventory != null && (
-                          <Text className="text-xs text-gray500 mt-2">{tt.inventory} remaining</Text>
+                          <Text className="text-xs text-gray500 mt-2">{t('eventDetails.remaining', { count: tt.inventory })}</Text>
                         )}
                       </View>
                       <View className="items-end">
@@ -1191,7 +1193,7 @@ export default function EventDetailsPage({
           {activeTab === 'upcoming' && (
             <View className="px-5 mt-5">
               <Text className="text-base font-semibold text-black">
-                Upcoming Events
+                {t('eventDetails.upcomingEvents')}
               </Text>
 
               {/* View mode toggle */}
@@ -1207,7 +1209,7 @@ export default function EventDetailsPage({
                   )}
                 >
                   <Feather name="list" size={14} color={upcomingViewMode === 'list' ? '#FFFFFF' : '#6B7280'} />
-                  <Text className={upcomingViewMode === 'list' ? 'text-white text-sm' : 'text-gray700 text-sm'}>List</Text>
+                  <Text className={upcomingViewMode === 'list' ? 'text-white text-sm' : 'text-gray700 text-sm'}>{t('eventDetails.list')}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => setUpcomingViewMode('calendar')}
@@ -1217,7 +1219,7 @@ export default function EventDetailsPage({
                   )}
                 >
                   <Feather name="calendar" size={14} color={upcomingViewMode === 'calendar' ? '#FFFFFF' : '#6B7280'} />
-                  <Text className={upcomingViewMode === 'calendar' ? 'text-white text-sm' : 'text-gray700 text-sm'}>Calendar</Text>
+                  <Text className={upcomingViewMode === 'calendar' ? 'text-white text-sm' : 'text-gray700 text-sm'}>{t('eventDetails.calendar')}</Text>
                 </Pressable>
               </View>
 
@@ -1275,7 +1277,7 @@ export default function EventDetailsPage({
               <View className="mt-3 gap-y-3">
                 {(upcomingViewMode === 'calendar' ? filteredUpcomingEvents : upcomingEvents).length === 0 ? (
                   <Text className="text-gray500 py-4">
-                    {selectedCalendarDate ? 'No events on this date.' : 'No upcoming events found.'}
+                    {selectedCalendarDate ? t('eventDetails.noEventsOnDate') : t('eventDetails.noUpcoming')}
                   </Text>
                 ) : (
                   (upcomingViewMode === 'calendar' ? filteredUpcomingEvents : upcomingEvents).map((u) => (
@@ -1296,7 +1298,7 @@ export default function EventDetailsPage({
                       {u.priceLabel ? (
                         <Badge label={u.priceLabel} variant="solid" tone="brand" size="sm" className="rounded-full" />
                       ) : (
-                        <Badge label="Remind me" variant="soft" tone="gray" size="sm" className="rounded-full" />
+                        <Badge label={t('eventDetails.remindMe')} variant="soft" tone="gray" size="sm" className="rounded-full" />
                       )}
                     </Card>
                   ))
@@ -1323,7 +1325,7 @@ export default function EventDetailsPage({
             }}
           >
             <Text className="text-white text-base font-semibold">
-              {proceeding ? 'Preparing checkout…' : 'Book Now'}
+              {proceeding ? t('eventDetails.preparingCheckout') : t('eventDetails.bookNow')}
             </Text>
           </Pressable>
         </View>
@@ -1340,7 +1342,7 @@ export default function EventDetailsPage({
         {sheetOpen && ticketTypesError ? (
           <View className="absolute left-5 right-5" style={{ bottom: (insets.bottom || 0) + 150 }}>
             <Card variant="outlined" padding="md">
-              <Text className="text-sm text-red-600">Ticket types error: {ticketTypesError}</Text>
+              <Text className="text-sm text-red-600">{t('eventDetails.ticketTypesError', { error: ticketTypesError })}</Text>
             </Card>
           </View>
         ) : null}
@@ -1348,15 +1350,15 @@ export default function EventDetailsPage({
         {sheetOpen && ticketTypesLoading ? (
           <View className="absolute left-5 right-5" style={{ bottom: (insets.bottom || 0) + 150 }}>
             <Card variant="outlined" padding="md">
-              <Text className="text-sm text-gray700">Loading ticket types…</Text>
+              <Text className="text-sm text-gray700">{t('eventDetails.loadingTicketTypes')}</Text>
             </Card>
           </View>
         ) : null}
       </View>
       <ReviewModal
         visible={reviewOpen}
-        title="Rate Your Experience"
-        subtitle={`How was your experience at ${detailsEvent.title}?`}
+        title={t('eventDetails.rateExperience')}
+        subtitle={t('eventDetails.rateSubtitle', { title: detailsEvent.title })}
         onClose={() => setReviewOpen(false)}
         submitting={reviewSubmitting}
         accentColor="#6B7280"
@@ -1374,10 +1376,10 @@ export default function EventDetailsPage({
 
             setHasReviewed(true);
             setReviewOpen(false);
-            Alert.alert('Thanks!', 'Your review has been submitted.');
+            Alert.alert(t('eventDetails.thanksTitle'), t('eventDetails.thanksMessage'));
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            Alert.alert('Could not submit review', msg);
+            Alert.alert(t('eventDetails.couldNotSubmitReview'), msg);
           } finally {
             setReviewSubmitting(false);
           }
@@ -1396,7 +1398,7 @@ export default function EventDetailsPage({
         onTakePhoto={async () => {
           const permission = await ImagePicker.requestCameraPermissionsAsync();
           if (!permission.granted) {
-            Alert.alert('Permission required', 'Please allow access to your camera.');
+            Alert.alert(t('eventDetails.cameraPermissionTitle'), t('eventDetails.cameraPermissionMessage'));
             return null;
           }
 
@@ -1415,7 +1417,7 @@ export default function EventDetailsPage({
         onPickPhoto={async () => {
           const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (!permission.granted) {
-            Alert.alert('Permission required', 'Please allow access to your photo library.');
+            Alert.alert(t('eventDetails.cameraPermissionTitle'), t('eventDetails.libraryPermissionMessage'));
             return null;
           }
 
@@ -1446,10 +1448,10 @@ export default function EventDetailsPage({
 
             setHasStory(true);
             setStoryOpen(false);
-            Alert.alert('Story shared!', 'Your story is now visible to event attendees.');
+            Alert.alert(t('eventDetails.storySharedTitle'), t('eventDetails.storySharedMessage'));
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            Alert.alert('Could not share story', msg);
+            Alert.alert(t('eventDetails.couldNotShareStory'), msg);
           } finally {
             setStorySubmitting(false);
           }

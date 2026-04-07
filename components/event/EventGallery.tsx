@@ -1,6 +1,7 @@
 import React, { type ReactElement } from 'react';
 import { ScrollView, View, Text, Pressable, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import SectionHeader from './SectionHeader';
 
 export type EventGalleryProps = Readonly<{
@@ -16,11 +17,12 @@ export default function EventGallery({
   onOpenAll,
   onOpenIndex,
 }: EventGalleryProps): ReactElement {
+  const { t } = useTranslation();
   const thumbs = images.slice(0, 10);
 
   return (
     <>
-      <SectionHeader title="Event Gallery" action="See all" onPressAction={onOpenAll} />
+      <SectionHeader title={t('event.gallery.title')} action={t('event.gallery.seeAll')} onPressAction={onOpenAll} />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -32,7 +34,7 @@ export default function EventGallery({
             onPress={() => onOpenIndex(i)}
             className="items-center active:opacity-90"
             accessibilityRole="imagebutton"
-            accessibilityLabel={`Open photo ${i + 1}${eventTitle ? ` from ${eventTitle}` : ''}`}
+            accessibilityLabel={t('event.gallery.openPhotoA11y', { index: i + 1, from: eventTitle ? t('event.gallery.fromTitle', { title: eventTitle }) : '' })}
           >
             <Image
               source={{ uri }}

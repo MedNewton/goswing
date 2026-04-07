@@ -1,6 +1,7 @@
 import React, { useState, type ReactElement } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AboutSection from '@/components/event/AboutSection';
 import AttendeesSection from '@/components/event/AttendeesSection';
 import CancellationPolicy from '@/components/event/CancellationPolicy';
@@ -12,15 +13,16 @@ import { Event } from '@/types/domain';
 type TabKey = 'about' | 'offers' | 'upcoming';
 
 export default function SectionTabs({ event }: { event: Event }): ReactElement {
+  const { t } = useTranslation();
   const [active, setActive] = useState<TabKey>('about');
 
   return (
     <View className="px-5 mt-5">
       <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
-        <TabPill label="About" selected={active === 'about'} onPress={() => setActive('about')} />
-        <TabPill label="Offers" selected={active === 'offers'} onPress={() => setActive('offers')} />
+        <TabPill label={t('event.tabs.about')} selected={active === 'about'} onPress={() => setActive('about')} />
+        <TabPill label={t('event.tabs.offers')} selected={active === 'offers'} onPress={() => setActive('offers')} />
         <TabPill
-          label="Upcoming"
+          label={t('event.tabs.upcoming')}
           selected={active === 'upcoming'}
           onPress={() => setActive('upcoming')}
         />
@@ -88,31 +90,32 @@ type Offer = Readonly<{
 }>;
 
 function OffersPanel(): ReactElement {
+  const { t } = useTranslation();
   const offers: ReadonlyArray<Offer> = [
     {
       id: 'o1',
-      title: 'General Admission',
-      subtitle: 'Standard entry to the club',
+      title: t('event.offers.generalAdmission'),
+      subtitle: t('event.offers.generalAdmissionSubtitle'),
       price: '$25',
       originalPrice: '$35',
-      leftLabel: '80 left',
+      leftLabel: t('event.offers.leftCount', { count: 80 }),
     },
     {
       id: 'o2',
-      title: 'VIP Table',
-      subtitle: 'VIP table with bottle service',
+      title: t('event.offers.vipTable'),
+      subtitle: t('event.offers.vipTableSubtitle'),
       price: '$120',
       originalPrice: null,
-      leftLabel: '8 left',
+      leftLabel: t('event.offers.leftCount', { count: 8 }),
     },
   ];
 
   return (
     <View className="px-2">
       <View className="flex-row items-center justify-between">
-        <Text className="text-xl font-semibold text-black">Available Offers</Text>
+        <Text className="text-xl font-semibold text-black">{t('event.offers.available')}</Text>
         <Pressable className="rounded-2xl bg-white border border-gray300 px-4 py-2">
-          <Text className="text-gray800">See all offers</Text>
+          <Text className="text-gray800">{t('event.offers.seeAll')}</Text>
         </Pressable>
       </View>
 
@@ -126,6 +129,7 @@ function OffersPanel(): ReactElement {
 }
 
 function OfferCard({ offer }: { offer: Offer }): ReactElement {
+  const { t } = useTranslation();
   const [qty, setQty] = useState<number>(0);
 
   return (
@@ -137,12 +141,12 @@ function OfferCard({ offer }: { offer: Offer }): ReactElement {
 
           <View className="mt-3 gap-y-1">
             {offer.id === 'o1'
-              ? ['Club entry', 'Coat check included'].map((b) => (
+              ? [t('event.offers.bullet.clubEntry'), t('event.offers.bullet.coatCheck')].map((b) => (
                 <Text key={b} className="text-gray700">
                   • {b}
                 </Text>
               ))
-              : ['Reserved table', 'Priority entry', 'Dedicated server'].map((b) => (
+              : [t('event.offers.bullet.reservedTable'), t('event.offers.bullet.priorityEntry'), t('event.offers.bullet.dedicatedServer')].map((b) => (
                 <Text key={b} className="text-gray700">
                   • {b}
                 </Text>
@@ -198,10 +202,11 @@ function StepperButton({
 }
 
 function UpcomingPanel(): ReactElement {
+  const { t } = useTranslation();
   return (
     <View className="px-2">
       <Text className="text-xl font-semibold text-black">
-        Upcoming Events from Nightlife Events Paris
+        {t('event.upcoming.heading', { organizer: 'Nightlife Events Paris' })}
       </Text>
 
       <Card variant="outlined" padding="lg" className="rounded-3xl border-gray200 mt-3">
@@ -219,11 +224,11 @@ function UpcomingPanel(): ReactElement {
 
         <View className="mt-4 flex-row items-center gap-x-2">
           <View className="h-3 w-3 rounded-full bg-black" />
-          <Text className="text-gray600">Tap to view full calendar</Text>
+          <Text className="text-gray600">{t('event.upcoming.tapToView')}</Text>
         </View>
       </Card>
 
-      <Text className="text-xl font-semibold text-black mt-6">Next Events</Text>
+      <Text className="text-xl font-semibold text-black mt-6">{t('event.upcoming.nextEvents')}</Text>
       <View className="mt-3 gap-y-4">
         <NextEventCard
           title="Jazz Night Under Stars"

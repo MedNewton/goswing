@@ -1,6 +1,7 @@
 import React, { useState, type ReactElement } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import ReviewModal, { type ReviewPayload } from '@/components/event/ReviewModal';
 import CaptureStoryModal from '@/components/event/CaptureStoryModal';
 import SuggestSongsModal, { type SongSuggestion } from '@/components/event/SuggestSongsModal';
@@ -61,14 +62,15 @@ export default function ActionChips({
   onSuggestSong,
   className,
 }: Props): ReactElement {
+  const { t } = useTranslation();
   const [reviewOpen, setReviewOpen] = useState<boolean>(false);
   const [storyOpen, setStoryOpen] = useState<boolean>(false);
   const [songsOpen, setSongsOpen] = useState<boolean>(false);
 
   const subtitle =
     eventTitle && eventTitle.trim().length > 0
-      ? `How was your experience at ${eventTitle}?`
-      : 'How was your experience?';
+      ? t('event.review.experienceAt', { title: eventTitle })
+      : t('event.review.experienceGeneric');
 
   const handleSubmitReview = (payload: ReviewPayload): void => {
     onSubmitReview?.(payload);
@@ -80,7 +82,7 @@ export default function ActionChips({
         <Chip
           bgClass="bg-black"
           icon="music"
-          label="Suggest Songs"
+          label={t('event.actions.suggestSongs')}
           onPress={() => {
             onSuggestSongsTap?.();
             setSongsOpen(true);
@@ -89,7 +91,7 @@ export default function ActionChips({
         <Chip
           bgClass="bg-indigo-600"
           icon="camera"
-          label="Take Story"
+          label={t('event.actions.takeStory')}
           onPress={() => {
             onTakeStoryTap?.();
             setStoryOpen(true);
@@ -98,7 +100,7 @@ export default function ActionChips({
         <Chip
           bgClass="bg-amber-400"
           icon="star"
-          label="Give Review"
+          label={t('event.actions.giveReview')}
           darkText
           darkIcon
           onPress={() => setReviewOpen(true)}
@@ -107,7 +109,7 @@ export default function ActionChips({
 
       <ReviewModal
         visible={reviewOpen}
-        title="Rate Your Experience"
+        title={t('event.review.title')}
         subtitle={subtitle}
         onClose={() => setReviewOpen(false)}
         onSubmit={handleSubmitReview}

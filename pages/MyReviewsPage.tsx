@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { getMyReviews, deleteReview, type UserReview, type UserReviewsResult } from '@/lib/supabase/reviews';
 
@@ -48,6 +49,7 @@ function ReviewCard({
   onEdit: () => void;
   onDelete: () => void;
 }): ReactElement {
+  const { t } = useTranslation();
   return (
     <View className="rounded-2xl border border-gray200 bg-white p-4 mb-4">
       {/* Header */}
@@ -68,7 +70,7 @@ function ReviewCard({
               {review.eventTitle}
             </Text>
             <Text className="text-xs text-gray500 mt-0.5">
-              by {review.organizerName}
+              {t('myReviews.byOrganizer', { name: review.organizerName })}
             </Text>
             <View className="flex-row items-center mt-1">
               <Feather name="calendar" size={12} color="#9CA3AF" />
@@ -91,7 +93,7 @@ function ReviewCard({
       {/* Rating */}
       <View className="flex-row items-center mt-3">
         <StarRating rating={review.rating} />
-        <Text className="text-sm text-gray600 ml-2">{review.rating}/5 stars</Text>
+        <Text className="text-sm text-gray600 ml-2">{t('myReviews.starsOf5', { rating: review.rating })}</Text>
       </View>
 
       {/* Comment */}
@@ -117,15 +119,17 @@ function ReviewCard({
       {/* Footer */}
       <View className="flex-row items-center justify-between mt-4 pt-3 border-t border-gray100">
         <Text className="text-xs text-gray500">
-          Reviewed on {new Date(review.createdAt).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
+          {t('myReviews.reviewedOn', {
+            date: new Date(review.createdAt).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            }),
           })}
         </Text>
         {review.helpfulCount > 0 && (
           <Text className="text-xs text-gray500">
-            {review.helpfulCount} {review.helpfulCount === 1 ? 'person' : 'people'} found this helpful
+            {t('myReviews.helpful', { count: review.helpfulCount })}
           </Text>
         )}
       </View>
@@ -134,6 +138,7 @@ function ReviewCard({
 }
 
 export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   const [tab, setTab] = useState<TabKey>('published');
@@ -149,7 +154,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
       const data = await getMyReviews();
       setReviewsData(data);
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load reviews');
+      setError(err?.message ?? t('myReviews.errLoad'));
     } finally {
       setIsLoading(false);
     }
@@ -161,17 +166,17 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
 
   const handleEdit = (review: UserReview) => {
     // TODO: Navigate to edit review screen or open modal
-    Alert.alert('Edit Review', 'Edit functionality coming soon!');
+    Alert.alert(t('myReviews.editTitle'), t('myReviews.editComingSoon'));
   };
 
   const handleDelete = (review: UserReview) => {
     Alert.alert(
-      'Delete Review',
-      `Are you sure you want to delete your review for "${review.eventTitle}"?`,
+      t('myReviews.deleteTitle'),
+      t('myReviews.deleteConfirm', { title: review.eventTitle }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('myReviews.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -179,7 +184,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
               await deleteReview(review.id);
               await fetchReviews();
             } catch (err: any) {
-              Alert.alert('Error', err?.message ?? 'Could not delete review.');
+              Alert.alert(t('common.error'), err?.message ?? t('myReviews.errCouldNotDelete'));
             } finally {
               setDeletingId(null);
             }
@@ -197,7 +202,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
     return (
       <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">Loading reviews…</Text>
+        <Text className="text-gray600 mt-3">{t('myReviews.loading')}</Text>
       </SafeAreaView>
     );
   }
@@ -210,9 +215,9 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
           <Feather name="arrow-left" size={24} color="#111827" />
         </Pressable>
         <View>
-          <Text className="text-lg font-semibold text-black">My Reviews</Text>
+          <Text className="text-lg font-semibold text-black">{t('myReviews.title')}</Text>
           <Text className="text-xs text-gray500">
-            {reviewsData?.totalCount ?? 0} {(reviewsData?.totalCount ?? 0) === 1 ? 'review' : 'reviews'} published
+            {t('myReviews.countSuffix', { count: reviewsData?.totalCount ?? 0 })}
           </Text>
         </View>
       </View>
@@ -225,11 +230,11 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
         <View className="mx-5 mt-5 flex-row gap-x-3">
           <View className="flex-1 rounded-2xl border border-gray200 bg-white py-4 items-center">
             <Text className="text-2xl font-bold text-black">{reviewsData?.totalCount ?? 0}</Text>
-            <Text className="text-xs text-gray500 mt-1">Published Reviews</Text>
+            <Text className="text-xs text-gray500 mt-1">{t('myReviews.publishedReviews')}</Text>
           </View>
           <View className="flex-1 rounded-2xl border border-gray200 bg-white py-4 items-center">
             <Text className="text-2xl font-bold text-black">{reviewsData?.averageRating ?? 0}</Text>
-            <Text className="text-xs text-gray500 mt-1">Average Rating</Text>
+            <Text className="text-xs text-gray500 mt-1">{t('myReviews.averageRating')}</Text>
           </View>
         </View>
 
@@ -246,7 +251,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
               'text-sm font-medium',
               tab === 'published' ? 'text-black' : 'text-gray500'
             )}>
-              Published ({reviewsData?.published.length ?? 0})
+              {t('myReviews.publishedTab', { count: reviewsData?.published.length ?? 0 })}
             </Text>
           </Pressable>
           <Pressable
@@ -260,7 +265,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
               'text-sm font-medium',
               tab === 'drafts' ? 'text-black' : 'text-gray500'
             )}>
-              Drafts ({reviewsData?.drafts.length ?? 0})
+              {t('myReviews.draftsTab', { count: reviewsData?.drafts.length ?? 0 })}
             </Text>
           </Pressable>
         </View>
@@ -273,7 +278,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
               className="mt-3 bg-red-500 rounded-xl py-2 items-center"
               onPress={fetchReviews}
             >
-              <Text className="text-white font-medium">Retry</Text>
+              <Text className="text-white font-medium">{t('myReviews.retry')}</Text>
             </Pressable>
           </View>
         )}
@@ -285,12 +290,12 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
               <View className="rounded-2xl border border-gray200 bg-white p-6 items-center">
                 <Feather name="star" size={40} color="#9CA3AF" />
                 <Text className="text-gray700 font-medium mt-3">
-                  {tab === 'published' ? 'No published reviews yet' : 'No drafts'}
+                  {tab === 'published' ? t('myReviews.noPublished') : t('myReviews.noDrafts')}
                 </Text>
                 <Text className="text-gray500 text-sm mt-1 text-center">
                   {tab === 'published'
-                    ? 'Your reviews will appear here after attending events'
-                    : 'Started reviews that you haven\'t finished will appear here'}
+                    ? t('myReviews.noPublishedSubtitle')
+                    : t('myReviews.noDraftsSubtitle')}
                 </Text>
               </View>
             ) : (
@@ -309,13 +314,13 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
 
         {/* Guidelines */}
         <View className="mx-5 mt-5 mb-10 rounded-2xl bg-amber-50 border border-amber-200 p-4">
-          <Text className="text-base font-semibold text-amber-800 mb-3">Review Guidelines</Text>
+          <Text className="text-base font-semibold text-amber-800 mb-3">{t('myReviews.guidelines')}</Text>
           <View className="gap-y-2">
             {[
-              'Be honest and helpful in your reviews',
-              'Focus on your experience with the event',
-              'Avoid personal attacks or inappropriate content',
-              'Include photos to help other attendees',
+              t('myReviews.guideline1'),
+              t('myReviews.guideline2'),
+              t('myReviews.guideline3'),
+              t('myReviews.guideline4'),
             ].map((guideline, idx) => (
               <View key={idx} className="flex-row items-start">
                 <Text className="text-amber-700 mr-2">•</Text>

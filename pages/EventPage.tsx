@@ -1,6 +1,7 @@
 import React, { useMemo, useState, type ReactElement } from 'react';
 import { ScrollView, View, Text } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import HeroHeader from '@/components/event/HeroHeader';
 import InfoNoteCard from '@/components/event/InfoNoteCard';
 import TitleMeta from '@/components/event/TitleMeta';
@@ -30,6 +31,7 @@ function formatDateTime(iso?: string | null): { date: string; time: string } | n
 }
 
 export default function EventPage({ eventId, onBack, onBook }: EventPageProps): ReactElement {
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const event = useMemo(() => getEvents().find((e) => e.id === eventId) ?? null, [eventId]);
 
@@ -62,7 +64,7 @@ export default function EventPage({ eventId, onBack, onBook }: EventPageProps): 
     if (!event) {
         return (
             <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
-                <Text className="text-gray700">Event not found.</Text>
+                <Text className="text-gray700">{t('event.notFound')}</Text>
             </SafeAreaView>
         );
     }
@@ -127,7 +129,7 @@ export default function EventPage({ eventId, onBack, onBook }: EventPageProps): 
                 <BookTicketsSheet
                     visible={sheetOpen}
                     onClose={() => setSheetOpen(false)}
-                    title="Free Entry"
+                    title={t('event.book.freeEntry')}
                     price={0}
                     onProceed={({ qty }) => {
                         console.log('Proceed with qty:', qty);

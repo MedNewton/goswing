@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export type CaptureStoryModalProps = Readonly<
   {
@@ -80,15 +81,16 @@ export default function CaptureStoryModal({
   accentColor = '#6B7280',
   ...rest
 }: CaptureStoryModalProps): ReactElement {
+  const { t } = useTranslation();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [caption, setCaption] = useState<string>('');
 
   const subtitle = useMemo(
     () =>
       eventTitle && eventTitle.trim().length > 0
-        ? `Share your experience at ${eventTitle}`
-        : 'Share your experience from the event',
-    [eventTitle]
+        ? t('event.story.shareAt', { title: eventTitle })
+        : t('event.story.shareGeneric'),
+    [eventTitle, t]
   );
 
   const canShare = useMemo(() => typeof photoUri === 'string' && photoUri.length > 0, [photoUri]);
@@ -128,9 +130,9 @@ export default function CaptureStoryModal({
           <View className="flex-row items-start justify-between">
             <View className="flex-row items-center gap-x-2">
               <Feather name="camera" size={20} color="#111827" />
-              <Text className="text-2xl font-semibold text-black">Capture Story</Text>
+              <Text className="text-2xl font-semibold text-black">{t('event.story.title')}</Text>
             </View>
-            <Pressable onPress={onClose} accessibilityLabel="Close" hitSlop={12}>
+            <Pressable onPress={onClose} accessibilityLabel={t('event.story.closeA11y')} hitSlop={12}>
               <Feather name="x" size={20} color="#6B7280" />
             </Pressable>
           </View>
@@ -139,7 +141,7 @@ export default function CaptureStoryModal({
 
           {eventTitle ? (
             <View className="self-center mt-3 rounded-2xl bg-gray100 px-3 py-1.5 border border-gray200">
-              <Text className="text-gray700">Live at {eventTitle}</Text>
+              <Text className="text-gray700">{t('event.story.liveAt', { title: eventTitle })}</Text>
             </View>
           ) : null}
         </View>
@@ -156,14 +158,14 @@ export default function CaptureStoryModal({
                   className="mt-3 flex-row items-center gap-x-1"
                 >
                   <Feather name="refresh-cw" size={14} color="#6B7280" />
-                  <Text className="text-gray600">Change photo</Text>
+                  <Text className="text-gray600">{t('event.story.changePhoto')}</Text>
                 </Pressable>
               </View>
             ) : (
               <>
                 <Feather name="camera" size={40} color="#6B7280" />
                 <Text className="mt-3 text-gray600 text-center">
-                  Capture a moment from the event
+                  {t('event.story.captureMoment')}
                 </Text>
                 <View className="mt-5 flex-row items-center gap-x-3">
                   <Pressable
@@ -171,14 +173,14 @@ export default function CaptureStoryModal({
                     className="flex-row items-center gap-x-2 rounded-2xl bg-indigo-600 px-4 py-2.5 active:opacity-90"
                   >
                     <Feather name="camera" size={16} color="#FFFFFF" />
-                    <Text className="text-white font-medium">Take Photo</Text>
+                    <Text className="text-white font-medium">{t('event.story.takePhoto')}</Text>
                   </Pressable>
                   <Pressable
                     onPress={handlePick}
                     className="flex-row items-center gap-x-2 rounded-2xl border border-gray300 bg-white px-4 py-2.5 active:opacity-90"
                   >
                     <Feather name="image" size={16} color="#6B7280" />
-                    <Text className="text-gray800 font-medium">Library</Text>
+                    <Text className="text-gray800 font-medium">{t('event.story.library')}</Text>
                   </Pressable>
                 </View>
               </>
@@ -186,7 +188,7 @@ export default function CaptureStoryModal({
           </View>
 
           <TextInput
-            placeholder="Add a caption (optional)…"
+            placeholder={t('event.story.captionPlaceholder')}
             placeholderTextColor="#9CA3AF"
             value={caption}
             onChangeText={setCaption}
@@ -198,11 +200,11 @@ export default function CaptureStoryModal({
         <View className="px-5 py-5">
           <View className="flex-row items-center gap-x-3">
             <View className="flex-1">
-              <GhostButton label="Cancel" onPress={onClose} />
+              <GhostButton label={t('common.cancel')} onPress={onClose} />
             </View>
             <View className="flex-1">
               <SolidButton
-                label="Share Story"
+                label={t('event.story.share')}
                 icon="image"
                 onPress={() => {
                   if (canShare && photoUri) {
@@ -221,7 +223,7 @@ export default function CaptureStoryModal({
 
         <View className="px-5 pb-5">
           <Text className="text-center text-gray500">
-            Your story will be visible to event attendees for 24 hours
+            {t('event.story.visibilityNote')}
           </Text>
         </View>
       </View>

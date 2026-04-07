@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { Video, ResizeMode } from "expo-av";
 import { Feather } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import type { EventStoryWithUser } from "@/lib/supabase/stories";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -109,6 +110,7 @@ export default function StoriesHeroSlider({
   height,
   onSlideChange,
 }: StoriesHeroSliderProps): ReactElement {
+  const { t } = useTranslation();
   const slides = useMemo(
     () => buildSlides(heroImageUrl, stories),
     [heroImageUrl, stories]
@@ -322,7 +324,7 @@ export default function StoriesHeroSlider({
 
           <View className="ml-2 flex-1">
             <Text className="text-white font-semibold text-sm" numberOfLines={1}>
-              {currentSlide.userName || "Anonymous"}
+              {currentSlide.userName || t("event.stories.anonymous")}
             </Text>
             {currentSlide.createdAt && (
               <Text className="text-white/60 text-xs">

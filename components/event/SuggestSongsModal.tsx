@@ -16,6 +16,7 @@ import {
   type ViewProps,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 
 import {
   createDeezerSongSuggestion,
@@ -139,6 +140,7 @@ export default function SuggestSongsModal({
   onClose,
   ...rest
 }: SuggestSongsModalProps): ReactElement {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<"search" | "mine">("search");
 
   const [query, setQuery] = useState<string>("");
@@ -238,7 +240,7 @@ export default function SuggestSongsModal({
       await refreshMine();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert("Could not suggest song", msg);
+      Alert.alert(t("event.songs.couldNotSuggest"), msg);
     } finally {
       setSuggestingTrackIds((cur) => {
         const next = new Set(cur);
@@ -252,10 +254,10 @@ export default function SuggestSongsModal({
     const sid = String(s.id);
     if (!sid) return;
 
-    Alert.alert("Remove suggestion?", `"${s.trackTitle}" by ${s.artistName}`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("event.songs.removePromptTitle"), `"${s.trackTitle}" — ${s.artistName}`, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Remove",
+        text: t("event.songs.remove"),
         style: "destructive",
         onPress: async () => {
           setDeletingIds((cur) => new Set(cur).add(sid));
@@ -264,7 +266,7 @@ export default function SuggestSongsModal({
             await refreshMine();
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            Alert.alert("Could not remove suggestion", msg);
+            Alert.alert(t("event.songs.couldNotRemove"), msg);
           } finally {
             setDeletingIds((cur) => {
               const next = new Set(cur);
@@ -286,7 +288,7 @@ export default function SuggestSongsModal({
           onClose();
         }}
         className="flex-1 bg-black/40"
-        accessibilityHint="Close suggest songs dialog"
+        accessibilityHint={t("event.songs.closeHint")}
       />
 
       <View
@@ -302,7 +304,7 @@ export default function SuggestSongsModal({
               <View className="flex-row items-start justify-between">
                 <View className="flex-row items-center gap-x-2">
                   <Feather name="music" size={20} color="#111827" />
-                  <Text className="text-2xl font-semibold text-black">Suggest Songs</Text>
+                  <Text className="text-2xl font-semibold text-black">{t("event.songs.title")}</Text>
                 </View>
 
                 <Pressable
@@ -310,7 +312,7 @@ export default function SuggestSongsModal({
                     Keyboard.dismiss();
                     onClose();
                   }}
-                  accessibilityLabel="Close"
+                  accessibilityLabel={t("event.songs.closeA11y")}
                   hitSlop={12}
                 >
                   <Feather name="x" size={20} color="#6B7280" />
@@ -318,7 +320,7 @@ export default function SuggestSongsModal({
               </View>
 
               <Text className="mt-2 text-gray600">
-                Suggest songs you&apos;d like to hear at{" "}
+                {t("event.songs.description")}{" "}
                 <Text className="font-medium text-gray800">{eventTitle}</Text>
               </Text>
             </View>
@@ -326,9 +328,9 @@ export default function SuggestSongsModal({
             {/* Tabs */}
             <View className="px-3">
               <View className="flex-row items-end justify-center">
-                <Tab label="Search Songs" selected={tab === "search"} onPress={() => setTab("search")} />
+                <Tab label={t("event.songs.tabSearch")} selected={tab === "search"} onPress={() => setTab("search")} />
                 <Tab
-                  label="My Suggestions"
+                  label={t("event.songs.tabMine")}
                   selected={tab === "mine"}
                   onPress={() => {
                     Keyboard.dismiss();
@@ -357,7 +359,7 @@ export default function SuggestSongsModal({
                       <TextInput
                         value={query}
                         onChangeText={setQuery}
-                        placeholder="Search for songs or artists"
+                        placeholder={t("event.songs.searchPlaceholder")}
                         placeholderTextColor="#9CA3AF"
                         className="ml-3 flex-1 text-gray900"
                         returnKeyType="search"
@@ -365,7 +367,7 @@ export default function SuggestSongsModal({
                       />
                     </View>
 
-                    <PillButton label={searching ? "…" : "Search"} onPress={onRunSearch} disabled={!canSearch} tone="dark" />
+                    <PillButton label={searching ? "…" : t("event.songs.search")} onPress={onRunSearch} disabled={!canSearch} tone="dark" />
                   </View>
 
                   {searchError ? <Text className="mt-3 text-sm text-red-600">{searchError}</Text> : null}
@@ -375,16 +377,16 @@ export default function SuggestSongsModal({
                     <View className="mt-10 items-center justify-center">
                       <Feather name="search" size={56} color="#9CA3AF" />
                       <Text className="mt-4 text-gray600 text-base">
-                        {searching ? "Searching…" : "Search for songs to suggest"}
+                        {searching ? t("event.songs.searching") : t("event.songs.searchPrompt")}
                       </Text>
                     </View>
                   ) : (
                     <View className="mt-4 rounded-2xl border border-gray200 overflow-hidden">
-                      {results.slice(0, 8).map((t, idx) => {
-                        const tid = String(t.id);
+                      {results.slice(0, 8).map((track, idx) => {
+                        const tid = String(track.id);
                         const already = suggestedTrackIdSet.has(tid);
                         const busy = suggestingTrackIds.has(tid);
-                        const cover = t.album?.cover_medium ?? t.album?.cover_small;
+                        const cover = track.album?.cover_medium ?? track.album?.cover_small;
 
                         return (
                           <View key={tid}>
@@ -399,20 +401,20 @@ export default function SuggestSongsModal({
 
                               <View className="flex-1 ml-3">
                                 <Text className="text-sm font-semibold text-gray900" numberOfLines={1}>
-                                  {t.title}
+                                  {track.title}
                                 </Text>
                                 <Text className="text-xs text-gray600" numberOfLines={1}>
-                                  {t.artist?.name ?? "Unknown artist"}
+                                  {track.artist?.name ?? t("event.songs.unknownArtist")}
                                 </Text>
                               </View>
 
                               {already ? (
                                 <View className="flex-row items-center gap-x-1">
                                   <Feather name="check" size={16} color="#16A34A" />
-                                  <Text className="text-xs text-green-700 font-medium">Suggested</Text>
+                                  <Text className="text-xs text-green-700 font-medium">{t("event.songs.suggested")}</Text>
                                 </View>
                               ) : (
-                                <PillButton label={busy ? "…" : "Suggest"} onPress={() => onSuggest(t)} disabled={busy} tone="dark" />
+                                <PillButton label={busy ? "…" : t("event.songs.suggest")} onPress={() => onSuggest(track)} disabled={busy} tone="dark" />
                               )}
                             </View>
 
@@ -425,15 +427,15 @@ export default function SuggestSongsModal({
                 </>
               ) : (
                 <>
-                  {myLoading ? <Text className="text-sm text-gray600">Loading your suggestions…</Text> : null}
+                  {myLoading ? <Text className="text-sm text-gray600">{t("event.songs.loadingMine")}</Text> : null}
                   {myError ? <Text className="mt-2 text-sm text-red-600">{myError}</Text> : null}
 
                   {!myLoading && mySuggestions.length === 0 ? (
                     <View className="mt-10 items-center justify-center">
                       <Feather name="music" size={56} color="#9CA3AF" />
-                      <Text className="mt-4 text-gray600 text-base">No suggestions yet</Text>
+                      <Text className="mt-4 text-gray600 text-base">{t("event.songs.noneTitle")}</Text>
                       <Text className="mt-1 text-gray500 text-sm text-center">
-                        Your submitted song suggestions will appear here.
+                        {t("event.songs.noneSubtitle")}
                       </Text>
                     </View>
                   ) : (
@@ -489,7 +491,7 @@ export default function SuggestSongsModal({
                 }}
                 className="w-full rounded-2xl border border-gray300 bg-white px-5 py-3 items-center justify-center active:opacity-90"
               >
-                <Text className="text-gray900 font-medium">Close</Text>
+                <Text className="text-gray900 font-medium">{t("event.songs.close")}</Text>
               </Pressable>
             </View>
           </View>

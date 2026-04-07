@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export type BookTicketsSheetProps = Readonly<{
   visible: boolean;
@@ -21,9 +22,11 @@ export default function BookTicketsSheet({
   visible,
   onClose,
   onProceed,
-  title = 'Free Entry',
+  title,
   price = 0,
 }: BookTicketsSheetProps): ReactElement {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t('event.book.freeEntry');
   const insets = useSafeAreaInsets();
   const [qty, setQty] = useState<number>(0);
   const canCheckout = qty > 0;
@@ -58,7 +61,7 @@ export default function BookTicketsSheet({
       >
         <View className="px-5 pt-5 pb-3">
           <View className="flex-row items-center justify-between">
-            <Text className="text-xl font-semibold text-black">Book Your Tickets</Text>
+            <Text className="text-xl font-semibold text-black">{t('event.book.title')}</Text>
             <Pressable
               accessibilityRole="button"
               onPress={onClose}
@@ -73,7 +76,7 @@ export default function BookTicketsSheet({
           <View className="rounded-3xl border border-gray200 bg-white px-4 py-4">
             <View className="flex-row items-center justify-between">
               <View>
-                <Text className="text-lg font-medium text-black">{title}</Text>
+                <Text className="text-lg font-medium text-black">{resolvedTitle}</Text>
                 <Text className="text-gray500 mt-1">${price}</Text>
               </View>
 
@@ -95,7 +98,7 @@ export default function BookTicketsSheet({
             <View className="h-px bg-gray200 my-4 mx-5" />
             <View className="px-5 pb-4 flex-row items-center justify-between">
               <Text className="text-lg text-gray900">
-                Total: {qty} {qty === 1 ? 'ticket' : 'tickets'}
+                {t('event.book.totalLine', { count: qty })}
               </Text>
               <Text className="text-lg text-gray900">${total}</Text>
             </View>
@@ -105,7 +108,7 @@ export default function BookTicketsSheet({
                 onPress={() => onProceed?.({ qty, price })}
                 className="rounded-2xl bg-black px-6 py-4 items-center justify-center active:opacity-90"
               >
-                <Text className="text-white text-base font-semibold">Proceed to Checkout</Text>
+                <Text className="text-white text-base font-semibold">{t('event.book.proceed')}</Text>
               </Pressable>
             </View>
           </>

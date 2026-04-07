@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string => c.filter(Boolean).join(' ');
 
@@ -88,6 +89,7 @@ export default function ReservationDetailsPage({
   onAddToCalendar,
 }: ReservationDetailsPageProps): ReactElement {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const bottomPad = (insets.bottom || 0) + 120;
 
   const QRCode = useMemo(() => tryGetQrComponent(), []);
@@ -105,22 +107,22 @@ export default function ReservationDetailsPage({
 
   const handleShare = (ticketId: string): void => {
     if (typeof onShareTicket === 'function') onShareTicket(ticketId);
-    else Alert.alert('Share', 'Hook up sharing later.');
+    else Alert.alert(t('reservationDetails.shareTitle'), t('reservationDetails.shareMessage'));
   };
 
   const handleDownload = (ticketId: string): void => {
     if (typeof onDownloadTicket === 'function') onDownloadTicket(ticketId);
-    else Alert.alert('Download', 'Hook up download later.');
+    else Alert.alert(t('reservationDetails.downloadTitle'), t('reservationDetails.downloadMessage'));
   };
 
   const handleDownloadAll = (): void => {
     if (typeof onDownloadAll === 'function') onDownloadAll(details.id);
-    else Alert.alert('Download All', 'Hook up “Download All Tickets” later.');
+    else Alert.alert(t('reservationDetails.downloadAllTitle'), t('reservationDetails.downloadAllMessage'));
   };
 
   const handleAddToCalendar = (): void => {
     if (typeof onAddToCalendar === 'function') onAddToCalendar(details.id);
-    else Alert.alert('Calendar', 'Hook up “Add to Calendar” later.');
+    else Alert.alert(t('reservationDetails.calendarTitle'), t('reservationDetails.calendarMessage'));
   };
 
   return (
@@ -139,7 +141,7 @@ export default function ReservationDetailsPage({
             </Pressable>
 
             <View>
-              <Text className="text-base font-semibold text-black">Event Reservation</Text>
+              <Text className="text-base font-semibold text-black">{t('reservationDetails.header')}</Text>
               <Text className="text-xs text-gray500 mt-0.5">{details.ticketsCountLabel}</Text>
             </View>
           </View>
@@ -187,20 +189,20 @@ export default function ReservationDetailsPage({
         {/* Order summary */}
         <View className="px-5 mt-4">
           <View className="rounded-2xl border border-gray200 bg-white p-4">
-            <Text className="text-base font-semibold text-gray900">Order Summary</Text>
+            <Text className="text-base font-semibold text-gray900">{t('reservationDetails.orderSummary')}</Text>
 
             <View className="mt-4 gap-y-3">
-              <Row label="Order Date" value={details.orderDateLabel} />
+              <Row label={t('reservationDetails.orderDate')} value={details.orderDateLabel} />
 
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm text-gray700">Total Tickets</Text>
+                <Text className="text-sm text-gray700">{t('reservationDetails.totalTickets')}</Text>
                 <View className="h-6 min-w-[28px] px-2 rounded-full bg-gray100 border border-gray200 items-center justify-center">
                   <Text className="text-xs font-semibold text-gray800">{details.totalTicketsNumber}</Text>
                 </View>
               </View>
 
               <View className="flex-row items-center justify-between">
-                <Text className="text-sm text-gray700">Total Amount</Text>
+                <Text className="text-sm text-gray700">{t('reservationDetails.totalAmount')}</Text>
                 <Text className="text-sm font-semibold text-gray900">{details.totalAmountLabel}</Text>
               </View>
             </View>
@@ -209,22 +211,22 @@ export default function ReservationDetailsPage({
 
         {/* Tickets */}
         <View className="px-5 mt-5">
-          <Text className="text-base font-semibold text-gray900">Your Tickets</Text>
+          <Text className="text-base font-semibold text-gray900">{t('reservationDetails.yourTickets')}</Text>
         </View>
 
         <View className="px-5 mt-3 gap-y-4">
-          {details.tickets.map((t) => (
-            <View key={t.id} className="rounded-2xl border border-gray200 bg-white p-4">
+          {details.tickets.map((ticket) => (
+            <View key={ticket.id} className="rounded-2xl border border-gray200 bg-white p-4">
               {/* Ticket header */}
               <View className="flex-row items-start justify-between">
                 <View>
-                  <Text className="text-sm font-semibold text-gray900">{t.ticketLabel}</Text>
+                  <Text className="text-sm font-semibold text-gray900">{ticket.ticketLabel}</Text>
                   <View className="mt-2 self-start px-2 py-1 rounded-full bg-gray100 border border-gray200">
-                    <Text className="text-xs font-medium text-gray700">{t.ticketTypeLabel}</Text>
+                    <Text className="text-xs font-medium text-gray700">{ticket.ticketTypeLabel}</Text>
                   </View>
                 </View>
 
-                <Text className="text-sm font-semibold text-gray900">{t.priceLabel}</Text>
+                <Text className="text-sm font-semibold text-gray900">{ticket.priceLabel}</Text>
               </View>
 
               {/* Holder */}
@@ -233,20 +235,20 @@ export default function ReservationDetailsPage({
                   <Feather name="user" size={16} color="#6B7280" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-sm font-medium text-gray900">{t.holderName}</Text>
-                  <Text className="text-xs text-gray500 mt-0.5">{t.holderEmail}</Text>
+                  <Text className="text-sm font-medium text-gray900">{ticket.holderName}</Text>
+                  <Text className="text-xs text-gray500 mt-0.5">{ticket.holderEmail}</Text>
                 </View>
               </View>
 
               {/* QR */}
               <Pressable
                 accessibilityRole="button"
-                onPress={() => openQr(t.qrValue, t.qrCaption)}
+                onPress={() => openQr(ticket.qrValue, ticket.qrCaption)}
                 className="mt-4 rounded-xl border border-gray200 bg-white p-4 items-center justify-center active:opacity-90"
               >
                 <View className="items-center justify-center">
                   {QRCode ? (
-                    <QRCode value={t.qrValue} size={92} color="#111827" backgroundColor="#FFFFFF" />
+                    <QRCode value={ticket.qrValue} size={92} color="#111827" backgroundColor="#FFFFFF" />
                   ) : (
                     <View className="h-[92px] w-[92px] rounded-xl border border-gray200 bg-gray50 items-center justify-center">
                       <Feather name="grid" size={22} color="#111827" />
@@ -254,9 +256,9 @@ export default function ReservationDetailsPage({
                   )}
 
                   <Text className="text-xs text-gray500 mt-3">
-                    {t.qrCaption ? String(t.qrCaption) : t.qrValue}
+                    {ticket.qrCaption ? String(ticket.qrCaption) : ticket.qrValue}
                   </Text>
-                  <Text className="text-xs text-gray500 mt-1">Tap to view full size</Text>
+                  <Text className="text-xs text-gray500 mt-1">{t('reservationDetails.tapToView')}</Text>
                 </View>
               </Pressable>
 
@@ -264,22 +266,22 @@ export default function ReservationDetailsPage({
               <View className="mt-4 flex-row gap-x-3">
                 <ActionButton
                   icon="share-2"
-                  label="Share"
-                  onPress={() => handleShare(t.id)}
+                  label={t('reservationDetails.share')}
+                  onPress={() => handleShare(ticket.id)}
                 />
                 <ActionButton
                   icon="download"
-                  label="Download"
-                  onPress={() => handleDownload(t.id)}
+                  label={t('reservationDetails.download')}
+                  onPress={() => handleDownload(ticket.id)}
                 />
               </View>
 
               {/* Included */}
               <View className="mt-4">
-                <Text className="text-xs text-gray500">What’s included:</Text>
+                <Text className="text-xs text-gray500">{t('reservationDetails.whatsIncluded')}</Text>
 
                 <View className="mt-2 gap-y-2">
-                  {(t.included ?? []).map((line) => (
+                  {(ticket.included ?? []).map((line) => (
                     <View key={line} className="flex-row items-center gap-x-2">
                       <Feather name="check-circle" size={14} color="#22C55E" />
                       <Text className="text-sm text-gray700">{line}</Text>
@@ -294,14 +296,14 @@ export default function ReservationDetailsPage({
         {/* Important info */}
         <View className="px-5 mt-5">
           <View className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <Text className="text-sm font-semibold text-blue-700">Important Information</Text>
+            <Text className="text-sm font-semibold text-blue-700">{t('reservationDetails.importantInfo')}</Text>
 
             <View className="mt-3 gap-y-2">
               {[
-                'Please arrive 30 minutes before the event starts',
-                'Have your QR code ready for scanning at the entrance',
-                'Tickets are non-transferable and non-refundable',
-                'Valid ID required for entry verification',
+                t('reservationDetails.info1'),
+                t('reservationDetails.info2'),
+                t('reservationDetails.info3'),
+                t('reservationDetails.info4'),
               ].map((line) => (
                 <View key={line} className="flex-row items-start gap-x-2">
                   <Text className="text-blue-700 mt-[1px]">•</Text>
@@ -314,8 +316,8 @@ export default function ReservationDetailsPage({
 
         {/* Bottom actions */}
         <View className="px-5 mt-5 gap-y-3">
-          <BottomActionButton icon="download" label="Download All Tickets" onPress={handleDownloadAll} />
-          <BottomActionButton icon="calendar" label="Add to Calendar" onPress={handleAddToCalendar} />
+          <BottomActionButton icon="download" label={t('reservationDetails.downloadAll')} onPress={handleDownloadAll} />
+          <BottomActionButton icon="calendar" label={t('reservationDetails.addToCalendar')} onPress={handleAddToCalendar} />
         </View>
 
         <View style={{ height: (insets.bottom || 0) + 24 }} />
@@ -351,14 +353,14 @@ export default function ReservationDetailsPage({
               {qrModalCaption ? qrModalCaption : qrModalValue}
             </Text>
             <Text className="text-xs text-gray500 mt-1 text-center">
-              {Platform.OS === 'ios' ? 'Pinch to zoom (if enabled)' : 'Tap outside to close'}
+              {Platform.OS === 'ios' ? t('reservationDetails.modalPinch') : t('reservationDetails.modalTap')}
             </Text>
 
             <Pressable
               onPress={closeQr}
               className="mt-5 px-4 py-2 rounded-full bg-gray100 border border-gray200 active:opacity-90"
             >
-              <Text className="text-sm text-gray800 font-medium">Close</Text>
+              <Text className="text-sm text-gray800 font-medium">{t('reservationDetails.close')}</Text>
             </Pressable>
           </View>
 

@@ -1,5 +1,5 @@
 // pages/HelpSupportPage.tsx
-import React, { useState, type ReactElement } from 'react';
+import React, { useMemo, useState, type ReactElement } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type HelpSupportPageProps = Readonly<{
   onBack: () => void;
@@ -22,39 +23,6 @@ type FAQItem = {
   answer: string;
   icon: keyof typeof Feather.glyphMap;
 };
-
-const FAQ_DATA: FAQItem[] = [
-  {
-    id: '1',
-    question: 'How do I create an account?',
-    answer: 'You can create an account by downloading the GoSwing app and signing up with your email address or social media accounts. Follow the on-screen instructions to complete your profile.',
-    icon: 'help-circle',
-  },
-  {
-    id: '2',
-    question: 'How do I buy tickets for an event?',
-    answer: 'Browse events in the app, select the event you want to attend, choose your ticket type and quantity, then proceed to checkout. You can pay using credit/debit cards or other supported payment methods.',
-    icon: 'calendar',
-  },
-  {
-    id: '3',
-    question: 'What is your refund policy?',
-    answer: 'Refund policies vary by event. Generally, refunds are available up to 48 hours before the event starts. Check the specific event details for the refund policy or contact the event organizer.',
-    icon: 'credit-card',
-  },
-  {
-    id: '4',
-    question: 'How do I use my QR code ticket?',
-    answer: 'Your QR code ticket can be found in the "My Tickets" section of the app. Simply show the QR code to the event staff at the entrance for scanning. Make sure your screen brightness is turned up.',
-    icon: 'calendar',
-  },
-  {
-    id: '5',
-    question: 'How do I manage my notifications?',
-    answer: 'Go to Profile > Notification Preferences to customize which notifications you receive. You can enable or disable push notifications, email updates, and event reminders.',
-    icon: 'message-circle',
-  },
-];
 
 function FAQAccordion({ item }: { item: FAQItem }): ReactElement {
   const [expanded, setExpanded] = useState(false);
@@ -81,40 +49,48 @@ function FAQAccordion({ item }: { item: FAQItem }): ReactElement {
 }
 
 export default function HelpSupportPage({ onBack }: HelpSupportPageProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [category, setCategory] = useState('');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
 
+  const FAQ_DATA: FAQItem[] = useMemo(() => [
+    { id: '1', question: t('helpSupport.faq.q1'), answer: t('helpSupport.faq.a1'), icon: 'help-circle' },
+    { id: '2', question: t('helpSupport.faq.q2'), answer: t('helpSupport.faq.a2'), icon: 'calendar' },
+    { id: '3', question: t('helpSupport.faq.q3'), answer: t('helpSupport.faq.a3'), icon: 'credit-card' },
+    { id: '4', question: t('helpSupport.faq.q4'), answer: t('helpSupport.faq.a4'), icon: 'calendar' },
+    { id: '5', question: t('helpSupport.faq.q5'), answer: t('helpSupport.faq.a5'), icon: 'message-circle' },
+  ], [t]);
+
   const handleLiveChat = (): void => {
-    Alert.alert('Live Chat', 'Live chat coming soon!');
+    Alert.alert(t('helpSupport.liveChat'), t('helpSupport.liveChatComingSoon'));
   };
 
   const handleEmailUs = async (): Promise<void> => {
     const emailUrl = 'mailto:goswingapp@gmail.com';
     const canOpen = await Linking.canOpenURL(emailUrl);
-    
+
     if (canOpen) {
       await Linking.openURL(emailUrl);
     } else {
-      Alert.alert('Error', 'Unable to open email app. Please email us at goswingapp@gmail.com');
+      Alert.alert(t('common.error'), t('helpSupport.emailOpenError'));
     }
   };
 
   const handleSendMessage = (): void => {
     if (!subject.trim() || !message.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields.');
+      Alert.alert(t('common.error'), t('helpSupport.errFillFields'));
       return;
     }
 
-    // Here you would typically send the support request to your backend
     Alert.alert(
-      'Message Sent',
-      'Thank you for contacting us. We will respond within 24 hours.',
+      t('helpSupport.sentTitle'),
+      t('helpSupport.sentMessage'),
       [
         {
-          text: 'OK',
+          text: t('helpSupport.ok'),
           onPress: () => {
             setCategory('');
             setSubject('');
@@ -127,12 +103,12 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
 
   const handleReportBug = (): void => {
     Alert.alert(
-      'Report a Bug',
-      'Please describe the bug you encountered. Our team will investigate and fix it as soon as possible.',
+      t('helpSupport.reportBugTitle'),
+      t('helpSupport.reportBugMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Report via Email',
+          text: t('helpSupport.reportViaEmail'),
           onPress: async () => {
             const emailUrl = 'mailto:goswingapp@gmail.com?subject=Bug%20Report';
             const canOpen = await Linking.canOpenURL(emailUrl);
@@ -158,7 +134,7 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
         <Pressable onPress={onBack} className="mr-3 active:opacity-70">
           <Feather name="arrow-left" size={24} color="#111827" />
         </Pressable>
-        <Text className="text-lg font-semibold text-black">Help & Support</Text>
+        <Text className="text-lg font-semibold text-black">{t('helpSupport.title')}</Text>
       </View>
 
       <ScrollView
@@ -172,8 +148,8 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
             className="flex-1 items-center rounded-2xl border border-gray200 bg-white py-5 active:opacity-80"
           >
             <Feather name="message-circle" size={24} color="#111827" />
-            <Text className="mt-2 text-sm font-medium text-gray900">Live Chat</Text>
-            <Text className="mt-1 text-xs text-gray500">Chat with support</Text>
+            <Text className="mt-2 text-sm font-medium text-gray900">{t('helpSupport.liveChat')}</Text>
+            <Text className="mt-1 text-xs text-gray500">{t('helpSupport.liveChatSubtitle')}</Text>
           </Pressable>
 
           <Pressable
@@ -181,20 +157,20 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
             className="flex-1 items-center rounded-2xl border border-gray200 bg-white py-5 active:opacity-80"
           >
             <Feather name="mail" size={24} color="#111827" />
-            <Text className="mt-2 text-sm font-medium text-gray900">Email Us</Text>
-            <Text className="mt-1 text-xs text-gray500">Get help via email</Text>
+            <Text className="mt-2 text-sm font-medium text-gray900">{t('helpSupport.emailUs')}</Text>
+            <Text className="mt-1 text-xs text-gray500">{t('helpSupport.emailUsSubtitle')}</Text>
           </Pressable>
         </View>
 
         {/* Search Help Articles */}
         <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-3">Search Help Articles</Text>
+          <Text className="text-base font-semibold text-black mb-3">{t('helpSupport.searchTitle')}</Text>
           <View className="flex-row items-center border border-gray200 rounded-xl px-3 py-2.5 bg-gray50">
             <Feather name="search" size={18} color="#9CA3AF" />
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search for help..."
+              placeholder={t('helpSupport.searchPlaceholder')}
               placeholderTextColor="#9CA3AF"
               className="flex-1 ml-2 text-sm text-gray900"
             />
@@ -204,28 +180,28 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
         {/* Frequently Asked Questions */}
         <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white overflow-hidden">
           <View className="px-4 py-4 border-b border-gray200">
-            <Text className="text-base font-semibold text-black">Frequently Asked Questions</Text>
+            <Text className="text-base font-semibold text-black">{t('helpSupport.faqTitle')}</Text>
           </View>
           {filteredFAQs.length > 0 ? (
             filteredFAQs.map((faq) => <FAQAccordion key={faq.id} item={faq} />)
           ) : (
             <View className="px-4 py-6 items-center">
-              <Text className="text-sm text-gray500">No matching questions found</Text>
+              <Text className="text-sm text-gray500">{t('helpSupport.faqNoMatch')}</Text>
             </View>
           )}
         </View>
 
         {/* Contact Support Form */}
         <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-4">Contact Support</Text>
+          <Text className="text-base font-semibold text-black mb-4">{t('helpSupport.contactTitle')}</Text>
 
           <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">Category</Text>
+            <Text className="text-sm text-gray700 mb-2">{t('helpSupport.category')}</Text>
             <View className="border border-gray200 rounded-xl overflow-hidden">
               <TextInput
                 value={category}
                 onChangeText={setCategory}
-                placeholder="Select a category"
+                placeholder={t('helpSupport.categoryPlaceholder')}
                 placeholderTextColor="#9CA3AF"
                 className="px-3 py-3 text-sm text-gray900 bg-white"
               />
@@ -233,12 +209,12 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
           </View>
 
           <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">Subject</Text>
+            <Text className="text-sm text-gray700 mb-2">{t('helpSupport.subject')}</Text>
             <View className="border border-gray200 rounded-xl overflow-hidden">
               <TextInput
                 value={subject}
                 onChangeText={setSubject}
-                placeholder="Brief description of your issue"
+                placeholder={t('helpSupport.subjectPlaceholder')}
                 placeholderTextColor="#9CA3AF"
                 className="px-3 py-3 text-sm text-gray900 bg-white"
               />
@@ -246,12 +222,12 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
           </View>
 
           <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">Message</Text>
+            <Text className="text-sm text-gray700 mb-2">{t('helpSupport.messageLabel')}</Text>
             <View className="border border-gray200 rounded-xl overflow-hidden">
               <TextInput
                 value={message}
                 onChangeText={setMessage}
-                placeholder="Please describe your issue in detail..."
+                placeholder={t('helpSupport.messagePlaceholder')}
                 placeholderTextColor="#9CA3AF"
                 multiline
                 numberOfLines={4}
@@ -265,38 +241,38 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
             onPress={handleSendMessage}
             className="bg-gray900 rounded-xl py-3.5 items-center active:opacity-90"
           >
-            <Text className="text-white font-medium">Send Message</Text>
+            <Text className="text-white font-medium">{t('helpSupport.sendMessage')}</Text>
           </Pressable>
         </View>
 
         {/* Other Ways to Reach Us */}
         <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-4">Other Ways to Reach Us</Text>
+          <Text className="text-base font-semibold text-black mb-4">{t('helpSupport.otherTitle')}</Text>
 
           <View className="flex-row items-start gap-x-3 mb-4">
             <Feather name="mail" size={18} color="#111827" />
             <View className="flex-1">
-              <Text className="text-sm font-medium text-gray900">Email Support</Text>
+              <Text className="text-sm font-medium text-gray900">{t('helpSupport.emailSupport')}</Text>
               <Text className="text-sm text-gray600">goswingapp@gmail.com</Text>
-              <Text className="text-xs text-gray500 mt-0.5">Response within 24 hours</Text>
+              <Text className="text-xs text-gray500 mt-0.5">{t('helpSupport.emailResponseTime')}</Text>
             </View>
           </View>
 
           <View className="flex-row items-start gap-x-3 mb-4">
             <Feather name="phone" size={18} color="#111827" />
             <View className="flex-1">
-              <Text className="text-sm font-medium text-gray900">Phone Support</Text>
+              <Text className="text-sm font-medium text-gray900">{t('helpSupport.phoneSupport')}</Text>
               <Text className="text-sm text-gray600">+1 (555) 123-HELP</Text>
-              <Text className="text-xs text-gray500 mt-0.5">Mon-Fri, 9 AM - 6 PM EST</Text>
+              <Text className="text-xs text-gray500 mt-0.5">{t('helpSupport.phoneHours')}</Text>
             </View>
           </View>
 
           <View className="flex-row items-start gap-x-3">
             <Feather name="message-circle" size={18} color="#111827" />
             <View className="flex-1">
-              <Text className="text-sm font-medium text-gray900">Live Chat</Text>
-              <Text className="text-sm text-gray600">Available in-app</Text>
-              <Text className="text-xs text-gray500 mt-0.5">Mon-Fri, 9 AM - 9 PM EST</Text>
+              <Text className="text-sm font-medium text-gray900">{t('helpSupport.liveChat')}</Text>
+              <Text className="text-sm text-gray600">{t('helpSupport.liveChatAvailable')}</Text>
+              <Text className="text-xs text-gray500 mt-0.5">{t('helpSupport.liveChatHours')}</Text>
             </View>
           </View>
         </View>
@@ -305,28 +281,28 @@ export default function HelpSupportPage({ onBack }: HelpSupportPageProps): React
         <View className="mx-5 mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-4">
           <View className="flex-row items-center gap-x-2 mb-2">
             <Feather name="settings" size={18} color="#F97316" />
-            <Text className="text-base font-semibold text-orange-600">Found a Bug?</Text>
+            <Text className="text-base font-semibold text-orange-600">{t('helpSupport.bugTitle')}</Text>
           </View>
           <Text className="text-sm text-orange-700 mb-3">
-            Help us improve GoSwing by reporting bugs or issues you encounter.
+            {t('helpSupport.bugBody')}
           </Text>
           <Pressable
             onPress={handleReportBug}
             className="self-start border border-gray300 bg-white rounded-xl px-4 py-2 active:opacity-80"
           >
-            <Text className="text-sm font-medium text-gray900">Report Bug</Text>
+            <Text className="text-sm font-medium text-gray900">{t('helpSupport.reportBug')}</Text>
           </Pressable>
         </View>
 
         {/* System Status */}
         <View className="mx-5 mt-4 mb-16 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-3">System Status</Text>
+          <Text className="text-base font-semibold text-black mb-3">{t('helpSupport.systemStatus')}</Text>
           <View className="flex-row items-center gap-x-2">
             <View className="w-2.5 h-2.5 rounded-full bg-green-500" />
-            <Text className="text-sm text-gray900">All systems operational</Text>
+            <Text className="text-sm text-gray900">{t('helpSupport.allOperational')}</Text>
           </View>
           <Pressable className="mt-2 active:opacity-70">
-            <Text className="text-sm text-gray600 underline">View detailed status page</Text>
+            <Text className="text-sm text-gray600 underline">{t('helpSupport.viewStatusPage')}</Text>
           </Pressable>
         </View>
       </ScrollView>

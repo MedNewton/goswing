@@ -1,19 +1,22 @@
 import React, { type ReactElement } from 'react';
 import { View, Text, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import Card from '@/components/ui/Card';
 import type { MiniEvent } from './MoreFromOrganizer';
 
 export default function SimilarEvents({
   items,
-  title = 'Similar Events You Might Like',
+  title,
 }: {
   items: ReadonlyArray<MiniEvent>;
   title?: string;
 }): ReactElement {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t('event.similar.title');
   return (
     <View className="px-2 mt-4">
-      <Text className="text-base font-semibold text-black">{title}</Text>
+      <Text className="text-base font-semibold text-black">{resolvedTitle}</Text>
       <View className="mt-3 gap-y-3">
         {items.map((ev) => (
           <Card

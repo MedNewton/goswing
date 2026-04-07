@@ -15,7 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { useTranslation } from 'react-i18next';
 
 import { useProfile } from '@/hooks/profile';
 
@@ -83,6 +83,7 @@ function InputField({
 }
 
 export default function EditProfilePage({ onBack }: EditProfilePageProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { profile, updateProfile, isLoading: profileLoading } = useProfile();
 
@@ -92,9 +93,6 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
   // Form state
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
-  const [bio, setBio] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
@@ -104,8 +102,6 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
     if (profile) {
       setAvatarUri(profile.avatarUri ?? null);
       setFullName(profile.name ?? '');
-      setBio((profile as any).bio ?? '');
-      setDateOfBirth((profile as any).dateOfBirth ? new Date((profile as any).dateOfBirth) : null);
       setEmail(profile.email ?? '');
       setPhone(profile.phone ?? '');
       setLocation(profile.city ?? '');
@@ -119,19 +115,18 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
     const changed =
       avatarUri !== (profile.avatarUri ?? null) ||
       fullName !== (profile.name ?? '') ||
-      bio !== ((profile as any).bio ?? '') ||
       email !== (profile.email ?? '') ||
       phone !== (profile.phone ?? '') ||
       location !== (profile.city ?? '');
 
     setHasChanges(changed);
-  }, [avatarUri, fullName, bio, email, phone, location, profile]);
+  }, [avatarUri, fullName, email, phone, location, profile]);
 
   const handlePickImage = async (): Promise<void> => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your photo library to change your profile photo.');
+      Alert.alert(t('editProfile.permissionRequired'), t('editProfile.libraryPermissionMessage'));
       return;
     }
 
@@ -151,7 +146,7 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your camera to take a profile photo.');
+      Alert.alert(t('editProfile.permissionRequired'), t('editProfile.cameraPermissionMessage'));
       return;
     }
 
@@ -167,33 +162,16 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
   };
 
   const handleChangePhoto = (): void => {
-    Alert.alert('Change Profile Photo', 'Choose an option', [
-      { text: 'Take Photo', onPress: handleTakePhoto },
-      { text: 'Choose from Library', onPress: handlePickImage },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('editProfile.changePhotoTitle'), t('editProfile.changePhotoMessage'), [
+      { text: t('editProfile.takePhoto'), onPress: handleTakePhoto },
+      { text: t('editProfile.chooseFromLibrary'), onPress: handlePickImage },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
-  };
-
-  const handleDateChange = (event: any, selectedDate?: Date): void => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDateOfBirth(selectedDate);
-      setHasChanges(true);
-    }
-  };
-
-  const formatDate = (date: Date | null): string => {
-    if (!date) return '';
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
   };
 
   const handleSave = async (): Promise<void> => {
     if (!fullName.trim()) {
-      Alert.alert('Error', 'Please enter your full name.');
+      Alert.alert(t('common.error'), t('editProfile.errNameRequired'));
       return;
     }
 
@@ -206,14 +184,13 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
         email: email.trim() || null,
         phone: phone.trim() || null,
         city: location.trim() || undefined,
-        // Note: bio and dateOfBirth would need to be added to the profile type and database
       });
 
-      Alert.alert('Success', 'Your profile has been updated.', [
-        { text: 'OK', onPress: onBack },
+      Alert.alert(t('editProfile.successTitle'), t('editProfile.successMessage'), [
+        { text: t('editProfile.ok'), onPress: onBack },
       ]);
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Failed to update profile. Please try again.');
+      Alert.alert(t('common.error'), err?.message ?? t('editProfile.errSaveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -222,11 +199,11 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
   const handleCancel = (): void => {
     if (hasChanges) {
       Alert.alert(
-        'Discard Changes?',
-        'You have unsaved changes. Are you sure you want to discard them?',
+        t('editProfile.discardTitle'),
+        t('editProfile.discardMessage'),
         [
-          { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: onBack },
+          { text: t('editProfile.keepEditing'), style: 'cancel' },
+          { text: t('editProfile.discard'), style: 'destructive', onPress: onBack },
         ]
       );
     } else {
@@ -238,7 +215,7 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
     return (
       <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">Loading profile...</Text>
+        <Text className="text-gray600 mt-3">{t('editProfile.loading')}</Text>
       </SafeAreaView>
     );
   }
@@ -251,7 +228,7 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
           <Pressable onPress={handleCancel} className="mr-3 active:opacity-70">
             <Feather name="arrow-left" size={24} color="#111827" />
           </Pressable>
-          <Text className="text-lg font-semibold text-black">Edit Profile</Text>
+          <Text className="text-lg font-semibold text-black">{t('editProfile.title')}</Text>
         </View>
         <Pressable
           onPress={handleSave}
@@ -262,7 +239,7 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <Text className={`text-sm font-medium ${hasChanges ? 'text-white' : 'text-gray500'}`}>
-              Save
+              {t('editProfile.save')}
             </Text>
           )}
         </Pressable>
@@ -278,7 +255,7 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
         >
           {/* Profile Photo Section */}
           <SectionCard>
-            <Text className="text-base font-semibold text-black mb-4">Profile Photo</Text>
+            <Text className="text-base font-semibold text-black mb-4">{t('editProfile.profilePhoto')}</Text>
             <View className="flex-row items-center">
               <View className="relative">
                 {avatarUri ? (
@@ -301,9 +278,9 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
                 </Pressable>
               </View>
               <View className="ml-4 flex-1">
-                <Text className="text-sm font-medium text-gray900">Change Profile Photo</Text>
+                <Text className="text-sm font-medium text-gray900">{t('editProfile.changeProfilePhoto')}</Text>
                 <Text className="text-xs text-gray500 mt-1">
-                  Upload a new photo or take one with your camera
+                  {t('editProfile.uploadOrTake')}
                 </Text>
               </View>
             </View>
@@ -311,83 +288,52 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
 
           {/* Basic Information Section */}
           <SectionCard>
-            <SectionTitle icon="user" title="Basic Information" />
+            <SectionTitle icon="user" title={t('editProfile.basicInformation')} />
 
             <InputField
-              label="Full Name"
+              label={t('editProfile.fullName')}
               value={fullName}
               onChangeText={setFullName}
-              placeholder="John Doe"
+              placeholder={t('editProfile.fullNamePlaceholder')}
             />
-
-            <InputField
-              label="Bio"
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Tell us about yourself..."
-              multiline
-            />
-
-            <View className="mb-4">
-              <Text className="text-sm text-gray700 mb-2">Date of Birth</Text>
-              <Pressable
-                onPress={() => setShowDatePicker(true)}
-                className="border border-gray200 rounded-xl bg-white px-4 py-3 flex-row items-center justify-between"
-              >
-                <Text className={`text-sm ${dateOfBirth ? 'text-gray900' : 'text-gray400'}`}>
-                  {dateOfBirth ? formatDate(dateOfBirth) : 'Select date'}
-                </Text>
-                <Feather name="calendar" size={18} color="#9CA3AF" />
-              </Pressable>
-            </View>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={dateOfBirth ?? new Date(2000, 0, 1)}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleDateChange}
-                maximumDate={new Date()}
-              />
-            )}
           </SectionCard>
 
           {/* Contact Information Section */}
           <SectionCard>
-            <SectionTitle icon="phone" title="Contact Information" />
+            <SectionTitle icon="phone" title={t('editProfile.contactInformation')} />
 
             <InputField
-              label="Email Address"
+              label={t('editProfile.emailAddress')}
               icon="mail"
               value={email}
               onChangeText={setEmail}
-              placeholder="john.doe@example.com"
+              placeholder={t('editProfile.emailPlaceholder')}
               keyboardType="email-address"
             />
 
             <InputField
-              label="Phone Number"
+              label={t('editProfile.phoneNumber')}
               icon="phone"
               value={phone}
               onChangeText={setPhone}
-              placeholder="+1 (555) 123-4567"
+              placeholder={t('editProfile.phonePlaceholder')}
               keyboardType="phone-pad"
             />
 
             <InputField
-              label="Location"
+              label={t('editProfile.location')}
               icon="map-pin"
               value={location}
               onChangeText={setLocation}
-              placeholder="Paris"
+              placeholder={t('editProfile.locationPlaceholder')}
             />
           </SectionCard>
 
           {/* Privacy Notice */}
           <SectionCard>
-            <Text className="text-base font-semibold text-black mb-2">Privacy Notice</Text>
+            <Text className="text-base font-semibold text-black mb-2">{t('editProfile.privacyNotice')}</Text>
             <Text className="text-sm text-gray600 leading-5">
-              Your profile information will be visible to other users and event organizers. You can control what information is shared in your privacy settings.
+              {t('editProfile.privacyNoticeBody')}
             </Text>
           </SectionCard>
 
@@ -402,7 +348,7 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Text className={`font-medium ${hasChanges ? 'text-white' : 'text-gray500'}`}>
-                  Save Changes
+                  {t('editProfile.saveChanges')}
                 </Text>
               )}
             </Pressable>
@@ -411,7 +357,7 @@ export default function EditProfilePage({ onBack }: EditProfilePageProps): React
               onPress={handleCancel}
               className="mt-3 rounded-xl py-4 items-center border border-gray300 bg-white active:opacity-80"
             >
-              <Text className="font-medium text-gray900">Cancel</Text>
+              <Text className="font-medium text-gray900">{t('common.cancel')}</Text>
             </Pressable>
           </View>
         </ScrollView>
