@@ -86,6 +86,7 @@ export type OrganizerGalleryImage = Readonly<{
   imageUrl: string;
   caption: string | null;
   createdAt: string;
+  mediaType: 'image' | 'video';
 }>;
 
 export type OrganizerReview = Readonly<{
@@ -380,19 +381,24 @@ export async function getOrganizerGallery(
 
   const { data, error } = await supabase
     .from("organizer_gallery")
-    .select("id, image_url, caption, created_at")
+    .select("id, image_url, caption, created_at, media_type")
     .eq("organizer_id", id)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((row) => ({
-    id: asString(row.id),
-    imageUrl: asString(row.image_url),
-    caption: normalizeNullableString(row.caption),
-    createdAt: asString(row.created_at),
-  }));
+  return (data ?? []).map((row: any) => {
+    const rawType = typeof row.media_type === "string" ? row.media_type.toLowerCase() : "image";
+    const mediaType: "image" | "video" = rawType === "video" ? "video" : "image";
+    return {
+      id: asString(row.id),
+      imageUrl: asString(row.image_url),
+      caption: normalizeNullableString(row.caption),
+      createdAt: asString(row.created_at),
+      mediaType,
+    };
+  });
 }
 
 // ============================================

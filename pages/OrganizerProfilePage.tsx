@@ -11,11 +11,14 @@ import {
   Alert,
   RefreshControl,
   Animated,
+  Modal,
+  StatusBar,
   type DimensionValue,
 } from 'react-native';
 import { Pressable as RNPressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, FontAwesome } from '@expo/vector-icons';
+import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 
 import Card from '@/components/ui/Card';
 import {
@@ -459,6 +462,9 @@ export default function OrganizerProfilePage({
     loaded: boolean;
     loading: boolean;
   }>({ items: [], loaded: false, loading: false });
+
+  const [activeVideo, setActiveVideo] = useState<{ url: string; caption: string | null } | null>(null);
+  const [videoLoading, setVideoLoading] = useState<boolean>(false);
 
   const [reviews, setReviews] = useState<{
     items: ReadonlyArray<OrganizerReview>;
@@ -913,16 +919,41 @@ export default function OrganizerProfilePage({
                     </View>
                   ) : (
                     <View className="flex-row flex-wrap justify-between">
-                      {gallery.items.map((img) => (
-                        <Pressable key={img.id} style={{ width: '48%' }} className="mb-3 active:opacity-90">
-                          <Image
-                            source={{ uri: img.imageUrl }}
-                            className="w-full rounded-2xl bg-gray100"
-                            style={{ aspectRatio: 1 }}
-                            resizeMode="cover"
-                          />
-                        </Pressable>
-                      ))}
+                      {gallery.items.map((item) => {
+                        const isVideo = item.mediaType === 'video';
+                        return (
+                          <Pressable
+                            key={item.id}
+                            style={{ width: '48%' }}
+                            className="mb-3 active:opacity-90"
+                            onPress={() => {
+                              if (isVideo) setActiveVideo({ url: item.imageUrl, caption: item.caption });
+                            }}
+                          >
+                            <View className="relative w-full rounded-2xl overflow-hidden bg-gray100" style={{ aspectRatio: 1 }}>
+                              <Image
+                                source={{ uri: item.imageUrl }}
+                                className="w-full h-full"
+                                resizeMode="cover"
+                              />
+                              {isVideo ? (
+                                <>
+                                  <View className="absolute inset-0 bg-black/25" />
+                                  <View className="absolute inset-0 items-center justify-center">
+                                    <View className="w-14 h-14 rounded-full bg-black/55 items-center justify-center border border-white/30">
+                                      <Feather name="play" size={26} color="#FFFFFF" style={{ marginLeft: 3 }} />
+                                    </View>
+                                  </View>
+                                  <View className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/60 flex-row items-center">
+                                    <Feather name="video" size={11} color="#FFFFFF" />
+                                    <Text className="text-white text-[10px] font-semibold ml-1">VIDEO</Text>
+                                  </View>
+                                </>
+                              ) : null}
+                            </View>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   )}
                 </View>
@@ -969,6 +1000,66 @@ export default function OrganizerProfilePage({
           )}
         </View>
       </ScrollView>
+
+      {/* Fullscreen video player modal */}
+      <Modal
+        visible={activeVideo !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setActiveVideo(null)}
+      >
+        <StatusBar barStyle="light-content" />
+        <View className="flex-1 bg-black/95">
+          <SafeAreaView edges={['top', 'bottom']} className="flex-1">
+            {/* Close button */}
+            <View className="flex-row justify-end px-5 pt-2">
+              <Pressable
+                onPress={() => setActiveVideo(null)}
+                hitSlop={12}
+                className="w-10 h-10 rounded-full bg-white/10 items-center justify-center active:bg-white/20"
+              >
+                <Feather name="x" size={22} color="#FFFFFF" />
+              </Pressable>
+            </View>
+
+            {/* Video */}
+            <View className="flex-1 items-center justify-center px-4">
+              {activeVideo ? (
+                <View className="w-full rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: 16 / 9 }}>
+                  <Video
+                    source={{ uri: activeVideo.url }}
+                    style={{ width: '100%', height: '100%' }}
+                    useNativeControls
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    isLooping={false}
+                    onLoadStart={() => setVideoLoading(true)}
+                    onReadyForDisplay={() => setVideoLoading(false)}
+                    onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
+                      if ('isLoaded' in status && status.isLoaded) setVideoLoading(false);
+                    }}
+                  />
+                  {videoLoading ? (
+                    <View className="absolute inset-0 items-center justify-center">
+                      <ActivityIndicator size="large" color="#FFFFFF" />
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+
+            {/* Caption */}
+            {activeVideo?.caption ? (
+              <View className="px-6 pb-4">
+                <Text className="text-white text-sm text-center" numberOfLines={3}>
+                  {activeVideo.caption}
+                </Text>
+              </View>
+            ) : null}
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
