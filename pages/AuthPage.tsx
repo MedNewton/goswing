@@ -3,6 +3,8 @@ import React, { type ReactElement } from 'react';
 import { View, Text, Pressable, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, AntDesign } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '@/lib/i18n/useLanguage';
 
 type Props = Readonly<{
   onClose?: () => void;
@@ -47,43 +49,55 @@ export default function AuthPage({
   onContinueGoogle,
   onContinueApple,
 }: Props): ReactElement {
+  const { t } = useTranslation();
+  const { lang, setLanguage } = useLanguage();
+
   return (
     <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" />
       <View className="flex-1 items-center justify-center px-5">
         <View className="w-full max-w-[520px] items-center gap-y-4">
+          <View className="flex-row items-center justify-center gap-x-2 mb-1">
+            <Pressable onPress={() => setLanguage('en')} accessibilityRole="button">
+              <Text className={lang === 'en' ? 'font-bold text-black' : 'text-gray500'}>EN</Text>
+            </Pressable>
+            <Text className="text-gray300">|</Text>
+            <Pressable onPress={() => setLanguage('fr')} accessibilityRole="button">
+              <Text className={lang === 'fr' ? 'font-bold text-black' : 'text-gray500'}>FR</Text>
+            </Pressable>
+          </View>
+
           <Text className="text-4xl font-bold text-[#0B0B15] text-center">GoSwing</Text>
           <Text className="text-2xl text-gray800 text-center">
-            Welcome! Let&apos;s get fun.
+            {t('auth.welcome')}
           </Text>
 
           <View className="w-full mt-4 gap-y-4 px-2">
             <PillButton
-              label="Continue with Email"
+              label={t('auth.continueEmail')}
               onPress={onContinueEmail}
               left={<Feather name="mail" size={18} color="#111827" />}
               className="flex flex-row items-center justify-center"
             />
             <PillButton
-              label="Continue with Phone"
+              label={t('auth.continuePhone')}
               onPress={onContinuePhone}
               left={<Feather name="smartphone" size={18} color="#111827" />}
               className="flex flex-row items-center justify-center"
             />
             <PillButton
-              label="Continue with Google"
+              label={t('auth.continueGoogle')}
               onPress={onContinueGoogle}
               left={<AntDesign name="google" size={18} color="#DB4437" />}
               className="flex flex-row items-center justify-center"
             />
             <PillButton
-              label="Continue with Apple"
+              label={t('auth.continueApple')}
               onPress={onContinueApple}
               left={<AntDesign name="apple" size={20} color="#000000" />}
               className="flex flex-row items-center justify-center"
             />
           </View>
-          
         </View>
       </View>
     </SafeAreaView>

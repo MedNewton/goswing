@@ -121,6 +121,7 @@ export function useProfile(): UseProfileReturn {
         updatedAt: profileData?.updated_at,
         deactivatedAt: profileData?.deactivated_at,
         deletedAt: profileData?.deleted_at,
+        occupation: profileData?.occupation ?? null,
         interests,
         stats: {
           attendedCount,
@@ -153,6 +154,7 @@ export function useProfile(): UseProfileReturn {
     if (updates.phoneVerified !== undefined) dbUpdates.phone_verified = updates.phoneVerified;
     if (updates.city !== undefined) dbUpdates.location = updates.city;
     if (updates.profileVisibility !== undefined) dbUpdates.profile_visibility = updates.profileVisibility;
+    if (updates.occupation !== undefined) dbUpdates.occupation = updates.occupation;
 
     const { error: updateError } = await supabase
       .from('profiles')

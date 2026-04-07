@@ -16,6 +16,17 @@ CREATE TABLE public.event_favorites (
   CONSTRAINT event_favorites_pkey PRIMARY KEY (user_id, event_id),
   CONSTRAINT event_favorites_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id)
 );
+CREATE TABLE public.event_gallery (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  event_id uuid NOT NULL,
+  media_url text NOT NULL,
+  media_type text NOT NULL DEFAULT 'image'::text,
+  caption text,
+  sort_order integer DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT event_gallery_pkey PRIMARY KEY (id),
+  CONSTRAINT event_gallery_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id)
+);
 CREATE TABLE public.event_reviews (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   event_id uuid NOT NULL,
@@ -25,6 +36,9 @@ CREATE TABLE public.event_reviews (
   comment text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  admin_liked boolean NOT NULL DEFAULT false,
+  admin_reply text,
+  admin_reply_at timestamp with time zone,
   CONSTRAINT event_reviews_pkey PRIMARY KEY (id),
   CONSTRAINT event_reviews_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id),
   CONSTRAINT event_reviews_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id),
@@ -92,6 +106,10 @@ CREATE TABLE public.events (
   last_sync_error text,
   description text,
   category text,
+  waitlist_enabled boolean NOT NULL DEFAULT false,
+  approval_mode text NOT NULL DEFAULT 'auto'::text,
+  sharing_enabled boolean NOT NULL DEFAULT true,
+  policies jsonb NOT NULL DEFAULT '[]'::jsonb,
   CONSTRAINT events_pkey PRIMARY KEY (id),
   CONSTRAINT events_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.organizers(id),
   CONSTRAINT events_venue_id_fkey FOREIGN KEY (venue_id) REFERENCES public.venues(id)
@@ -148,8 +166,42 @@ CREATE TABLE public.organizer_gallery (
   caption text,
   sort_order integer DEFAULT 0,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  media_type text NOT NULL DEFAULT 'image'::text,
   CONSTRAINT organizer_gallery_pkey PRIMARY KEY (id),
   CONSTRAINT organizer_gallery_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.organizers(id)
+);
+CREATE TABLE public.organizer_members (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  organizer_id uuid NOT NULL,
+  user_id text NOT NULL,
+  role text NOT NULL DEFAULT 'admin'::text,
+  invited_by text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT organizer_members_pkey PRIMARY KEY (id),
+  CONSTRAINT organizer_members_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.organizers(id)
+);
+CREATE TABLE public.organizer_payment_methods (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  organizer_id uuid NOT NULL,
+  method_type text NOT NULL CHECK (method_type = ANY (ARRAY['payment'::text, 'withdrawal'::text])),
+  provider text NOT NULL DEFAULT 'stripe'::text,
+  provider_account_id text,
+  label text,
+  is_default boolean NOT NULL DEFAULT false,
+  details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT organizer_payment_methods_pkey PRIMARY KEY (id),
+  CONSTRAINT organizer_payment_methods_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.organizers(id)
+);
+CREATE TABLE public.organizer_tags (
+  organizer_id uuid NOT NULL,
+  tag_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT organizer_tags_pkey PRIMARY KEY (organizer_id, tag_id),
+  CONSTRAINT organizer_tags_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.organizers(id),
+  CONSTRAINT organizer_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.tags(id)
 );
 CREATE TABLE public.organizers (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -179,6 +231,13 @@ CREATE TABLE public.organizers (
   refund_policy text,
   response_time_hours numeric,
   updated_at timestamp with time zone DEFAULT now(),
+  tiktok_handle text,
+  youtube_handle text,
+  twitter_handle text,
+  pinterest_handle text,
+  snapchat_handle text,
+  google_business_url text,
+  custom_policies jsonb NOT NULL DEFAULT '[]'::jsonb,
   CONSTRAINT organizers_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.payments (
@@ -197,6 +256,23 @@ CREATE TABLE public.payments (
   CONSTRAINT payments_pkey PRIMARY KEY (id),
   CONSTRAINT payments_reservation_id_fkey FOREIGN KEY (reservation_id) REFERENCES public.reservations(id)
 );
+CREATE TABLE public.payouts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  organizer_id uuid NOT NULL,
+  amount_cents integer NOT NULL,
+  currency character NOT NULL DEFAULT 'USD'::bpchar,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'failed'::text])),
+  scheduled_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  provider text NOT NULL DEFAULT 'stripe'::text,
+  provider_payout_id text,
+  period_start timestamp with time zone,
+  period_end timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT payouts_pkey PRIMARY KEY (id),
+  CONSTRAINT payouts_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.organizers(id)
+);
 CREATE TABLE public.profiles (
   user_id text NOT NULL DEFAULT requesting_user_id(),
   display_name text,
@@ -212,6 +288,7 @@ CREATE TABLE public.profiles (
   deactivated_at timestamp with time zone,
   deleted_at timestamp with time zone,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  occupation text,
   CONSTRAINT profiles_pkey PRIMARY KEY (user_id)
 );
 CREATE TABLE public.reservation_items (
@@ -336,6 +413,8 @@ CREATE TABLE public.ticket_types (
   last_synced_at timestamp with time zone,
   sync_state text,
   last_sync_error text,
+  is_free boolean NOT NULL DEFAULT false,
+  free_for_ladies boolean NOT NULL DEFAULT false,
   CONSTRAINT ticket_types_pkey PRIMARY KEY (id),
   CONSTRAINT ticket_types_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id)
 );
@@ -396,6 +475,21 @@ CREATE TABLE public.user_settings (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT user_settings_pkey PRIMARY KEY (user_id)
 );
+CREATE TABLE public.venue_reviews (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  venue_id uuid NOT NULL,
+  clerk_user_id text NOT NULL DEFAULT (auth.jwt() ->> 'sub'::text),
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment text,
+  admin_liked boolean NOT NULL DEFAULT false,
+  admin_reply text,
+  admin_reply_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT venue_reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT venue_reviews_venue_id_fkey FOREIGN KEY (venue_id) REFERENCES public.venues(id),
+  CONSTRAINT venue_reviews_clerk_user_id_fkey FOREIGN KEY (clerk_user_id) REFERENCES public.profiles(user_id)
+);
 CREATE TABLE public.venues (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL,
@@ -414,7 +508,14 @@ CREATE TABLE public.venues (
   sync_state text,
   last_sync_error text,
   created_by_user_id text DEFAULT requesting_user_id(),
-  CONSTRAINT venues_pkey PRIMARY KEY (id)
+  postal_code text,
+  capacity integer,
+  organizer_id uuid UNIQUE,
+  description text,
+  free_access boolean NOT NULL DEFAULT false,
+  free_for_ladies boolean NOT NULL DEFAULT false,
+  CONSTRAINT venues_pkey PRIMARY KEY (id),
+  CONSTRAINT venues_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.organizers(id)
 );
 CREATE TABLE public.wallet_passes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

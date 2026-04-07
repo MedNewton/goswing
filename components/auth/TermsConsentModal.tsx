@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, type ReactElement } from 'react';
 import { Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type Props = Readonly<{
   visible: boolean;
@@ -9,6 +10,7 @@ type Props = Readonly<{
 }>;
 
 export default function TermsConsentModal({ visible, onAccept, onCancel }: Props): ReactElement {
+  const { t } = useTranslation();
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.96)).current;
 
@@ -55,32 +57,31 @@ export default function TermsConsentModal({ visible, onAccept, onCancel }: Props
             elevation: 8,
           }}
         >
-          <Text className="text-[20px] font-semibold text-black">Terms &amp; Conditions</Text>
+          <Text className="text-[20px] font-semibold text-black">{t('onboarding.terms.title')}</Text>
           <Text className="text-[20px] text-gray600 mt-2">
-            Please review our terms and privacy policy
+            {t('onboarding.terms.subtitle')}
           </Text>
 
           <Text className="text-gray700 mt-4 leading-6">
-            By using GoSwing, you agree to our Terms of Service{"\n"}
-            and acknowledge that you have read our Privacy Policy.
+            {t('onboarding.terms.body')}
           </Text>
 
-          <Row label="GDPR Compliance" />
-          <Row label="Data Protection" />
-          <Row label="User Privacy Rights" />
+          <Row label={t('onboarding.terms.itemGdpr')} />
+          <Row label={t('onboarding.terms.itemDataProtection')} />
+          <Row label={t('onboarding.terms.itemPrivacyRights')} />
 
           <Pressable
             onPress={onAccept}
             className="mt-6 rounded-2xl bg-[#0B0B15] py-3 items-center"
           >
-            <Text className="text-white font-semibold">Accept &amp; Continue</Text>
+            <Text className="text-white font-semibold">{t('onboarding.terms.acceptContinue')}</Text>
           </Pressable>
 
           <Pressable
             onPress={onCancel}
             className="mt-3 rounded-2xl border border-gray300 bg-white py-3 items-center"
           >
-            <Text className="text-gray900">Cancel</Text>
+            <Text className="text-gray900">{t('common.cancel')}</Text>
           </Pressable>
         </Animated.View>
       </Animated.View>

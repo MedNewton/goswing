@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type PrivacySecurityPageProps = Readonly<{
   onBack: () => void;
@@ -49,6 +50,7 @@ function SubSection({ title, children }: { title: string; children: React.ReactN
 }
 
 export default function PrivacySecurityPage({ onBack }: PrivacySecurityPageProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   return (
@@ -58,7 +60,7 @@ export default function PrivacySecurityPage({ onBack }: PrivacySecurityPageProps
         <Pressable onPress={onBack} className="mr-3 active:opacity-70">
           <Feather name="arrow-left" size={24} color="#111827" />
         </Pressable>
-        <Text className="text-lg font-semibold text-black">Privacy Policy</Text>
+        <Text className="text-lg font-semibold text-black">{t('privacy.title')}</Text>
       </View>
 
       <ScrollView
@@ -67,138 +69,138 @@ export default function PrivacySecurityPage({ onBack }: PrivacySecurityPageProps
       >
         {/* Last Updated */}
         <Text className="text-center text-sm text-gray500 mt-4">
-          Last updated: August 30, 2025
+          {t('privacy.lastUpdated', { date: t('privacy.lastUpdatedDate') })}
         </Text>
 
         {/* Your Privacy Matters */}
         <SectionCard>
-          <SectionTitle icon="shield" title="Your Privacy Matters" />
+          <SectionTitle icon="shield" title={t('privacy.yourPrivacyMattersTitle')} />
           <Text className="text-sm text-gray700 leading-5">
-            At GoSwing, we are committed to protecting your privacy and ensuring the security of your personal information. This privacy policy explains how we collect, use, and safeguard your data when you use our services.
+            {t('privacy.yourPrivacyMattersBody')}
           </Text>
         </SectionCard>
 
         {/* Information We Collect */}
         <SectionCard>
-          <SectionTitle icon="database" title="Information We Collect" />
-          
-          <SubSection title="Personal Information">
-            <BulletPoint>Name, email address, and phone number</BulletPoint>
-            <BulletPoint>Profile picture and biographical information</BulletPoint>
-            <BulletPoint>Payment information (processed securely by our partners)</BulletPoint>
-            <BulletPoint>Location data when you grant permission</BulletPoint>
+          <SectionTitle icon="database" title={t('privacy.informationWeCollectTitle')} />
+
+          <SubSection title={t('privacy.personalInformationTitle')}>
+            <BulletPoint>{t('privacy.personalInformation1')}</BulletPoint>
+            <BulletPoint>{t('privacy.personalInformation2')}</BulletPoint>
+            <BulletPoint>{t('privacy.personalInformation3')}</BulletPoint>
+            <BulletPoint>{t('privacy.personalInformation4')}</BulletPoint>
           </SubSection>
 
-          <SubSection title="Usage Information">
-            <BulletPoint>Events you view, save, and attend</BulletPoint>
-            <BulletPoint>Search queries and preferences</BulletPoint>
-            <BulletPoint>App usage patterns and interactions</BulletPoint>
-            <BulletPoint>Device information and IP address</BulletPoint>
+          <SubSection title={t('privacy.usageInformationTitle')}>
+            <BulletPoint>{t('privacy.usageInformation1')}</BulletPoint>
+            <BulletPoint>{t('privacy.usageInformation2')}</BulletPoint>
+            <BulletPoint>{t('privacy.usageInformation3')}</BulletPoint>
+            <BulletPoint>{t('privacy.usageInformation4')}</BulletPoint>
           </SubSection>
         </SectionCard>
 
         {/* How We Use Your Information */}
         <SectionCard>
-          <SectionTitle icon="eye" title="How We Use Your Information" />
+          <SectionTitle icon="eye" title={t('privacy.howWeUseTitle')} />
           <BulletPoint>
-            <Text className="font-medium">Service Provision:</Text> To provide and improve our event discovery services
+            <Text className="font-medium">{t('privacy.serviceProvisionLabel')}</Text> {t('privacy.serviceProvisionBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Personalization:</Text> To recommend events and content tailored to your interests
+            <Text className="font-medium">{t('privacy.personalizationLabel')}</Text> {t('privacy.personalizationBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Communication:</Text> To send you important updates, notifications, and marketing (with your consent)
+            <Text className="font-medium">{t('privacy.communicationLabel')}</Text> {t('privacy.communicationBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Safety & Security:</Text> To protect against fraud and ensure platform safety
+            <Text className="font-medium">{t('privacy.safetySecurityLabel')}</Text> {t('privacy.safetySecurityBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Analytics:</Text> To understand how our service is used and improve user experience
+            <Text className="font-medium">{t('privacy.analyticsLabel')}</Text> {t('privacy.analyticsBody')}
           </BulletPoint>
         </SectionCard>
 
         {/* Information Sharing */}
         <SectionCard>
-          <SectionTitle icon="users" title="Information Sharing" />
+          <SectionTitle icon="users" title={t('privacy.informationSharingTitle')} />
           <Text className="text-sm text-gray700 leading-5 mb-2">
-            We do not sell your personal information. We may share your information only in these limited circumstances:
+            {t('privacy.informationSharingBody')}
           </Text>
           <BulletPoint>
-            <Text className="font-medium">Event Organizers:</Text> Basic attendee information for events you register for
+            <Text className="font-medium">{t('privacy.eventOrganizersLabel')}</Text> {t('privacy.eventOrganizersBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Service Providers:</Text> Third-party services that help us operate our platform
+            <Text className="font-medium">{t('privacy.serviceProvidersLabel')}</Text> {t('privacy.serviceProvidersBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Legal Requirements:</Text> When required by law or to protect our rights
+            <Text className="font-medium">{t('privacy.legalRequirementsLabel')}</Text> {t('privacy.legalRequirementsBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Business Transfers:</Text> In case of merger, acquisition, or sale of our company
+            <Text className="font-medium">{t('privacy.businessTransfersLabel')}</Text> {t('privacy.businessTransfersBody')}
           </BulletPoint>
         </SectionCard>
 
         {/* Your Rights & Choices */}
         <SectionCard>
-          <SectionTitle icon="check-circle" title="Your Rights & Choices" />
+          <SectionTitle icon="check-circle" title={t('privacy.yourRightsTitle')} />
           <BulletPoint>
-            <Text className="font-medium">Access:</Text> Request a copy of your personal data
+            <Text className="font-medium">{t('privacy.accessLabel')}</Text> {t('privacy.accessBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Correction:</Text> Update or correct your information
+            <Text className="font-medium">{t('privacy.correctionLabel')}</Text> {t('privacy.correctionBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Deletion:</Text> Request deletion of your account and data
+            <Text className="font-medium">{t('privacy.deletionLabel')}</Text> {t('privacy.deletionBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Portability:</Text> Export your data in a portable format
+            <Text className="font-medium">{t('privacy.portabilityLabel')}</Text> {t('privacy.portabilityBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Opt-out:</Text> Unsubscribe from marketing communications
+            <Text className="font-medium">{t('privacy.optOutLabel')}</Text> {t('privacy.optOutBody')}
           </BulletPoint>
           <BulletPoint>
-            <Text className="font-medium">Restrict Processing:</Text> Limit how we use your data
+            <Text className="font-medium">{t('privacy.restrictProcessingLabel')}</Text> {t('privacy.restrictProcessingBody')}
           </BulletPoint>
         </SectionCard>
 
         {/* Data Security */}
         <SectionCard>
-          <SectionTitle icon="lock" title="Data Security" />
+          <SectionTitle icon="lock" title={t('privacy.dataSecurityTitle')} />
           <Text className="text-sm text-gray700 leading-5">
-            We implement industry-standard security measures to protect your data, including encryption, secure servers, and regular security audits. However, no method of transmission over the internet is 100% secure, and we cannot guarantee absolute security.
+            {t('privacy.dataSecurityBody')}
           </Text>
         </SectionCard>
 
         {/* International Data Transfers */}
         <SectionCard>
-          <SectionTitle icon="globe" title="International Data Transfers" />
+          <SectionTitle icon="globe" title={t('privacy.internationalTransfersTitle')} />
           <Text className="text-sm text-gray700 leading-5">
-            Your information may be transferred to and processed in countries other than your own. We ensure appropriate safeguards are in place for such transfers in accordance with applicable data protection laws.
+            {t('privacy.internationalTransfersBody')}
           </Text>
         </SectionCard>
 
         {/* Children's Privacy */}
         <SectionCard>
-          <SectionTitle icon="alert-circle" title="Children's Privacy" />
+          <SectionTitle icon="alert-circle" title={t('privacy.childrenPrivacyTitle')} />
           <Text className="text-sm text-gray700 leading-5">
-            Our service is not directed to children under 13. We do not knowingly collect personal information from children under 13. If you become aware that a child has provided us with personal information, please contact us immediately.
+            {t('privacy.childrenPrivacyBody')}
           </Text>
         </SectionCard>
 
         {/* Contact Us */}
         <SectionCard>
-          <SectionTitle icon="mail" title="Contact Us" />
+          <SectionTitle icon="mail" title={t('privacy.contactUsTitle')} />
           <Text className="text-sm text-gray700 leading-5 mb-2">
-            If you have questions about this privacy policy or your personal data, contact us at:
+            {t('privacy.contactUsBody')}
           </Text>
           <View className="mt-2">
             <Text className="text-sm text-gray700">
-              <Text className="font-medium">Email:</Text> privacy@goswing.com
+              <Text className="font-medium">{t('privacy.emailLabel')}</Text> privacy@goswing.com
             </Text>
             <Text className="text-sm text-gray700 mt-1">
-              <Text className="font-medium">Address:</Text> 123 Privacy Street, Tech City, TC 12345
+              <Text className="font-medium">{t('privacy.addressLabel')}</Text> 123 Privacy Street, Tech City, TC 12345
             </Text>
             <Text className="text-sm text-gray700 mt-1">
-              <Text className="font-medium">Phone:</Text> +1 (555) 123-PRIVACY
+              <Text className="font-medium">{t('privacy.phoneLabel')}</Text> +1 (555) 123-PRIVACY
             </Text>
           </View>
         </SectionCard>
@@ -207,10 +209,10 @@ export default function PrivacySecurityPage({ onBack }: PrivacySecurityPageProps
         <SectionCard>
           <View className="flex-row items-center gap-x-2 mb-13">
             <Feather name="refresh-cw" size={18} color="#F97316" />
-            <Text className="text-base font-semibold text-orange-500">Changes to This Policy</Text>
+            <Text className="text-base font-semibold text-orange-500">{t('privacy.changesTitle')}</Text>
           </View>
           <Text className="text-sm text-gray700 leading-5">
-            We may update this privacy policy from time to time. We will notify you of any material changes by posting the new policy on this page and updating the "Last updated" date. Continued use of our service constitutes acceptance of the updated policy.
+            {t('privacy.changesBody')}
           </Text>
         </SectionCard>
       </ScrollView>

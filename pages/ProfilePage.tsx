@@ -14,8 +14,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useClerk } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
 import { useProfile, useSettings } from '@/hooks/profile';
+import { useLanguage } from '@/lib/i18n/useLanguage';
 
 import AccountSettingsPage from '@/pages/AccountSettingsPage';
 import PaymentMethodsPage from '@/pages/PaymentMethodsPage';
@@ -95,6 +97,8 @@ export default function ProfilePage({
   onNavigateToReservations,
   onNavigateToSaved,
 }: ProfilePageProps): ReactElement {
+  const { t } = useTranslation();
+  const { lang, setLanguage } = useLanguage();
   const insets = useSafeAreaInsets();
   const { signOut } = useClerk();
 
@@ -114,7 +118,7 @@ export default function ProfilePage({
       await signOut();
     } catch (err: any) {
       setSigningOut(false);
-      Alert.alert('Sign out failed', err?.message ?? 'Please try again.');
+      Alert.alert(t('profile.signOutFailed'), err?.message ?? t('profile.tryAgain'));
     }
   };
 
@@ -122,7 +126,7 @@ export default function ProfilePage({
     try {
       await updateSettings({ pushNotificationsEnabled: value });
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Could not update setting.');
+      Alert.alert(t('common.error'), err?.message ?? t('profile.couldNotUpdateSetting'));
     }
   };
 
@@ -130,7 +134,7 @@ export default function ProfilePage({
     try {
       await updateSettings({ locationServicesEnabled: value });
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Could not update setting.');
+      Alert.alert(t('common.error'), err?.message ?? t('profile.couldNotUpdateSetting'));
     }
   };
 
@@ -186,15 +190,15 @@ export default function ProfilePage({
     return (
       <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">Loading profile…</Text>
+        <Text className="text-gray600 mt-3">{t('profile.loadingProfile')}</Text>
       </SafeAreaView>
     );
   }
 
   const statsItems = [
-    { key: 'attended' as const, icon: 'calendar', label: 'Events Attended', value: profile?.stats?.attendedCount ?? 0 },
-    { key: 'saved' as const, icon: 'heart', label: 'Events Saved', value: profile?.stats?.savedCount ?? 0 },
-    { key: 'reviews' as const, icon: 'star', label: 'Reviews', value: profile?.stats?.reviewsCount ?? 0 },
+    { key: 'attended' as const, icon: 'calendar', label: t('profile.eventsAttended'), value: profile?.stats?.attendedCount ?? 0 },
+    { key: 'saved' as const, icon: 'heart', label: t('profile.eventsSaved'), value: profile?.stats?.savedCount ?? 0 },
+    { key: 'reviews' as const, icon: 'star', label: t('profile.reviews'), value: profile?.stats?.reviewsCount ?? 0 },
   ];
 
   return (
@@ -222,17 +226,17 @@ export default function ProfilePage({
 
             <View className="flex-1 ml-4">
               <Text className="text-black text-base font-semibold" numberOfLines={1}>
-                {profile?.name ?? 'User Name'}
+                {profile?.name ?? t('profile.userNameFallback')}
               </Text>
               <View className="mt-1 flex-row items-center gap-x-2">
                 <Feather name="mail" size={14} color="#6B7280" />
                 <Text className="text-gray600 text-xs" numberOfLines={1}>
-                  {profile?.email ?? 'user@example.com'}
+                  {profile?.email ?? t('profile.userEmailFallback')}
                 </Text>
               </View>
               <View className="mt-1 flex-row items-center gap-x-2">
                 <Feather name="map-pin" size={14} color="#6B7280" />
-                <Text className="text-gray600 text-xs">{profile?.city ?? 'Unknown'}</Text>
+                <Text className="text-gray600 text-xs">{profile?.city ?? t('common.unknown')}</Text>
               </View>
             </View>
 
@@ -241,7 +245,7 @@ export default function ProfilePage({
               onPress={() => setRoute({ name: 'editProfile' })}
             >
               <Feather name="edit-2" size={14} color="#111827" />
-              <Text className="text-sm text-gray900">Edit</Text>
+              <Text className="text-sm text-gray900">{t('common.edit')}</Text>
             </Pressable>
           </View>
         </View>
@@ -256,19 +260,21 @@ export default function ProfilePage({
             >
               <Feather name={s.icon as any} size={20} color="#0B0B15" />
               <Text className="mt-2 text-black font-semibold">{s.value}</Text>
-              <Text className="mt-1 text-xs text-gray600">{s.label}</Text>
+              <Text className="mt-1 text-xs text-gray600 text-center leading-4 min-h-[32px] w-full px-1">
+                {s.label}
+              </Text>
             </Pressable>
           ))}
         </View>
 
         {/* Interests */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black">Interests</Text>
+          <Text className="text-base font-semibold text-black">{t('profile.interests')}</Text>
           <View className="mt-3 flex-row flex-wrap gap-2">
             {(profile?.interests ?? []).length > 0 ? (
               profile!.interests!.map((i: string) => <Chip key={i} label={i} />)
             ) : (
-              <Text className="text-sm text-gray500">No interests selected</Text>
+              <Text className="text-sm text-gray500">{t('profile.noInterestsSelected')}</Text>
             )}
           </View>
         </View>
@@ -276,16 +282,16 @@ export default function ProfilePage({
         {/* Quick Settings */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white">
           <View className="px-5 py-4">
-            <Text className="text-base font-semibold text-black">Quick Settings</Text>
+            <Text className="text-base font-semibold text-black">{t('profile.quickSettings')}</Text>
           </View>
 
           <View className="px-5 py-3 flex-row items-center justify-between border-t border-gray200">
             <View>
               <View className="flex-row items-center gap-x-2">
                 <Feather name="bell" size={16} color="#111827" />
-                <Text className="text-gray900 font-medium">Push Notifications</Text>
+                <Text className="text-gray900 font-medium">{t('profile.pushNotifications')}</Text>
               </View>
-              <Text className="text-xs text-gray500 mt-1">Get notified about events</Text>
+              <Text className="text-xs text-gray500 mt-1">{t('profile.pushNotificationsSubtitle')}</Text>
             </View>
             <Switch
               value={settings?.pushNotificationsEnabled ?? false}
@@ -299,9 +305,9 @@ export default function ProfilePage({
             <View>
               <View className="flex-row items-center gap-x-2">
                 <Feather name="map-pin" size={16} color="#111827" />
-                <Text className="text-gray900 font-medium">Location Services</Text>
+                <Text className="text-gray900 font-medium">{t('profile.locationServices')}</Text>
               </View>
-              <Text className="text-xs text-gray500 mt-1">Find events near you</Text>
+              <Text className="text-xs text-gray500 mt-1">{t('profile.locationServicesSubtitle')}</Text>
             </View>
             <Switch
               value={settings?.locationServicesEnabled ?? false}
@@ -310,35 +316,43 @@ export default function ProfilePage({
               trackColor={{ false: '#E5E7EB', true: '#59B259' }}
             />
           </View>
+
+          <Divider />
+          <SettingsRow
+            icon="globe"
+            title={t('profile.language')}
+            subtitle={lang === 'en' ? t('language.en') : t('language.fr')}
+            onPress={() => setLanguage(lang === 'en' ? 'fr' : 'en')}
+          />
         </View>
 
         {/* Settings Links */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white overflow-hidden">
           <SettingsRow
             icon="user"
-            title="Account Settings"
-            subtitle="Manage your personal information"
+            title={t('profile.accountSettings')}
+            subtitle={t('profile.accountSettingsSubtitle')}
             onPress={() => setRoute({ name: 'accountSettings' })}
           />
           <Divider />
           <SettingsRow
             icon="credit-card"
-            title="Payment Methods"
-            subtitle="Manage cards and billing"
+            title={t('profile.paymentMethods')}
+            subtitle={t('profile.paymentMethodsSubtitle')}
             onPress={() => setRoute({ name: 'paymentMethods' })}
           />
           <Divider />
           <SettingsRow
             icon="bell"
-            title="Notification Preferences"
-            subtitle="Customize your alerts"
+            title={t('profile.notificationPreferences')}
+            subtitle={t('profile.notificationPreferencesSubtitle')}
             onPress={() => setRoute({ name: 'notificationPreferences' })}
           />
           <Divider />
           <SettingsRow
             icon="shield"
-            title="Privacy & Security"
-            subtitle="Control your data and privacy"
+            title={t('profile.privacySecurity')}
+            subtitle={t('profile.privacySecuritySubtitle')}
             onPress={() => setRoute({ name: 'privacySecurity' })}
           />
         </View>
@@ -347,15 +361,15 @@ export default function ProfilePage({
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white overflow-hidden">
           <SettingsRow
             icon="help-circle"
-            title="Help & Support"
-            subtitle="Get help and contact us"
+            title={t('profile.helpSupport')}
+            subtitle={t('profile.helpSupportSubtitle')}
             onPress={() => setRoute({ name: 'helpSupport' })}
           />
           <Divider />
           <SettingsRow
             icon="file-text"
-            title="Terms & Privacy"
-            subtitle="Legal information"
+            title={t('profile.termsPrivacy')}
+            subtitle={t('profile.termsPrivacySubtitle')}
             onPress={() => setRoute({ name: 'termsConditions' })}
           />
         </View>
@@ -372,7 +386,7 @@ export default function ProfilePage({
           <View className="flex-row items-center gap-x-3">
             <Feather name="log-out" size={18} color="#111827" />
             <Text className="text-gray900 font-medium">
-              {signingOut ? 'Signing out…' : 'Sign Out'}
+              {signingOut ? t('profile.signingOut') : t('profile.signOut')}
             </Text>
           </View>
           {signingOut ? <ActivityIndicator size="small" color="#9CA3AF" /> : null}

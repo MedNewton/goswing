@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export type SortBy = 'best' | 'date' | 'price';
 export type DateQuick =
@@ -229,6 +230,7 @@ export default function FiltersDrawer({
   onApply,
   onReset,
 }: FiltersDrawerProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   const initialNormalized = useMemo<FiltersPayload>(() => {
@@ -371,7 +373,7 @@ export default function FiltersDrawer({
           className="px-4 pb-3 border-b border-gray200 bg-white"
         >
           <View className="flex-row items-center justify-between">
-            <Text className="text-gray800 text-base font-semibold">Filters</Text>
+            <Text className="text-gray800 text-base font-semibold">{t('filters.title')}</Text>
             <Pressable
               accessibilityRole="button"
               onPress={handleClose}
@@ -388,37 +390,37 @@ export default function FiltersDrawer({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Section title="Sort By">
+          <Section title={t('filters.sortBy')}>
             <ListSingle
               value={sortBy}
               onChange={(k) => setSortBy(k as SortBy)}
               options={[
-                { key: 'best', label: 'Best Match' },
-                { key: 'date', label: 'Date' },
-                { key: 'price', label: 'Price' },
+                { key: 'best', label: t('filters.bestMatch') },
+                { key: 'date', label: t('filters.date') },
+                { key: 'price', label: t('filters.price') },
               ]}
             />
           </Section>
 
-          <Section title="Date">
+          <Section title={t('filters.date')}>
             <ListSingle
               value={dateQuick}
               onChange={(k) => setDateQuick(k as DateQuick)}
               options={[
-                { key: 'any', label: 'Any' },
-                { key: 'tonight', label: 'Tonight' },
-                { key: 'tomorrow', label: 'Tomorrow' },
-                { key: 'this_week', label: 'This Week' },
-                { key: 'this_weekend', label: 'This Weekend' },
-                { key: 'next_week', label: 'Next Week' },
-                { key: 'next_weekend', label: 'Next Weekend' },
-                { key: 'this_month', label: 'This Month' },
-                { key: 'pick', label: 'Choose a Date' },
+                { key: 'any', label: t('filters.any') },
+                { key: 'tonight', label: t('when.tonight') },
+                { key: 'tomorrow', label: t('when.tomorrow') },
+                { key: 'this_week', label: t('when.thisWeek') },
+                { key: 'this_weekend', label: t('when.thisWeekend') },
+                { key: 'next_week', label: t('when.nextWeek') },
+                { key: 'next_weekend', label: t('when.nextWeekend') },
+                { key: 'this_month', label: t('when.thisMonth') },
+                { key: 'pick', label: t('filters.chooseDate') },
               ]}
             />
           </Section>
 
-          <Section title="Venue Type">
+          <Section title={t('filters.venueType')}>
             <GridMulti
               options={[...VENUE_TYPES]}
               values={venueTypes}
@@ -428,7 +430,7 @@ export default function FiltersDrawer({
             />
           </Section>
 
-          <Section title="Music Style">
+          <Section title={t('filters.musicStyle')}>
             <GridMulti
               options={[...MUSIC_STYLES]}
               values={musicStyles}
@@ -438,7 +440,7 @@ export default function FiltersDrawer({
             />
           </Section>
 
-          <Section title="Party Type">
+          <Section title={t('filters.partyType')}>
             <GridMulti
               options={[...PARTY_TYPES]}
               values={partyTypes}
@@ -448,11 +450,11 @@ export default function FiltersDrawer({
             />
           </Section>
 
-          <Section title="Access">
+          <Section title={t('filters.access')}>
             <ListMulti
               options={[
-                { key: 'free', label: 'Free' },
-                { key: 'free_ladies', label: 'Free for Ladies' },
+                { key: 'free', label: t('filters.free') },
+                { key: 'free_ladies', label: t('filters.freeLadies') },
               ]}
               values={access}
               onToggle={(k) =>
@@ -474,7 +476,7 @@ export default function FiltersDrawer({
               onPress={resetAndApply}
               className="w-full rounded-2xl border border-gray300 bg-white py-3 items-center"
             >
-              <Text className="text-gray800 font-semibold">Reset</Text>
+              <Text className="text-gray800 font-semibold">{t('common.reset')}</Text>
             </Pressable>
 
             <Pressable
@@ -482,7 +484,7 @@ export default function FiltersDrawer({
               onPress={applyAndClose}
               className="w-full rounded-2xl bg-gray900 py-3 items-center"
             >
-              <Text className="text-white font-semibold">Apply Filters</Text>
+              <Text className="text-white font-semibold">{t('filters.apply')}</Text>
             </Pressable>
           </View>
         </View>

@@ -24,7 +24,10 @@ export type UserProfile = Readonly<{
   updatedAt?: string;
   deactivatedAt?: string | null;
   deletedAt?: string | null;
-  
+
+  // Optional profile fields (new schema)
+  occupation?: string | null;
+
   // Computed stats (from other tables)
   stats?: Readonly<{
     attendedCount?: number;
@@ -195,6 +198,14 @@ export type Event = Readonly<{
   partyTypes?: ReadonlyArray<string>;
   access?: ReadonlyArray<'free' | 'free_ladies'>;
   basePrice?: number;
+
+  // New schema columns (optional, populated where selected)
+  endsAtIso?: string | null;
+  attendeeCount?: number;
+  waitlistEnabled?: boolean;
+  approvalMode?: string;
+  sharingEnabled?: boolean;
+  policies?: ReadonlyArray<unknown>;
 }>;
 
 // =====================================================

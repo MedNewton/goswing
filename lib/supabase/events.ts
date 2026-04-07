@@ -20,6 +20,11 @@ type DbVenue = {
   lat: number | string | null;
   lng: number | string | null;
   venue_type: string | null;
+  description: string | null;
+  postal_code: string | null;
+  capacity: number | null;
+  free_access: boolean | null;
+  free_for_ladies: boolean | null;
 };
 
 type DbOrganizer = {
@@ -37,10 +42,16 @@ type DbEventRow = {
   category: string | null;
   hero_image_url: string | null;
   starts_at: string | null;
+  ends_at: string | null;
   status: string | null;
 
   is_free: boolean | null;
   min_price_cents: number | null;
+  attendee_count: number | null;
+  waitlist_enabled: boolean | null;
+  approval_mode: string | null;
+  sharing_enabled: boolean | null;
+  policies: unknown;
 
   organizers: DbOrganizer | null;
   venues: DbVenue | null;
@@ -125,7 +136,14 @@ function mapRowToEvent(row: DbEventRow): Event {
 
     favorite: false,
     attendees: [],
-    attendeesExtraCount: 0,
+    attendeesExtraCount: row.attendee_count ?? 0,
+
+    endsAtIso: row.ends_at ?? null,
+    attendeeCount: row.attendee_count ?? 0,
+    waitlistEnabled: Boolean(row.waitlist_enabled),
+    approvalMode: row.approval_mode ?? undefined,
+    sharingEnabled: row.sharing_enabled == null ? true : Boolean(row.sharing_enabled),
+    policies: Array.isArray(row.policies) ? (row.policies as unknown[]) : [],
   } satisfies Event;
 }
 
@@ -143,11 +161,17 @@ export async function getPublishedEvents(): Promise<ReadonlyArray<Event>> {
       category,
       hero_image_url,
       starts_at,
+      ends_at,
       status,
       is_free,
       min_price_cents,
+      attendee_count,
+      waitlist_enabled,
+      approval_mode,
+      sharing_enabled,
+      policies,
       organizers:organizer_id ( id, name ),
-      venues:venue_id ( name, city, country_code, lat, lng, venue_type ),
+      venues:venue_id ( name, city, country_code, lat, lng, venue_type, description, postal_code, capacity, free_access, free_for_ladies ),
       event_tags ( tags:tag_id ( type, slug ) )
     `
     )
@@ -172,6 +196,8 @@ export type TicketType = Readonly<{
   currency: string;
   inventory?: number | null; // we use capacity as inventory
   benefits?: ReadonlyArray<string> | null;
+  isFree?: boolean;
+  freeForLadies?: boolean;
 }>;
 
 type DbTicketTypeRow = {
@@ -186,6 +212,8 @@ type DbTicketTypeRow = {
   sales_start_at: string | null;
   sales_end_at: string | null;
   created_at: string | null;
+  is_free: boolean | null;
+  free_for_ladies: boolean | null;
 };
 
 async function resolveEventDbId(eventUiId: string): Promise<string | null> {
@@ -239,7 +267,7 @@ export async function getTicketTypesForEvent(eventUiId: string): Promise<Readonl
 
   const { data, error } = await supabase
     .from('ticket_types')
-    .select('id,event_id,name,description,price_cents,currency,benefits,capacity,sales_start_at,sales_end_at,created_at')
+    .select('id,event_id,name,description,price_cents,currency,benefits,capacity,sales_start_at,sales_end_at,created_at,is_free,free_for_ladies')
     .eq('event_id', eventDbId)
     .order('created_at', { ascending: true });
 
@@ -259,6 +287,8 @@ export async function getTicketTypesForEvent(eventUiId: string): Promise<Readonl
         currency,
         inventory: r.capacity == null ? null : r.capacity,
         benefits: parseBenefits(r.benefits),
+        isFree: Boolean(r.is_free),
+        freeForLadies: Boolean(r.free_for_ladies),
       } satisfies TicketType;
     });
 }
@@ -277,11 +307,17 @@ const EVENT_DETAIL_SELECT = `
   category,
   hero_image_url,
   starts_at,
+  ends_at,
   status,
   is_free,
   min_price_cents,
+  attendee_count,
+  waitlist_enabled,
+  approval_mode,
+  sharing_enabled,
+  policies,
   organizers:organizer_id ( id, name ),
-  venues:venue_id ( name, city, country_code, lat, lng, venue_type ),
+  venues:venue_id ( name, city, country_code, lat, lng, venue_type, description, postal_code, capacity, free_access, free_for_ladies ),
   event_tags ( tags:tag_id ( type, slug ) )
 `;
 

@@ -1,6 +1,7 @@
 // components/sections/FeaturedEvents.tsx
 import React, { type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import EventCard, { type EventItem } from '@/components/blocks/EventCard';
 
@@ -19,7 +20,7 @@ const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
   c.filter(Boolean).join(' ');
 
 export default function FeaturedEvents({
-  title = 'Featured Events',
+  title,
   events,
   onPressEvent,
   onToggleFavorite,
@@ -29,10 +30,13 @@ export default function FeaturedEvents({
   highlightId,
   ...rest
 }: FeaturedEventsProps): ReactElement {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t('home.featuredEvents');
+
   return (
     <View {...rest} className={cx('w-full', className)}>
       <View className="px-5 mt-1 mb-4 flex-row items-center justify-between">
-        <Text className="text-base font-semibold text-black">{title}</Text>
+        <Text className="text-base font-semibold text-black">{resolvedTitle}</Text>
 
         {onPressSeeAll ? (
           <Pressable
@@ -40,7 +44,7 @@ export default function FeaturedEvents({
             onPress={onPressSeeAll}
             className="active:opacity-90"
           >
-            <Text className="text-sm text-gray700 font-medium">See All</Text>
+            <Text className="text-sm text-gray700 font-medium">{t('common.seeAll')}</Text>
           </Pressable>
         ) : null}
       </View>

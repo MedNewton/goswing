@@ -1,5 +1,6 @@
 import React, { type ReactElement } from 'react';
 import { View, Text, ScrollView, type ViewProps } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Chip from '@/components/ui/Chip';
 
 export type WhenKey = 'tonight' | 'tomorrow' | 'this_week' | 'this_weekend' | 'next_week' | 'next_weekend' | 'this_month';
@@ -17,28 +18,31 @@ export type WhenSliderProps = Readonly<
 const cx = (...classes: ReadonlyArray<string | null | undefined | false>): string =>
   classes.filter(Boolean).join(' ');
 
-const items: ReadonlyArray<{ key: WhenKey; label: string }> = [
-  { key: 'tonight',      label: 'Tonight' },
-  { key: 'tomorrow',     label: 'Tomorrow' },
-  { key: 'this_week',    label: 'This Week' },
-  { key: 'this_weekend', label: 'This Weekend' },
-  { key: 'next_week',    label: 'Next Week' },
-  { key: 'next_weekend', label: 'Next Weekend' },
-  { key: 'this_month',   label: 'This Month' },
+const items: ReadonlyArray<{ key: WhenKey; labelKey: string }> = [
+  { key: 'tonight', labelKey: 'when.tonight' },
+  { key: 'tomorrow', labelKey: 'when.tomorrow' },
+  { key: 'this_week', labelKey: 'when.thisWeek' },
+  { key: 'this_weekend', labelKey: 'when.thisWeekend' },
+  { key: 'next_week', labelKey: 'when.nextWeek' },
+  { key: 'next_weekend', labelKey: 'when.nextWeekend' },
+  { key: 'this_month', labelKey: 'when.thisMonth' },
 ] as const;
 
 export default function WhenSlider({
-  title = 'When',
+  title,
   activeKey,
   onChange,
   className,
   contentClassName,
   ...rest
 }: WhenSliderProps): ReactElement {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t('when.title');
+
   return (
     <View {...rest} className={cx('w-full', className)}>
       <View className="px-4 mb-3">
-        <Text className="text-lg font-bold text-black">{title}</Text>
+        <Text className="text-lg font-bold text-black">{resolvedTitle}</Text>
       </View>
 
       <ScrollView
@@ -51,7 +55,7 @@ export default function WhenSlider({
           return (
             <Chip
               key={it.key}
-              label={it.label}
+              label={t(it.labelKey)}
               selected={selected}
               variant="outline"
               tone={selected ? 'brand' : 'gray'}

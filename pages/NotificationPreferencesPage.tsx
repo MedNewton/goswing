@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { useNotificationPreferences } from '@/hooks/profile';
 import type { NotificationPreferences } from '@/types/domain';
@@ -76,6 +77,7 @@ function ToggleRow({
 export default function NotificationPreferencesPage({
   onBack,
 }: NotificationPreferencesPageProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   const { preferences, updatePreferences, isLoading } = useNotificationPreferences();
@@ -88,7 +90,7 @@ export default function NotificationPreferencesPage({
     try {
       await updatePreferences({ [key]: value });
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Could not update preference.');
+      Alert.alert(t('common.error'), err?.message ?? t('notifications.couldNotUpdatePreference'));
     }
   };
 
@@ -96,9 +98,9 @@ export default function NotificationPreferencesPage({
     try {
       setIsSaving(true);
       // Quiet hours are already saved via individual toggles
-      Alert.alert('Saved', 'Your notification preferences have been saved.');
+      Alert.alert(t('notifications.savedTitle'), t('notifications.savedMessage'));
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Could not save preferences.');
+      Alert.alert(t('common.error'), err?.message ?? t('notifications.couldNotSavePreferences'));
     } finally {
       setIsSaving(false);
     }
@@ -108,7 +110,7 @@ export default function NotificationPreferencesPage({
     return (
       <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">Loading preferences…</Text>
+        <Text className="text-gray600 mt-3">{t('notifications.loadingPreferences')}</Text>
       </SafeAreaView>
     );
   }
@@ -120,7 +122,7 @@ export default function NotificationPreferencesPage({
         <Pressable onPress={onBack} className="mr-4 active:opacity-70">
           <Feather name="arrow-left" size={24} color="#111827" />
         </Pressable>
-        <Text className="text-lg font-semibold text-black">Notification Preferences</Text>
+        <Text className="text-lg font-semibold text-black">{t('notifications.title')}</Text>
       </View>
 
       <ScrollView
@@ -131,12 +133,12 @@ export default function NotificationPreferencesPage({
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
           <View className="flex-row items-center gap-x-2 mb-2">
             <Feather name="bell" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">Push Notifications</Text>
+            <Text className="text-base font-semibold text-black">{t('notifications.pushTitle')}</Text>
           </View>
 
           <ToggleRow
-            title="Enable Push Notifications"
-            subtitle="Receive notifications on your device"
+            title={t('notifications.pushEnableTitle')}
+            subtitle={t('notifications.pushEnableSubtitle')}
             value={preferences?.pushEnabled ?? true}
             onValueChange={(v) => handleToggle('pushEnabled', v)}
           />
@@ -144,8 +146,8 @@ export default function NotificationPreferencesPage({
           <View className="border-t border-gray200 mt-2 pt-2">
             <ToggleRow
               icon="calendar"
-              title="Event Reminders"
-              subtitle="Get notified before your events start"
+              title={t('notifications.eventRemindersTitle')}
+              subtitle={t('notifications.eventRemindersSubtitle')}
               value={preferences?.pushEventReminders ?? true}
               onValueChange={(v) => handleToggle('pushEventReminders', v)}
               disabled={!preferences?.pushEnabled}
@@ -153,8 +155,8 @@ export default function NotificationPreferencesPage({
             />
             <ToggleRow
               icon="zap"
-              title="Event Updates"
-              subtitle="Changes to events you're attending"
+              title={t('notifications.eventUpdatesTitle')}
+              subtitle={t('notifications.eventUpdatesSubtitle')}
               value={preferences?.pushEventUpdates ?? true}
               onValueChange={(v) => handleToggle('pushEventUpdates', v)}
               disabled={!preferences?.pushEnabled}
@@ -162,8 +164,8 @@ export default function NotificationPreferencesPage({
             />
             <ToggleRow
               icon="users"
-              title="New Followers"
-              subtitle="When someone follows you"
+              title={t('notifications.newFollowersTitle')}
+              subtitle={t('notifications.newFollowersSubtitle')}
               value={preferences?.pushNewFollowers ?? true}
               onValueChange={(v) => handleToggle('pushNewFollowers', v)}
               disabled={!preferences?.pushEnabled}
@@ -171,8 +173,8 @@ export default function NotificationPreferencesPage({
             />
             <ToggleRow
               icon="heart"
-              title="Event Recommendations"
-              subtitle="Events you might like based on your interests"
+              title={t('notifications.eventRecommendationsTitle')}
+              subtitle={t('notifications.eventRecommendationsSubtitle')}
               value={preferences?.pushEventRecommendations ?? true}
               onValueChange={(v) => handleToggle('pushEventRecommendations', v)}
               disabled={!preferences?.pushEnabled}
@@ -185,44 +187,44 @@ export default function NotificationPreferencesPage({
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
           <View className="flex-row items-center gap-x-2 mb-2">
             <Feather name="mail" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">Email Notifications</Text>
+            <Text className="text-base font-semibold text-black">{t('notifications.emailTitle')}</Text>
           </View>
 
           <ToggleRow
-            title="Enable Email Notifications"
-            subtitle="Receive notifications via email"
+            title={t('notifications.emailEnableTitle')}
+            subtitle={t('notifications.emailEnableSubtitle')}
             value={preferences?.emailEnabled ?? true}
             onValueChange={(v) => handleToggle('emailEnabled', v)}
           />
 
           <View className="border-t border-gray200 mt-2 pt-2">
             <ToggleRow
-              title="Weekly Digest"
-              subtitle="Summary of events happening near you"
+              title={t('notifications.weeklyDigestTitle')}
+              subtitle={t('notifications.weeklyDigestSubtitle')}
               value={preferences?.emailWeeklyDigest ?? true}
               onValueChange={(v) => handleToggle('emailWeeklyDigest', v)}
               disabled={!preferences?.emailEnabled}
               indented
             />
             <ToggleRow
-              title="Event Invites"
-              subtitle="Invitations from friends and organizers"
+              title={t('notifications.eventInvitesTitle')}
+              subtitle={t('notifications.eventInvitesSubtitle')}
               value={preferences?.emailEventInvites ?? true}
               onValueChange={(v) => handleToggle('emailEventInvites', v)}
               disabled={!preferences?.emailEnabled}
               indented
             />
             <ToggleRow
-              title="Promotions & Deals"
-              subtitle="Special offers and discounts on events"
+              title={t('notifications.promotionsTitle')}
+              subtitle={t('notifications.promotionsSubtitle')}
               value={preferences?.emailPromotions ?? false}
               onValueChange={(v) => handleToggle('emailPromotions', v)}
               disabled={!preferences?.emailEnabled}
               indented
             />
             <ToggleRow
-              title="Newsletter"
-              subtitle="Monthly newsletter with event trends"
+              title={t('notifications.newsletterTitle')}
+              subtitle={t('notifications.newsletterSubtitle')}
               value={preferences?.emailNewsletter ?? false}
               onValueChange={(v) => handleToggle('emailNewsletter', v)}
               disabled={!preferences?.emailEnabled}
@@ -235,28 +237,28 @@ export default function NotificationPreferencesPage({
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
           <View className="flex-row items-center gap-x-2 mb-2">
             <Feather name="smartphone" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">SMS Notifications</Text>
+            <Text className="text-base font-semibold text-black">{t('notifications.smsTitle')}</Text>
           </View>
 
           <ToggleRow
-            title="Enable SMS Notifications"
-            subtitle="Receive text messages for important updates"
+            title={t('notifications.smsEnableTitle')}
+            subtitle={t('notifications.smsEnableSubtitle')}
             value={preferences?.smsEnabled ?? false}
             onValueChange={(v) => handleToggle('smsEnabled', v)}
           />
 
           <View className="border-t border-gray200 mt-2 pt-2">
             <ToggleRow
-              title="Urgent Updates"
-              subtitle="Critical event changes or emergencies"
+              title={t('notifications.urgentUpdatesTitle')}
+              subtitle={t('notifications.urgentUpdatesSubtitle')}
               value={preferences?.smsUrgentUpdates ?? false}
               onValueChange={(v) => handleToggle('smsUrgentUpdates', v)}
               disabled={!preferences?.smsEnabled}
               indented
             />
             <ToggleRow
-              title="Event Cancellations"
-              subtitle="When events you're attending are cancelled"
+              title={t('notifications.eventCancellationsTitle')}
+              subtitle={t('notifications.eventCancellationsSubtitle')}
               value={preferences?.smsEventCancellations ?? true}
               onValueChange={(v) => handleToggle('smsEventCancellations', v)}
               disabled={!preferences?.smsEnabled}
@@ -267,18 +269,18 @@ export default function NotificationPreferencesPage({
 
         {/* Marketing & Personalization */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-4">Marketing & Personalization</Text>
+          <Text className="text-base font-semibold text-black mb-4">{t('notifications.marketingTitle')}</Text>
 
           <ToggleRow
-            title="Personalized Ads"
-            subtitle="Show ads relevant to your interests"
+            title={t('notifications.personalizedAdsTitle')}
+            subtitle={t('notifications.personalizedAdsSubtitle')}
             value={preferences?.personalizedAds ?? true}
             onValueChange={(v) => handleToggle('personalizedAds', v)}
           />
           <View className="border-t border-gray200" />
           <ToggleRow
-            title="Location-Based Suggestions"
-            subtitle="Get event suggestions based on your location"
+            title={t('notifications.locationSuggestionsTitle')}
+            subtitle={t('notifications.locationSuggestionsSubtitle')}
             value={preferences?.locationBasedSuggestions ?? true}
             onValueChange={(v) => handleToggle('locationBasedSuggestions', v)}
           />
@@ -286,13 +288,13 @@ export default function NotificationPreferencesPage({
 
         {/* Quiet Hours */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-2">Quiet Hours</Text>
+          <Text className="text-base font-semibold text-black mb-2">{t('notifications.quietHoursTitle')}</Text>
           <Text className="text-sm text-gray500 mb-4">
-            Set times when you don't want to receive non-urgent notifications
+            {t('notifications.quietHoursSubtitle')}
           </Text>
 
           <ToggleRow
-            title="Enable Quiet Hours"
+            title={t('notifications.enableQuietHours')}
             value={preferences?.quietHoursEnabled ?? false}
             onValueChange={(v) => handleToggle('quietHoursEnabled', v)}
           />
@@ -300,7 +302,7 @@ export default function NotificationPreferencesPage({
           {preferences?.quietHoursEnabled && (
             <View className="flex-row gap-x-4 mt-4">
               <View className="flex-1">
-                <Text className="text-sm text-gray700 mb-2">Start Time</Text>
+                <Text className="text-sm text-gray700 mb-2">{t('notifications.startTime')}</Text>
                 <View className="border border-gray300 rounded-xl px-4 py-3">
                   <TextInput
                     placeholder="22:00"
@@ -312,7 +314,7 @@ export default function NotificationPreferencesPage({
                 </View>
               </View>
               <View className="flex-1">
-                <Text className="text-sm text-gray700 mb-2">End Time</Text>
+                <Text className="text-sm text-gray700 mb-2">{t('notifications.endTime')}</Text>
                 <View className="border border-gray300 rounded-xl px-4 py-3">
                   <TextInput
                     placeholder="08:00"
@@ -340,7 +342,7 @@ export default function NotificationPreferencesPage({
             {isSaving ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text className="text-white font-semibold">Save Preferences</Text>
+              <Text className="text-white font-semibold">{t('notifications.savePreferences')}</Text>
             )}
           </Pressable>
         </View>

@@ -1,6 +1,7 @@
 import React, { type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export type HeaderProps = Readonly<
   {
@@ -18,13 +19,16 @@ const cx = (...classes: ReadonlyArray<string | null | undefined | false>): strin
 
 export default function Header({
   userName,
-  greeting = 'Good evening',
+  greeting,
   locationLabel,
   onPressNotifications,
   onPressLocation,
   className,
   ...rest
 }: HeaderProps): ReactElement {
+  const { t } = useTranslation();
+  const resolvedGreeting = greeting ?? t('home.goodEvening');
+
   return (
     <View
       {...rest}
@@ -32,7 +36,7 @@ export default function Header({
     >
       <View className="flex-row items-center justify-between">
         <Text className="text-3xl font-bold text-black flex-1 pr-4" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-          {greeting}, {userName}
+          {resolvedGreeting}, {userName}
         </Text>
 
         <Pressable

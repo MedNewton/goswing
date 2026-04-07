@@ -76,7 +76,8 @@
       "expo-font",
       "expo-web-browser",
       "expo-location",
-      "expo-calendar"
+      "expo-calendar",
+      "expo-localization"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

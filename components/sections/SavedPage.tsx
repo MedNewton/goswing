@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import SearchResultCard, { type SearchResultItem } from '@/components/ui/SearchResultCard';
 
@@ -70,6 +71,7 @@ export default function SavedPage({
   onOpenEvent,
   ...rest
 }: SavedPageProps): ReactElement {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<SavedTab>('events');
   const insets = useSafeAreaInsets();
 
@@ -127,7 +129,7 @@ export default function SavedPage({
         );
       } catch (e: any) {
         if (!mounted) return;
-        setErrMsg(e?.message ? String(e.message) : 'Failed to load saved events.');
+        setErrMsg(e?.message ? String(e.message) : t('saved.loadEventsFailed'));
         setSavedEvents([]);
       } finally {
         if (!mounted) return;
@@ -138,7 +140,7 @@ export default function SavedPage({
     return () => {
       mounted = false;
     };
-  }, [tab, userId]);
+  }, [tab, userId, t]);
 
   // Fetch followed organizers
   useEffect(() => {
@@ -157,7 +159,7 @@ export default function SavedPage({
         setFollowedOrgs(orgs);
       } catch (e: any) {
         if (!mounted) return;
-        setOrgsError(e?.message ? String(e.message) : 'Failed to load followed organizers.');
+        setOrgsError(e?.message ? String(e.message) : t('saved.loadOrganizersFailed'));
         setFollowedOrgs([]);
       } finally {
         if (!mounted) return;
@@ -168,16 +170,16 @@ export default function SavedPage({
     return () => {
       mounted = false;
     };
-  }, [tab]);
+  }, [tab, t]);
 
   const handleUnfollow = useCallback(async (orgId: string, orgName: string) => {
     Alert.alert(
-      'Unfollow',
-      `Are you sure you want to unfollow ${orgName}?`,
+      t('saved.unfollowTitle'),
+      t('saved.unfollowConfirm', { name: orgName }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Unfollow',
+          text: t('saved.unfollowAction'),
           style: 'destructive',
           onPress: async () => {
             setUnfollowingIds((prev) => new Set(prev).add(orgId));
@@ -185,7 +187,7 @@ export default function SavedPage({
               await unfollowOrganizer(orgId);
               setFollowedOrgs((prev) => prev.filter((o) => o.id !== orgId));
             } catch (e: any) {
-              Alert.alert('Error', e?.message ?? 'Could not unfollow.');
+              Alert.alert(t('common.error'), e?.message ?? t('saved.couldNotUnfollow'));
             } finally {
               setUnfollowingIds((prev) => {
                 const next = new Set(prev);
@@ -197,7 +199,7 @@ export default function SavedPage({
         },
       ],
     );
-  }, []);
+  }, [t]);
 
   const bottomPad = (insets.bottom || 0) + 88;
 
@@ -208,16 +210,16 @@ export default function SavedPage({
   return (
     <View {...rest} className={cx('flex-1 w-full', className)}>
       <View className="px-5 pt-4">
-        <Text className="text-3xl font-bold text-black">Saved</Text>
+        <Text className="text-3xl font-bold text-black">{t('saved.title')}</Text>
         <Text className="text-base text-gray500 mt-2">
-          Your saved events and followed organizers
+          {t('saved.subtitle')}
         </Text>
       </View>
 
       <View className="px-5 mt-4">
         <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
           <SegBtn
-            label={`Events (${savedEvents.length})`}
+            label={t('saved.eventsTab', { count: savedEvents.length })}
             icon={
               <Feather
                 name="grid"
@@ -229,7 +231,7 @@ export default function SavedPage({
             onPress={() => setTab('events')}
           />
           <SegBtn
-            label={`Organizers (${followedOrgs.length})`}
+            label={t('saved.organizersTab', { count: followedOrgs.length })}
             icon={
               <Feather
                 name="users"
@@ -254,18 +256,18 @@ export default function SavedPage({
             {loading ? (
               <View className="py-8 items-center justify-center">
                 <ActivityIndicator />
-                <Text className="mt-3 text-gray500">Loading saved events…</Text>
+                <Text className="mt-3 text-gray500">{t('saved.loadingEvents')}</Text>
               </View>
             ) : errMsg ? (
               <View className="rounded-2xl border border-gray200 bg-white p-4">
-                <Text className="text-gray800 font-medium">Could not load saved events</Text>
+                <Text className="text-gray800 font-medium">{t('saved.couldNotLoadEvents')}</Text>
                 <Text className="text-gray500 mt-2">{errMsg}</Text>
               </View>
             ) : savedEvents.length === 0 ? (
               <View className="rounded-2xl border border-gray200 bg-white p-4">
-                <Text className="text-gray800 font-medium">No saved events yet</Text>
+                <Text className="text-gray800 font-medium">{t('saved.emptyEventsTitle')}</Text>
                 <Text className="text-gray500 mt-2">
-                  Tap the heart icon on an event to save it here.
+                  {t('saved.emptyEventsMessage')}
                 </Text>
               </View>
             ) : (
@@ -289,18 +291,18 @@ export default function SavedPage({
             {orgsLoading ? (
               <View className="py-8 items-center justify-center">
                 <ActivityIndicator />
-                <Text className="mt-3 text-gray500">Loading followed organizers…</Text>
+                <Text className="mt-3 text-gray500">{t('saved.loadingOrganizers')}</Text>
               </View>
             ) : orgsError ? (
               <View className="rounded-2xl border border-gray200 bg-white p-4">
-                <Text className="text-gray800 font-medium">Could not load organizers</Text>
+                <Text className="text-gray800 font-medium">{t('saved.couldNotLoadOrganizers')}</Text>
                 <Text className="text-gray500 mt-2">{orgsError}</Text>
               </View>
             ) : followedOrgs.length === 0 ? (
               <View className="rounded-2xl border border-gray200 bg-white p-4">
-                <Text className="text-gray800 font-medium">No followed organizers yet</Text>
+                <Text className="text-gray800 font-medium">{t('saved.emptyOrganizersTitle')}</Text>
                 <Text className="text-gray500 mt-2">
-                  Follow organizers from event pages to see them here.
+                  {t('saved.emptyOrganizersMessage')}
                 </Text>
               </View>
             ) : (
@@ -334,7 +336,7 @@ export default function SavedPage({
                       )}
                     >
                       <Text className={cx('text-sm', unfollowingIds.has(o.id) ? 'text-gray500' : 'text-white')}>
-                        {unfollowingIds.has(o.id) ? 'Unfollowing…' : 'Following'}
+                        {unfollowingIds.has(o.id) ? t('saved.unfollowing') : t('saved.following')}
                       </Text>
                     </Pressable>
                   </View>

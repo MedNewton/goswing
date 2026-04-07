@@ -1,5 +1,6 @@
 // App.tsx
 import './style/globals.css';
+import './lib/i18n'; // initialize i18next
 import React, { type ReactElement } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';

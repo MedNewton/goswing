@@ -3,6 +3,7 @@ import React, { useState, useEffect, type ReactElement } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
 import TermsConsentModal from '@/components/auth/TermsConsentModal';
 import PhoneCollectPage from '@/pages/PhoneCollectPage';
@@ -23,6 +24,7 @@ export default function NewUserOnboardingGate({
   onDone,
   onCancel,
 }: Props): ReactElement {
+  const { t } = useTranslation();
   const { user, isLoaded } = useUser();
   const [step, setStep] = useState<OnboardingStep>('initializing');
   const [initError, setInitError] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export default function NewUserOnboardingGate({
       } catch (err: any) {
         console.error('Profile initialization failed:', err);
         if (!cancelled) {
-          setInitError(err?.message ?? 'Failed to initialize profile');
+          setInitError(err?.message ?? t('onboarding.initFailed'));
           // Still proceed to onboarding - we can retry later
           setStep('terms');
         }
@@ -66,7 +68,7 @@ export default function NewUserOnboardingGate({
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, user?.id]);
+  }, [isLoaded, t, user?.id]);
 
   // Final step: save collected data and complete onboarding
   const handleFinalDone = async (location?: string, locationServicesEnabled?: boolean): Promise<void> => {
@@ -93,7 +95,7 @@ export default function NewUserOnboardingGate({
     return (
       <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#0B0B15" />
-        <Text className="mt-4 text-gray600">Setting up your account...</Text>
+        <Text className="mt-4 text-gray600">{t('onboarding.settingUpAccount')}</Text>
         {initError && (
           <Text className="mt-2 text-red-500 text-sm px-8 text-center">{initError}</Text>
         )}

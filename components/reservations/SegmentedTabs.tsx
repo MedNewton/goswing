@@ -1,5 +1,6 @@
 import React, { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 export type SegKey = 'active' | 'past';
 
@@ -17,6 +18,7 @@ export default function SegmentedTabs({
   onChange: (key: SegKey) => void;
   counts: SegmentedTabsCounts;
 }): ReactElement {
+  const { t } = useTranslation();
   const activeCount = Number.isFinite(counts?.active) ? Math.max(0, Math.trunc(counts.active)) : 0;
   const pastCount = Number.isFinite(counts?.past) ? Math.max(0, Math.trunc(counts.past)) : 0;
 
@@ -41,8 +43,8 @@ export default function SegmentedTabs({
 
   return (
     <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
-      <Pill label={`Active (${activeCount})`} keyv="active" />
-      <Pill label={`Past (${pastCount})`} keyv="past" />
+      <Pill label={t('reservations.activeTab', { count: activeCount })} keyv="active" />
+      <Pill label={t('reservations.pastTab', { count: pastCount })} keyv="past" />
     </View>
   );
 }

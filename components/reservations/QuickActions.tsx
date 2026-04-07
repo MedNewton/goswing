@@ -1,6 +1,7 @@
 import React, { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export type QuickActionsProps = Readonly<{
   subtleBackground?: boolean;
@@ -13,6 +14,7 @@ export default function QuickActions({
   onDownloadAll,
   onSyncCalendar,
 }: QuickActionsProps): ReactElement {
+  const { t } = useTranslation();
   return (
     <View
       className={[
@@ -20,10 +22,10 @@ export default function QuickActions({
         subtleBackground ? 'bg-gray100 border-gray200' : 'bg-white border-gray200',
       ].join(' ')}
     >
-      <Text className="text-xl font-semibold text-gray900 mb-3">Quick Actions</Text>
+      <Text className="text-xl font-semibold text-gray900 mb-3">{t('reservations.quickActionsTitle')}</Text>
       <View className="flex-row gap-x-3">
-        <ActionPill icon="download" label="Download All" onPress={onDownloadAll} />
-        <ActionPill icon="calendar" label="Sync Calendar" onPress={onSyncCalendar} />
+        <ActionPill icon="download" label={t('reservations.downloadAll')} onPress={onDownloadAll} />
+        <ActionPill icon="calendar" label={t('reservations.syncCalendar')} onPress={onSyncCalendar} />
       </View>
     </View>
   );

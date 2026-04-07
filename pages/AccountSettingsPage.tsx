@@ -13,6 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
 import { useProfile, useSettings, useLoginHistory } from '@/hooks/profile';
 
@@ -24,6 +25,7 @@ type AccountSettingsPageProps = Readonly<{
 }>;
 
 export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps): ReactElement {
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user: clerkUser } = useUser();
 
@@ -45,7 +47,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
     try {
       await updateProfile({ profileVisibility: isPublic ? 'public' : 'private' });
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Could not update visibility.');
+      Alert.alert(t('common.error'), err?.message ?? t('account.couldNotUpdateVisibility'));
     }
   };
 
@@ -53,26 +55,26 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
     try {
       await updateSettings({ loginNotificationsEnabled: value });
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Could not update setting.');
+      Alert.alert(t('common.error'), err?.message ?? t('account.couldNotUpdateSetting'));
     }
   };
 
   const handleDeactivateAccount = (): void => {
     Alert.alert(
-      'Deactivate Account',
-      'Your account will be deactivated. You can reactivate it by signing in again. Are you sure?',
+      t('account.deactivateTitle'),
+      t('account.deactivateMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Deactivate',
+          text: t('account.deactivateAction'),
           style: 'destructive',
           onPress: async () => {
             try {
               setIsDeactivating(true);
               await deactivateAccount();
-              Alert.alert('Account Deactivated', 'Your account has been deactivated.');
+              Alert.alert(t('account.deactivatedTitle'), t('account.deactivatedMessage'));
             } catch (err: any) {
-              Alert.alert('Error', err?.message ?? 'Could not deactivate account.');
+              Alert.alert(t('common.error'), err?.message ?? t('account.couldNotDeactivate'));
             } finally {
               setIsDeactivating(false);
             }
@@ -84,20 +86,20 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
 
   const handleDeleteAccount = (): void => {
     Alert.alert(
-      'Delete Account Permanently',
-      'This action cannot be undone. All your data will be permanently deleted. Are you absolutely sure?',
+      t('account.deleteTitle'),
+      t('account.deleteMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete Forever',
+          text: t('account.deleteAction'),
           style: 'destructive',
           onPress: async () => {
             try {
               setIsDeleting(true);
               await deleteAccount();
-              Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
+              Alert.alert(t('account.deletedTitle'), t('account.deletedMessage'));
             } catch (err: any) {
-              Alert.alert('Error', err?.message ?? 'Could not delete account.');
+              Alert.alert(t('common.error'), err?.message ?? t('account.couldNotDelete'));
             } finally {
               setIsDeleting(false);
             }
@@ -111,10 +113,12 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
     return (
       <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">Loading settings…</Text>
+        <Text className="text-gray600 mt-3">{t('account.loadingSettings')}</Text>
       </SafeAreaView>
     );
   }
+
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
 
   return (
     <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
@@ -123,7 +127,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
         <Pressable onPress={onBack} className="mr-4 active:opacity-70">
           <Feather name="arrow-left" size={24} color="#111827" />
         </Pressable>
-        <Text className="text-lg font-semibold text-black">Account Settings</Text>
+        <Text className="text-lg font-semibold text-black">{t('account.title')}</Text>
       </View>
 
       <ScrollView
@@ -134,14 +138,14 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
           <View className="flex-row items-center gap-x-2 mb-4">
             <Feather name="shield" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">Password & Security</Text>
+            <Text className="text-base font-semibold text-black">{t('account.passwordSecurity')}</Text>
           </View>
 
           <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">Current Password</Text>
+            <Text className="text-sm text-gray700 mb-2">{t('account.currentPassword')}</Text>
             <View className="flex-row items-center border border-gray300 rounded-xl px-4 py-3">
               <TextInput
-                placeholder="Enter current password"
+                placeholder={t('account.currentPasswordPlaceholder')}
                 secureTextEntry
                 className="flex-1 text-gray900"
                 placeholderTextColor="#9CA3AF"
@@ -151,10 +155,10 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
           </View>
 
           <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">New Password</Text>
+            <Text className="text-sm text-gray700 mb-2">{t('account.newPassword')}</Text>
             <View className="flex-row items-center border border-gray300 rounded-xl px-4 py-3">
               <TextInput
-                placeholder="Enter new password"
+                placeholder={t('account.newPasswordPlaceholder')}
                 secureTextEntry
                 className="flex-1 text-gray900"
                 placeholderTextColor="#9CA3AF"
@@ -164,17 +168,19 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
           </View>
 
           <Pressable className="bg-gray900 rounded-xl py-3 items-center active:opacity-90">
-            <Text className="text-white font-medium">Update Password</Text>
+            <Text className="text-white font-medium">{t('account.updatePassword')}</Text>
           </Pressable>
 
           <View className="flex-row items-center justify-between mt-5 pt-4 border-t border-gray200">
             <View>
-              <Text className="text-gray900 font-medium">Two-Factor Authentication</Text>
-              <Text className="text-xs text-gray500 mt-1">Add an extra layer of security</Text>
+              <Text className="text-gray900 font-medium">{t('account.twoFactor')}</Text>
+              <Text className="text-xs text-gray500 mt-1">{t('account.twoFactorSubtitle')}</Text>
             </View>
             <Switch
               value={false}
-              onValueChange={() => Alert.alert('2FA', 'Two-factor authentication is managed through Clerk.')}
+              onValueChange={() =>
+                Alert.alert(t('account.twoFactorAlertTitle'), t('account.twoFactorAlertMessage'))
+              }
               thumbColor="#808080"
               trackColor={{ false: '#E5E7EB', true: '#59B259' }}
             />
@@ -183,20 +189,20 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
 
         {/* Account Verification */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-4">Account Verification</Text>
+          <Text className="text-base font-semibold text-black mb-4">{t('account.verification')}</Text>
 
           <View className="flex-row items-center justify-between py-3 border-b border-gray200">
             <View className="flex-row items-center gap-x-3">
               <Feather name="mail" size={18} color="#111827" />
               <View>
-                <Text className="text-gray900 font-medium">Email Address</Text>
+                <Text className="text-gray900 font-medium">{t('account.emailAddress')}</Text>
                 <Text className="text-xs text-gray500 mt-0.5">
-                  {clerkUser?.primaryEmailAddress?.emailAddress ?? 'Not set'}
+                  {clerkUser?.primaryEmailAddress?.emailAddress ?? t('account.notSet')}
                 </Text>
               </View>
             </View>
             <Text className={cx('text-sm font-medium', emailVerified ? 'text-green-600' : 'text-orange-500')}>
-              {emailVerified ? 'Verified' : 'Unverified'}
+              {emailVerified ? t('account.verified') : t('account.unverified')}
             </Text>
           </View>
 
@@ -204,17 +210,17 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
             <View className="flex-row items-center gap-x-3">
               <Feather name="smartphone" size={18} color="#111827" />
               <View>
-                <Text className="text-gray900 font-medium">Phone Number</Text>
+                <Text className="text-gray900 font-medium">{t('account.phoneNumber')}</Text>
                 <Text className="text-xs text-gray500 mt-0.5">
-                  {clerkUser?.primaryPhoneNumber?.phoneNumber ?? 'Not set'}
+                  {clerkUser?.primaryPhoneNumber?.phoneNumber ?? t('account.notSet')}
                 </Text>
               </View>
             </View>
             {phoneVerified ? (
-              <Text className="text-sm font-medium text-green-600">Verified</Text>
+              <Text className="text-sm font-medium text-green-600">{t('account.verified')}</Text>
             ) : (
               <Pressable className="px-3 py-1.5 border border-gray300 rounded-lg active:opacity-70">
-                <Text className="text-sm text-gray900">Verify</Text>
+                <Text className="text-sm text-gray900">{t('account.verify')}</Text>
               </Pressable>
             )}
           </View>
@@ -222,12 +228,12 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
 
         {/* Login & Activity */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-4">Login & Activity</Text>
+          <Text className="text-base font-semibold text-black mb-4">{t('account.loginActivity')}</Text>
 
           <View className="flex-row items-center justify-between pb-4 border-b border-gray200">
             <View>
-              <Text className="text-gray900 font-medium">Login Notifications</Text>
-              <Text className="text-xs text-gray500 mt-1">Get notified when someone logs into your account</Text>
+              <Text className="text-gray900 font-medium">{t('account.loginNotifications')}</Text>
+              <Text className="text-xs text-gray500 mt-1">{t('account.loginNotificationsSubtitle')}</Text>
             </View>
             <Switch
               value={settings?.loginNotificationsEnabled ?? false}
@@ -242,7 +248,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
             onPress={() => setShowLoginHistory(!showLoginHistory)}
           >
             <Text className="text-gray900 font-medium">
-              {showLoginHistory ? 'Hide Login History' : 'View Login History'}
+              {showLoginHistory ? t('account.hideLoginHistory') : t('account.viewLoginHistory')}
             </Text>
           </Pressable>
 
@@ -251,7 +257,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
               {historyLoading ? (
                 <ActivityIndicator size="small" color="#6B7280" />
               ) : history.length === 0 ? (
-                <Text className="text-sm text-gray500">No login history available.</Text>
+                <Text className="text-sm text-gray500">{t('account.noLoginHistory')}</Text>
               ) : (
                 history.map((entry) => (
                   <View key={entry.id} className="py-2 border-b border-gray100 last:border-b-0">
@@ -262,14 +268,16 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
                           size={14}
                           color="#6B7280"
                         />
-                        <Text className="text-sm text-gray700">{entry.location ?? 'Unknown location'}</Text>
+                        <Text className="text-sm text-gray700">
+                          {entry.location ?? t('account.unknownLocation')}
+                        </Text>
                       </View>
                       <Text className={cx('text-xs', entry.wasSuccessful ? 'text-green-600' : 'text-red-500')}>
-                        {entry.wasSuccessful ? 'Success' : 'Failed'}
+                        {entry.wasSuccessful ? t('account.loginSuccess') : t('account.loginFailed')}
                       </Text>
                     </View>
                     <Text className="text-xs text-gray500 mt-1">
-                      {new Date(entry.loggedInAt).toLocaleString()}
+                      {new Date(entry.loggedInAt).toLocaleString(locale)}
                     </Text>
                   </View>
                 ))
@@ -280,8 +288,8 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
 
         {/* Account Visibility */}
         <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-2">Account Visibility</Text>
-          <Text className="text-sm text-gray500 mb-4">Control who can see your profile information</Text>
+          <Text className="text-base font-semibold text-black mb-2">{t('account.visibility')}</Text>
+          <Text className="text-sm text-gray500 mb-4">{t('account.visibilitySubtitle')}</Text>
 
           <Pressable
             className={cx(
@@ -291,8 +299,8 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
             onPress={() => handleToggleVisibility(true)}
           >
             <View className="flex-1">
-              <Text className="text-gray900 font-medium">Public</Text>
-              <Text className="text-xs text-gray500 mt-0.5">Anyone can see your profile</Text>
+              <Text className="text-gray900 font-medium">{t('account.visibilityPublic')}</Text>
+              <Text className="text-xs text-gray500 mt-0.5">{t('account.visibilityPublicSubtitle')}</Text>
             </View>
             {profile?.profileVisibility === 'public' && (
               <Feather name="check-circle" size={20} color="#22C55E" />
@@ -307,8 +315,8 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
             onPress={() => handleToggleVisibility(false)}
           >
             <View className="flex-1">
-              <Text className="text-gray900 font-medium">Private</Text>
-              <Text className="text-xs text-gray500 mt-0.5">Only people you follow can see your profile</Text>
+              <Text className="text-gray900 font-medium">{t('account.visibilityPrivate')}</Text>
+              <Text className="text-xs text-gray500 mt-0.5">{t('account.visibilityPrivateSubtitle')}</Text>
             </View>
             {profile?.profileVisibility === 'private' && (
               <Feather name="check-circle" size={20} color="#22C55E" />
@@ -318,7 +326,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
 
         {/* Danger Zone */}
         <View className="mx-5 mt-5 mb-10 rounded-2xl border border-red-200 bg-red-50 p-5">
-          <Text className="text-base font-semibold text-red-600 mb-2">Danger Zone</Text>
+          <Text className="text-base font-semibold text-red-600 mb-2">{t('account.dangerZone')}</Text>
 
           <Pressable
             disabled={isDeactivating}
@@ -331,7 +339,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
             {isDeactivating ? (
               <ActivityIndicator size="small" color="#6B7280" />
             ) : (
-              <Text className="text-gray900 font-medium">Deactivate Account</Text>
+              <Text className="text-gray900 font-medium">{t('account.deactivateAction')}</Text>
             )}
           </Pressable>
 
@@ -346,12 +354,12 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
             {isDeleting ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text className="text-white font-medium">Delete Account Permanently</Text>
+              <Text className="text-white font-medium">{t('account.deleteTitle')}</Text>
             )}
           </Pressable>
 
           <Text className="text-xs text-red-600 mt-3 text-center">
-            Warning: These actions cannot be undone. Please be certain.
+            {t('account.warning')}
           </Text>
         </View>
       </ScrollView>

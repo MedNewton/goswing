@@ -2,10 +2,9 @@
 import React, { useEffect, useState, type ReactElement } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/lib/supabase';
-import type { ID } from '@/types/domain';
+import { useTranslation } from 'react-i18next';
 
 type Tag = { id: string; label: string; slug: string };
 
@@ -21,6 +20,7 @@ export default function InterestsSelectionPage({
   onDone,
   onSkip,
 }: InterestsSelectionPageProps): ReactElement {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,9 +86,9 @@ export default function InterestsSelectionPage({
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} className="flex-1 bg-white">
       <View className="px-6 pt-8 pb-4">
-        <Text className="text-3xl font-bold text-black">What are you into?</Text>
+        <Text className="text-3xl font-bold text-black">{t('onboarding.interests.title')}</Text>
         <Text className="mt-2 text-base text-gray600">
-          Pick your interests so we can personalize your experience.
+          {t('onboarding.interests.description')}
         </Text>
       </View>
 
@@ -149,7 +149,9 @@ export default function InterestsSelectionPage({
             <ActivityIndicator color="#fff" />
           ) : (
             <Text className={cx('text-base font-semibold', selectedIds.size > 0 ? 'text-white' : 'text-gray700')}>
-              {selectedIds.size > 0 ? `Continue (${selectedIds.size} selected)` : 'Continue'}
+              {selectedIds.size > 0
+                ? t('onboarding.interests.continueSelected', { count: selectedIds.size })
+                : t('common.continue')}
             </Text>
           )}
         </Pressable>
@@ -159,7 +161,7 @@ export default function InterestsSelectionPage({
           onPress={onSkip}
           className="mt-3 w-full items-center py-3"
         >
-          <Text className="text-base font-semibold text-gray600">Skip for now</Text>
+          <Text className="text-base font-semibold text-gray600">{t('onboarding.interests.skipForNow')}</Text>
         </Pressable>
       </View>
     </SafeAreaView>

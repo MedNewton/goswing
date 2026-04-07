@@ -3,6 +3,7 @@ import React, { useMemo, useCallback, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Card from '@/components/ui/Card';
+import { useTranslation } from 'react-i18next';
 
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string => c.filter(Boolean).join(' ');
 
@@ -55,6 +56,7 @@ export default function ReservationCard({
   reservation,
   onPressReservation,
 }: ReservationCardProps): ReactElement {
+  const { t } = useTranslation();
   const QRCode = useMemo(() => tryGetQrComponent(), []);
 
   const handleOpenDetails = useCallback(() => {
@@ -79,7 +81,7 @@ export default function ReservationCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open reservation details for ${reservation.title}`}
+      accessibilityLabel={t('reservations.openDetailsA11y', { title: reservation.title })}
       onPress={handleOpenDetails}
       className="active:opacity-95"
     >
@@ -119,16 +121,16 @@ export default function ReservationCard({
         </View>
 
         <View className="mt-4 border-b border-gray200 pt-3 flex-row items-center justify-between pb-3">
-          <Text className="text-gray700 font-medium">Total Amount</Text>
+          <Text className="text-gray700 font-medium">{t('reservations.totalAmount')}</Text>
           <Text className="text-gray900 mt-1">{reservation.totalAmount}</Text>
         </View>
 
         {reservation.groups.length > 0 ? (
           <>
-            <Text className="mt-5 text-gray700 font-medium">Your Tickets</Text>
+            <Text className="mt-5 text-gray700 font-medium">{t('reservations.yourTickets')}</Text>
             <View className="mt-3 gap-y-4">
               {reservation.groups.map((g) => (
-                <TicketGroupBlock key={g.id} group={g} QRCode={QRCode} />
+                <TicketGroupBlock key={g.id} group={g} QRCode={QRCode} shareLabel={t('reservations.share')} />
               ))}
             </View>
           </>
@@ -144,7 +146,7 @@ export default function ReservationCard({
             className="h-11 rounded-2xl border border-gray300 px-3 flex-row items-center justify-center gap-x-2 active:opacity-90"
           >
             <Feather name="external-link" size={16} color="#111827" />
-            <Text className="text-gray900">View Details</Text>
+            <Text className="text-gray900">{t('reservations.viewDetails')}</Text>
           </Pressable>
         </View>
       </Card>
@@ -155,9 +157,11 @@ export default function ReservationCard({
 function TicketGroupBlock({
   group,
   QRCode,
+  shareLabel,
 }: {
   group: TicketGroup;
   QRCode: QRComp | null;
+  shareLabel: string;
 }): ReactElement {
   return (
     <View className="rounded-3xl border border-gray200 p-4">
@@ -185,7 +189,7 @@ function TicketGroupBlock({
             </View>
 
             <View className="mt-2 flex-row items-center gap-x-6">
-              <MiniIcon action="share" label="Share" />
+              <MiniIcon action="share" label={shareLabel} />
             </View>
           </View>
         ))}
@@ -202,4 +206,3 @@ function MiniIcon({ action, label }: { action: keyof typeof Feather.glyphMap; la
     </View>
   );
 }
-

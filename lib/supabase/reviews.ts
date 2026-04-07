@@ -30,6 +30,9 @@ export type UserReview = Readonly<{
   helpfulCount: number;
   images: ReadonlyArray<string>;
   isDraft: boolean;
+  adminLiked: boolean;
+  adminReply: string | null;
+  adminReplyAt: string | null;
 }>;
 
 export type UserReviewsResult = Readonly<{
@@ -116,6 +119,9 @@ export async function getMyReviews(): Promise<UserReviewsResult> {
       comment,
       created_at,
       updated_at,
+      admin_liked,
+      admin_reply,
+      admin_reply_at,
       events:event_id (
         id,
         title,
@@ -153,6 +159,9 @@ export async function getMyReviews(): Promise<UserReviewsResult> {
       helpfulCount: 0, // TODO: Add helpful_count to schema if needed
       images: [], // TODO: Add review images support if needed
       isDraft: !row.comment || row.comment.trim().length === 0,
+      adminLiked: Boolean(row.admin_liked),
+      adminReply: normalizeComment(row.admin_reply),
+      adminReplyAt: row.admin_reply_at ? asString(row.admin_reply_at) : null,
     };
   });
 

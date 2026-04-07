@@ -283,6 +283,16 @@ export async function createReservation(args: CreateReservationArgs): Promise<Cr
   validateBilling(args.billing);
 
   const eventPk = await resolveEventPk(args.eventId);
+
+  // Fetch approval_mode so we know whether to auto-confirm the reservation
+  const { data: eventRow, error: eventErr } = await supabase
+    .from('events')
+    .select('approval_mode')
+    .eq('id', eventPk)
+    .maybeSingle();
+  if (eventErr) throw new Error(`[checkout] Failed to fetch event approval_mode: ${eventErr.message}`);
+  const approvalMode = String((eventRow as any)?.approval_mode ?? 'auto').toLowerCase();
+
   const ticketTypes = await getTicketTypesForEventPk(eventPk);
 
   const totals = computeTotals(ticketTypes, args.quantities);
@@ -294,7 +304,10 @@ export async function createReservation(args: CreateReservationArgs): Promise<Cr
   }
   validateAttendees(args.attendees);
 
-  const status = args.status ?? 'pending';
+  // If caller didn't pin a status explicitly, derive it from the event's approval_mode:
+  //   approval_mode === 'auto' → reservation is auto-confirmed
+  //   anything else            → reservation starts as 'pending' awaiting organizer approval
+  const status = args.status ?? (approvalMode === 'auto' ? 'confirmed' : 'pending');
 
   // Preflight: ensure THIS request is authenticated (token attached)
   const { data: dbg, error: dbgErr } = await supabase.rpc('debug_auth_context');

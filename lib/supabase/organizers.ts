@@ -44,6 +44,13 @@ export type Organizer = Readonly<{
   cancellationPolicy: string | null;
   refundPolicy: string | null;
   responseTimeHours: number | null;
+  tiktokHandle: string | null;
+  youtubeHandle: string | null;
+  twitterHandle: string | null;
+  pinterestHandle: string | null;
+  snapchatHandle: string | null;
+  googleBusinessUrl: string | null;
+  customPolicies: ReadonlyArray<unknown>;
   createdAt: string;
   updatedAt: string;
 }>;
@@ -149,6 +156,13 @@ export async function getOrganizerById(
     cancellationPolicy: normalizeNullableString(org.cancellation_policy),
     refundPolicy: normalizeNullableString(org.refund_policy),
     responseTimeHours: org.response_time_hours ?? null,
+    tiktokHandle: normalizeNullableString(org.tiktok_handle),
+    youtubeHandle: normalizeNullableString(org.youtube_handle),
+    twitterHandle: normalizeNullableString(org.twitter_handle),
+    pinterestHandle: normalizeNullableString(org.pinterest_handle),
+    snapchatHandle: normalizeNullableString(org.snapchat_handle),
+    googleBusinessUrl: normalizeNullableString(org.google_business_url),
+    customPolicies: Array.isArray(org.custom_policies) ? (org.custom_policies as unknown[]) : [],
     createdAt: asString(org.created_at),
     updatedAt: asString(org.updated_at),
   };

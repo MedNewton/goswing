@@ -2,6 +2,7 @@
 import React, { useMemo, useState, type ReactElement } from 'react';
 import { View, Text, Pressable, ScrollView, Keyboard, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import TextField, { type TextFieldProps } from '@/components/ui/TextField';
 import type { Event } from '@/types/domain';
 import FiltersDrawer, {
@@ -46,7 +47,7 @@ export default function SearchBar({
   onSubmit,
   onPickEvent,
   maxSuggestions = 6,
-  placeholder = 'Search events, organizers, venues…',
+  placeholder,
   onPressFilter,
   onApplyFilters,
   initialFilters,
@@ -55,8 +56,10 @@ export default function SearchBar({
   inputProps,
   ...rest
 }: SearchBarProps): ReactElement {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const resolvedPlaceholder = placeholder ?? t('search.placeholder');
 
   const q = value.trim().toLowerCase();
   const MIN_CHARS = 2;
@@ -64,12 +67,12 @@ export default function SearchBar({
   const suggestions: ReadonlyArray<Sug> = useMemo(() => {
     if (q.length < MIN_CHARS) return [];
     const scored = events.map((e) => {
-      const t = e.title?.toLowerCase() ?? '';
+      const titleText = e.title?.toLowerCase() ?? '';
       const org = e.organizer?.toLowerCase() ?? '';
       const ven = e.venue?.toLowerCase() ?? '';
       const city = e.city?.toLowerCase() ?? '';
       let score = 0;
-      if (t.includes(q)) score += 3;
+      if (titleText.includes(q)) score += 3;
       if (org.includes(q)) score += 2;
       if (ven.includes(q)) score += 1;
       if (city.includes(q)) score += 1;
@@ -93,7 +96,7 @@ export default function SearchBar({
           onChangeText(t);
           setOpen(true);
         }}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         onFocus={() => setOpen(true)}
         onBlur={() => {
           setTimeout(() => setOpen(false), 120);
@@ -176,7 +179,7 @@ export default function SearchBar({
               </ScrollView>
             ) : (
               <View className="py-3 px-4">
-                <Text className="text-gray500 text-sm">No matches. Press enter to search.</Text>
+                <Text className="text-gray500 text-sm">{t('search.noMatchesEnter')}</Text>
               </View>
             )}
 
@@ -189,9 +192,7 @@ export default function SearchBar({
               className="px-4 py-3 border-t border-gray200 active:opacity-95 flex-row items-center gap-x-8"
             >
               <Feather name="search" size={16} color="#111827" />
-              <Text className="text-gray800">
-                Search for <Text className="font-semibold">“{value.trim()}”</Text>
-              </Text>
+              <Text className="text-gray800">{t('search.searchFor', { query: value.trim() })}</Text>
             </Pressable>
           </View>
 

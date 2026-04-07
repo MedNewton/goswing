@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
 type Props = Readonly<{
   onSubmit: (phone: string) => Promise<void>;  // <-- Changed: now accepts phone
@@ -17,6 +18,7 @@ type Props = Readonly<{
 }>;
 
 export default function PhoneCollectPage({ onSubmit, onSkip }: Props): ReactElement {
+  const { t } = useTranslation();
   const [phone, setPhone] = useState<string>('');
   const insets = useSafeAreaInsets();
   const disabled = phone.trim().length < 6;
@@ -55,18 +57,16 @@ export default function PhoneCollectPage({ onSubmit, onSkip }: Props): ReactElem
       >
         <View className="px-5 pt-3 mb-20 items-end">
           <Pressable onPress={onSkip} className="px-2 py-1 active:opacity-80">
-            <Text className="text-[18px] text-[#0B0B15]">Skip</Text>
+            <Text className="text-[18px] text-[#0B0B15]">{t('common.skip')}</Text>
           </Pressable>
         </View>
 
         <View className="flex-1 px-5 pt-2">
           <Text className="text-3xl text-black font-semibold text-center">
-            Can we get your number?
+            {t('onboarding.phone.title')}
           </Text>
           <Text className="text-lg text-gray600 text-center mt-3 px-4">
-            Your phone number will be verified and linked to your
-            account. With your permission, we&apos;ll use it to help you
-            experience GoSwing at the best way.
+            {t('onboarding.phone.description')}
           </Text>
 
           <View className="mt-8">
@@ -74,7 +74,7 @@ export default function PhoneCollectPage({ onSubmit, onSkip }: Props): ReactElem
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
-              placeholder="Phone number"
+              placeholder={t('onboarding.phone.placeholder')}
               placeholderTextColor="#9CA3AF"
               className="w-full rounded-2xl bg-gray100 px-4 py-4 text-gray900"
             />
@@ -91,7 +91,7 @@ export default function PhoneCollectPage({ onSubmit, onSkip }: Props): ReactElem
             className="rounded-2xl bg-[#0B0B15] py-4 items-center"
             style={{ opacity: disabled ? 0.6 : 1 }}
           >
-            <Text className="text-white text-[18px] font-semibold">Continue</Text>
+            <Text className="text-white text-[18px] font-semibold">{t('common.continue')}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

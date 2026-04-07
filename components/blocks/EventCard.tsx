@@ -11,6 +11,7 @@ import {
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import IconButton from '@/components/ui/IconButton';
+import { useTranslation } from 'react-i18next';
 
 export type Attendee = Readonly<{
   id: string;
@@ -94,8 +95,10 @@ export default function EventCard({
   className,
   ...rest
 }: EventCardProps): ReactElement {
+  const { t } = useTranslation();
   const dateLabel = formatDate(event.startsAtIso);
   const timeLabel = formatTime(event.startsAtIso);
+  const favoritesLabel = event.favorite ? t('event.removeFromFavorites') : t('event.addToFavorites');
 
   return (
     <Card
@@ -122,7 +125,7 @@ export default function EventCard({
           {/* Robust: ensure the tap always registers even if IconButton is not a Pressable internally */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={event.favorite ? 'Remove from favorites' : 'Add to favorites'}
+            accessibilityLabel={favoritesLabel}
             hitSlop={10}
             onPress={(e) => {
               e.stopPropagation?.();
@@ -131,7 +134,7 @@ export default function EventCard({
             className="active:opacity-90"
           >
             <IconButton
-              accessibilityLabel={event.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              accessibilityLabel={favoritesLabel}
               icon={<Text className="text-lg">{event.favorite ? '❤️' : '🤍'}</Text>}
               variant="ghost"
               tone="gray"

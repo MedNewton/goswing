@@ -1,7 +1,8 @@
-import React, { memo, type ReactElement } from 'react';
+import React, { memo, useMemo, type ReactElement } from 'react';
 import { View, Text, Pressable, type ViewProps } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 export type BottomTabKey = 'home' | 'search' | 'saved' | 'reservations' | 'profile';
 
@@ -22,14 +23,6 @@ export type BottomTabBarProps = Readonly<
 
 const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
   c.filter(Boolean).join(' ');
-
-const defaultItems: ReadonlyArray<BottomTabItem> = [
-  { key: 'home',         label: 'Home',         icon: 'home' },
-  { key: 'search',       label: 'Search',       icon: 'search' },
-  { key: 'saved',        label: 'Saved',        icon: 'heart' },
-  { key: 'reservations', label: 'Reservations', icon: 'calendar' },
-  { key: 'profile',      label: 'Profile',      icon: 'user' },
-] as const;
 
 function TabButton({
   item,
@@ -59,12 +52,24 @@ function TabButton({
 export default memo(function BottomTabBar({
   activeKey,
   onChange,
-  items = defaultItems,
+  items,
   className,
   ...rest
 }: BottomTabBarProps): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 6);
+  const resolvedItems = useMemo<ReadonlyArray<BottomTabItem>>(
+    () =>
+      items ?? [
+        { key: 'home', label: t('nav.home'), icon: 'home' },
+        { key: 'search', label: t('nav.search'), icon: 'search' },
+        { key: 'saved', label: t('nav.saved'), icon: 'heart' },
+        { key: 'reservations', label: t('nav.reservations'), icon: 'calendar' },
+        { key: 'profile', label: t('nav.profile'), icon: 'user' },
+      ],
+    [items, t],
+  );
 
   return (
     <View
@@ -79,7 +84,7 @@ export default memo(function BottomTabBar({
         )}
         style={{ paddingBottom: bottomPad }}
       >
-        {items.map((it) => (
+        {resolvedItems.map((it) => (
           <TabButton
             key={it.key}
             item={it}

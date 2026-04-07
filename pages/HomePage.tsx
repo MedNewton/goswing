@@ -3,6 +3,7 @@ import '../style/globals.css';
 import React, { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView, View, Text, Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import Header from '@/components/sections/Header';
 import SearchBar from '@/components/blocks/SearchBar';
@@ -151,22 +152,18 @@ function filterByWhenKey(events: ReadonlyArray<Event>, key: WhenKey): ReadonlyAr
   });
 }
 
-function errorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  return 'Something went wrong.';
-}
-
 export default function HomePage(): ReactElement {
+  const { t } = useTranslation();
   const { isSignedIn, getToken } = useClerkAuth();
   const { user: clerkUser } = useAuth();
   const user = getUser();
   const { profile } = useProfile();
 
-  const greeting = useMemo(() => {
+  const greetingKey = useMemo(() => {
     const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 18) return 'Good afternoon';
-    return 'Good evening';
+    if (h < 12) return 'home.goodMorning';
+    if (h < 18) return 'home.goodAfternoon';
+    return 'home.goodEvening';
   }, []);
 
   const displayName = profile?.name || user.name;
@@ -174,7 +171,7 @@ export default function HomePage(): ReactElement {
   const userId: string = String(clerkUser?.id ?? '');
 
   if (!userId) {
-    return <Text>Missing auth session</Text>;
+    return <Text>{t('home.missingAuthSession')}</Text>;
   }
 
   const { city, region, loading, error, refresh } = useCurrentCity();
@@ -301,14 +298,14 @@ export default function HomePage(): ReactElement {
   const locationLabel = locationOverride
     ? locationOverride
     : loading
-      ? 'Locating…'
+      ? t('home.locating')
       : error
-        ? user.city ?? 'Unknown'
+        ? user.city ?? t('common.unknown')
         : city
           ? region
             ? `${city}, ${region}`
             : city
-          : user.city ?? 'Unknown';
+          : user.city ?? t('common.unknown');
 
   const eventsForUIWithFav: ReadonlyArray<Event> = useMemo(() => {
     return filteredEvents.map((ev) => ({
@@ -321,7 +318,7 @@ export default function HomePage(): ReactElement {
     try {
       await fav.toggle(String(eventId), next);
     } catch (e: unknown) {
-      Alert.alert('Saved', errorMessage(e));
+      Alert.alert(t('home.savedAlertTitle'), e instanceof Error ? e.message : t('common.somethingWentWrong'));
     }
   };
 
@@ -334,7 +331,7 @@ export default function HomePage(): ReactElement {
           onOpenEvent={(eventId) => {
             const ev = allEvents.find((e) => String(e.id) === String(eventId));
             if (!ev) {
-              Alert.alert('Event', 'This event is not loaded yet. Pull to refresh and try again.');
+              Alert.alert(t('home.eventAlertTitle'), t('home.eventNotLoaded'));
               return;
             }
             setRoute({ name: 'eventDetails', event: ev, initialTab: 'about' });
@@ -371,8 +368,9 @@ export default function HomePage(): ReactElement {
       return (
         <View className="flex-1 items-center justify-center">
           <Text className="text-gray600">
-            {String(bottomTab ?? '').charAt(0).toUpperCase() + String(bottomTab ?? '').slice(1)} coming
-            soon…
+            {t('home.tabComingSoon', {
+              tab: String(bottomTab ?? '').charAt(0).toUpperCase() + String(bottomTab ?? '').slice(1),
+            })}
           </Text>
         </View>
       );
@@ -381,7 +379,7 @@ export default function HomePage(): ReactElement {
     if (eventsLoading) {
       return (
         <View className="flex-1 items-center justify-center">
-          <Text className="text-gray700">Loading events…</Text>
+          <Text className="text-gray700">{t('home.loadingEvents')}</Text>
         </View>
       );
     }
@@ -389,7 +387,7 @@ export default function HomePage(): ReactElement {
     if (eventsError) {
       return (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-gray900 font-semibold">Could not load events</Text>
+          <Text className="text-gray900 font-semibold">{t('home.couldNotLoadEvents')}</Text>
           <Text className="text-gray600 mt-2 text-center">{eventsError}</Text>
         </View>
       );
@@ -399,7 +397,7 @@ export default function HomePage(): ReactElement {
       <ScrollView contentContainerClassName={cx('pb-32')} showsVerticalScrollIndicator={false}>
         <Header
           userName={displayName}
-          greeting={greeting}
+          greeting={t(greetingKey)}
           locationLabel={locationLabel}
           onPressNotifications={() => setRoute({ name: 'notifications' })}
           onPressLocation={() => setLocationPickerOpen((v) => !v)}

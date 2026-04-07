@@ -6,6 +6,7 @@ import TextField from '@/components/ui/TextField';
 import Card from '@/components/ui/Card';
 import Constants from 'expo-constants';
 import type { Event } from '@/types/domain';
+import { useTranslation } from 'react-i18next';
 
 export type City = Readonly<{
   key: string;
@@ -79,7 +80,7 @@ function buildCityCentroids(events?: ReadonlyArray<Event>): Record<string, LatLn
 
 type PlaceSuggestion = { placeId: string; description: string };
 
-function usePlacesAutocomplete() {
+function usePlacesAutocomplete(t: (key: string) => string) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -148,7 +149,7 @@ function usePlacesAutocomplete() {
       } catch (e: any) {
         // Ignore abort errors silently
         if (e?.name === 'AbortError') return;
-        setError(e?.message ?? 'Autocomplete failed');
+        setError(e?.message ?? t('location.autocompleteFailed'));
         setSuggestions([]);
       } finally {
         setLoading(false);
@@ -159,7 +160,7 @@ function usePlacesAutocomplete() {
       if (tRef.current) clearTimeout(tRef.current);
       if (abortRef.current) abortRef.current.abort();
     };
-  }, [query, apiKey]);
+  }, [query, apiKey, t]);
 
   const getPlaceLatLng = async (placeId: string): Promise<LatLng | null> => {
     if (!apiKey) return null;
@@ -201,13 +202,15 @@ export default function LocationPicker({
   options = DEFAULT_CITIES,
   events,
   onPickCenter,
-  placeholder = 'Search a place or pick a city…',
+  placeholder,
   className,
   ...rest
 }: LocationPickerProps): ReactElement {
+  const { t } = useTranslation();
   const [open, setOpen] = useState<boolean>(false);
   const [filter, setFilter] = useState<string>('');
-  const places = usePlacesAutocomplete();
+  const places = usePlacesAutocomplete(t);
+  const resolvedPlaceholder = placeholder ?? t('location.searchOrPickCity');
 
   const cityCentroids = useMemo(() => buildCityCentroids(events), [events]);
 
@@ -256,7 +259,7 @@ export default function LocationPicker({
         <View className="flex-row items-center gap-x-2">
           <Feather name="map-pin" size={18} color="#6B7280" />
           <Text className={value ? 'text-gray800' : 'text-gray500'}>
-            {value ?? 'Select location…'}
+            {value ?? t('location.selectLocation')}
           </Text>
         </View>
 
@@ -286,7 +289,7 @@ export default function LocationPicker({
           <TextField
             value={places.query}
             onChangeText={places.setQuery}
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             variant="filled"
             size="md"
             left={<Feather name="search" size={16} color="#9CA3AF" />}
@@ -297,7 +300,7 @@ export default function LocationPicker({
 
           {!places.apiKey ? (
             <Text className="text-xs text-gray500 mt-2">
-              Google Places is disabled (missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY).
+              {t('location.googlePlacesDisabled')}
             </Text>
           ) : null}
 
@@ -310,7 +313,7 @@ export default function LocationPicker({
               <ScrollView className="max-h-60" keyboardShouldPersistTaps="handled">
                 {places.suggestions.length === 0 ? (
                   <View className="py-3 items-center">
-                    <Text className="text-gray500">No places found</Text>
+                    <Text className="text-gray500">{t('location.noPlacesFound')}</Text>
                   </View>
                 ) : (
                   places.suggestions.map((s) => (
@@ -327,7 +330,7 @@ export default function LocationPicker({
             ) : (
               <View className="py-3 items-center">
                 <Text className="text-gray500">
-                  {places.apiKey ? 'Type at least 2 characters…' : 'Add an API key to enable place search.'}
+                  {places.apiKey ? t('location.typeTwoChars') : t('location.addApiKey')}
                 </Text>
               </View>
             )}
@@ -341,7 +344,7 @@ export default function LocationPicker({
           <TextField
             value={filter}
             onChangeText={setFilter}
-            placeholder="Filter cities…"
+            placeholder={t('location.filterCities')}
             variant="filled"
             size="md"
             left={<Feather name="search" size={16} color="#9CA3AF" />}

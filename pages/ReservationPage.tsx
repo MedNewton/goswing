@@ -4,6 +4,7 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { useTranslation } from 'react-i18next';
 
 import SegmentedTabs, { type SegKey } from '@/components/reservations/SegmentedTabs';
 import ReservationCard, { type Reservation } from '@/components/reservations/ReservationCard';
@@ -13,7 +14,21 @@ import { getMyReservations } from '@/lib/supabase/myReservations';
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
-function generateAllReservationsHtml(reservations: ReadonlyArray<Reservation>): string {
+type ReservationPdfLabels = Readonly<{
+  date: string;
+  time: string;
+  venue: string;
+  total: string;
+  tickets: string;
+  reservationId: string;
+  title: string;
+  subtitle: string;
+}>;
+
+function generateAllReservationsHtml(
+  reservations: ReadonlyArray<Reservation>,
+  labels: ReservationPdfLabels,
+): string {
   const cards = reservations
     .map((r, i) => {
       const ticketRows = r.groups
@@ -39,33 +54,33 @@ function generateAllReservationsHtml(reservations: ReadonlyArray<Reservation>): 
           <div class="res-body">
             <div class="info-grid">
               <div class="info-item">
-                <span class="info-label">Date</span>
+                <span class="info-label">${labels.date}</span>
                 <span class="info-value">${r.dateLabel}</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Time</span>
+                <span class="info-label">${labels.time}</span>
                 <span class="info-value">${r.timeLabel}</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Venue</span>
+                <span class="info-label">${labels.venue}</span>
                 <span class="info-value">${r.venueLabel}</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Total</span>
+                <span class="info-label">${labels.total}</span>
                 <span class="info-value total">${r.totalAmount}</span>
               </div>
             </div>
 
             ${ticketRows ? `
             <div class="tickets-section">
-              <h3>Tickets</h3>
+              <h3>${labels.tickets}</h3>
               ${ticketRows}
             </div>` : ''}
 
             ${r.savedBadge ? `<div class="saved-badge">${r.savedBadge}</div>` : ''}
           </div>
 
-          <div class="res-footer">Reservation ID: ${r.id}</div>
+          <div class="res-footer">${labels.reservationId}: ${r.id}</div>
         </div>`;
     })
     .join('\n');
@@ -75,7 +90,7 @@ function generateAllReservationsHtml(reservations: ReadonlyArray<Reservation>): 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Reservations - GoSwing</title>
+  <title>${labels.title} - GoSwing</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -187,7 +202,7 @@ function generateAllReservationsHtml(reservations: ReadonlyArray<Reservation>): 
 <body>
   <div class="doc-header">
     <h1>GoSwing</h1>
-    <p>My Reservations &bull; ${reservations.length} reservation${reservations.length !== 1 ? 's' : ''}</p>
+    <p>${labels.subtitle}</p>
   </div>
   ${cards}
 </body>
@@ -206,6 +221,7 @@ export type ReservationsPageProps = Readonly<{
 }>;
 
 export default function ReservationsPage({ initialTab = 'active', route }: ReservationsPageProps): ReactElement {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<SegKey>(initialTab);
   const insets = useSafeAreaInsets();
   const bottomPad = (insets.bottom || 0) + 96;
@@ -275,29 +291,38 @@ export default function ReservationsPage({ initialTab = 'active', route }: Reser
 
   const handleDownloadAll = useCallback(async () => {
     if (list.length === 0) {
-      Alert.alert('No reservations', 'There are no reservations to download.');
+      Alert.alert(t('reservations.noReservationsTitle'), t('reservations.noReservationsMessage'));
       return;
     }
 
     try {
-      const html = generateAllReservationsHtml(list);
+      const html = generateAllReservationsHtml(list, {
+        date: t('reservations.pdf.date'),
+        time: t('reservations.pdf.time'),
+        venue: t('reservations.pdf.venue'),
+        total: t('reservations.pdf.total'),
+        tickets: t('reservations.pdf.tickets'),
+        reservationId: t('reservations.pdf.reservationId'),
+        title: t('reservations.pageTitle'),
+        subtitle: t('reservations.pdf.subtitle', { count: list.length }),
+      });
       const { uri } = await Print.printToFileAsync({ html, base64: false });
 
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: 'My Reservations - GoSwing',
+          dialogTitle: `${t('reservations.pageTitle')} - GoSwing`,
           UTI: 'com.adobe.pdf',
         });
       } else {
-        Alert.alert('PDF Generated', `Your reservations have been saved to:\n${uri}`);
+        Alert.alert(t('reservations.pdfGenerated'), t('reservations.savedToPath', { uri }));
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), msg);
     }
-  }, [list]);
+  }, [list, t]);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
@@ -307,9 +332,9 @@ export default function ReservationsPage({ initialTab = 'active', route }: Reser
         contentContainerStyle={{ paddingBottom: bottomPad }}
       >
         <View className="px-5 pt-2">
-          <Text className="text-3xl font-semibold text-black">My Reservations</Text>
+          <Text className="text-3xl font-semibold text-black">{t('reservations.pageTitle')}</Text>
           <Text className="text-base text-gray600 mt-1">
-            Manage your event reservations and tickets
+            {t('reservations.pageSubtitle')}
           </Text>
         </View>
 
@@ -323,11 +348,11 @@ export default function ReservationsPage({ initialTab = 'active', route }: Reser
 
         {loading ? (
           <View className="px-5 mt-6">
-            <Text className="text-base text-gray700">Loading reservations…</Text>
+            <Text className="text-base text-gray700">{t('reservations.loading')}</Text>
           </View>
         ) : error ? (
           <View className="px-5 mt-6">
-            <Text className="text-base font-semibold text-black">Could not load reservations</Text>
+            <Text className="text-base font-semibold text-black">{t('reservations.couldNotLoad')}</Text>
             <Text className="text-base text-gray600 mt-2">{error}</Text>
           </View>
         ) : (
@@ -337,8 +362,8 @@ export default function ReservationsPage({ initialTab = 'active', route }: Reser
                 <View className="px-1">
                   <Text className="text-base text-gray700">
                     {tab === 'active'
-                      ? 'No active reservations yet.'
-                      : 'No past reservations yet.'}
+                      ? t('reservations.noActive')
+                      : t('reservations.noPast')}
                   </Text>
                 </View>
               ) : (

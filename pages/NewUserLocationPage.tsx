@@ -10,6 +10,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useTranslation } from 'react-i18next';
 
 type Props = Readonly<{
   onDone: (location?: string, locationServicesEnabled?: boolean) => Promise<void>;
@@ -19,6 +20,7 @@ const cx = (...c: Array<string | false | null | undefined>) =>
   c.filter(Boolean).join(' ');
 
 export default function NewUserLocationPage({ onDone }: Props): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +47,9 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
       if (status !== Location.PermissionStatus.GRANTED) {
         setError(
           Platform.select({
-            ios: 'We could not access your location. You can enable it later in Settings.',
-            android: 'We could not access your location. You can enable it later in Settings.',
-            default: 'We could not access your location.',
+            ios: t('onboarding.location.permissionDenied'),
+            android: t('onboarding.location.permissionDenied'),
+            default: t('onboarding.location.permissionDenied'),
           }) as string
         );
         return;
@@ -79,7 +81,7 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
       await onDone(locationString, true);
     } catch (e) {
       console.warn('Location permission / fetch error:', e);
-      setError('Something went wrong while getting your location. Please try again or skip.');
+      setError(t('onboarding.location.fetchFailed'));
     } finally {
       setLoading(false);
     }
@@ -94,20 +96,20 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
           className="px-2 py-1 active:opacity-80"
           disabled={loading}
         >
-          <Text className="text-[18px] text-[#0B0B15]">Skip</Text>
+          <Text className="text-[18px] text-[#0B0B15]">{t('common.skip')}</Text>
         </Pressable>
       </View>
 
       {/* CONTENT */}
       <View className="flex-1 px-5 pt-4">
         <Text className="text-[28px] font-semibold text-black text-center mt-4">
-          Where are you making plans?
+          {t('onboarding.location.title')}
         </Text>
 
         {/* Big "hero" card */}
         <View className="mt-8 rounded-3xl bg-gray200 overflow-hidden h-[360px] items-center justify-center">
           <Feather name="map-pin" size={40} color="#0B0B15" />
-          <Text className="mt-3 text-base text-gray700">Use your current city</Text>
+          <Text className="mt-3 text-base text-gray700">{t('onboarding.location.hero')}</Text>
         </View>
 
         {error ? (
@@ -136,7 +138,7 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
             <View className="flex-row items-center gap-x-2">
               <Feather name="map-pin" size={18} color="#FFFFFF" />
               <Text className="text-white text-[18px] font-semibold">
-                Current Location
+                {t('onboarding.location.currentButton')}
               </Text>
             </View>
           )}
@@ -148,7 +150,7 @@ export default function NewUserLocationPage({ onDone }: Props): ReactElement {
           className="rounded-2xl border border-gray300 bg-white py-4 items-center active:opacity-90"
         >
           <Text className="text-[18px] font-semibold text-[#050515]">
-            Somewhere Else
+            {t('onboarding.location.somewhereElse')}
           </Text>
         </Pressable>
       </View>

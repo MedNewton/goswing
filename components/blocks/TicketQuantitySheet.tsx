@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState, type ReactElement } from '
 import { Animated, Easing, Modal, Pressable, ScrollView, Text, View, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 export type TicketType = Readonly<{
   id: string;
@@ -61,9 +62,11 @@ export default function TicketQuantitySheet({
   quantities,
   onChangeQuantities,
   onProceed,
-  title = 'Book Your Tickets',
+  title,
 }: TicketQuantitySheetProps): ReactElement | null {
+  const { t: translate } = useTranslation();
   const insets = useSafeAreaInsets();
+  const resolvedTitle = title ?? translate('tickets.bookYourTickets');
   const bottomPad = Math.max(insets.bottom, 12);
 
   const anim = useRef(new Animated.Value(0)).current;
@@ -186,11 +189,11 @@ export default function TicketQuantitySheet({
         {/* Header */}
         <View className="px-5 pt-4 pb-3">
           <View className="flex-row items-center justify-between">
-            <Text className="text-xl font-semibold text-black">{title}</Text>
+            <Text className="text-xl font-semibold text-black">{resolvedTitle}</Text>
             <Pressable
               onPress={close}
               accessibilityRole="button"
-              accessibilityLabel="Close ticket selector"
+              accessibilityLabel={translate('tickets.closeSelector')}
               hitSlop={10}
               className="h-9 w-9 items-center justify-center"
             >
@@ -203,8 +206,8 @@ export default function TicketQuantitySheet({
         <View className="px-5 pb-4">
           {ticketTypes.length === 0 ? (
             <View className="rounded-2xl border border-gray200 bg-white px-4 py-4">
-              <Text className="text-base font-medium text-black">No tickets available</Text>
-              <Text className="text-sm text-gray500 mt-1">Please check back later.</Text>
+              <Text className="text-base font-medium text-black">{translate('tickets.noneAvailable')}</Text>
+              <Text className="text-sm text-gray500 mt-1">{translate('tickets.checkBackLater')}</Text>
             </View>
           ) : (
             <ScrollView
@@ -213,34 +216,38 @@ export default function TicketQuantitySheet({
               contentContainerStyle={{ paddingBottom: 2 }}
             >
               <View className="gap-y-4">
-                {ticketTypes.map((t) => {
-                  const qty = clampInt(quantities[t.id] ?? 0, 0, 999);
+                {ticketTypes.map((ticket) => {
+                  const qty = clampInt(quantities[ticket.id] ?? 0, 0, 999);
                   const minusDisabled = qty <= 0;
 
                   const maxAllowed =
-                    typeof t.inventory === 'number' && Number.isFinite(t.inventory) ? clampInt(t.inventory, 0, 999) : undefined;
+                    typeof ticket.inventory === 'number' && Number.isFinite(ticket.inventory)
+                      ? clampInt(ticket.inventory, 0, 999)
+                      : undefined;
 
                   const plusDisabled = typeof maxAllowed === 'number' ? qty >= maxAllowed : false;
 
                   return (
                     <View
-                      key={t.id}
+                      key={ticket.id}
                       className="rounded-2xl border border-gray200 bg-white px-4 py-4 flex-row items-center justify-between"
                     >
                       <View className="flex-1 pr-4">
-                        <Text className="text-base font-medium text-black">{t.name}</Text>
-                        <Text className="text-sm text-gray500 mt-1">{formatMoney(t.priceCents, t.currency)}</Text>
+                        <Text className="text-base font-medium text-black">{ticket.name}</Text>
+                        <Text className="text-sm text-gray500 mt-1">{formatMoney(ticket.priceCents, ticket.currency)}</Text>
 
                         {typeof maxAllowed === 'number' ? (
-                          <Text className="text-xs text-gray400 mt-1">{maxAllowed} available</Text>
+                          <Text className="text-xs text-gray400 mt-1">
+                            {translate('tickets.availableCount', { count: maxAllowed })}
+                          </Text>
                         ) : null}
                       </View>
 
                       <View className="flex-row items-center gap-x-3">
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel={`Decrease ${t.name}`}
-                          onPress={() => bump(t.id, -1, maxAllowed)}
+                          accessibilityLabel={translate('tickets.decrease', { name: ticket.name })}
+                          onPress={() => bump(ticket.id, -1, maxAllowed)}
                           disabled={minusDisabled}
                           className={cx(
                             'h-12 w-12 rounded-xl border border-gray200 items-center justify-center',
@@ -255,8 +262,8 @@ export default function TicketQuantitySheet({
 
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel={`Increase ${t.name}`}
-                          onPress={() => bump(t.id, +1, maxAllowed)}
+                          accessibilityLabel={translate('tickets.increase', { name: ticket.name })}
+                          onPress={() => bump(ticket.id, +1, maxAllowed)}
                           disabled={plusDisabled}
                           className={cx(
                             'h-12 w-12 rounded-xl border border-gray200 items-center justify-center',
@@ -281,17 +288,15 @@ export default function TicketQuantitySheet({
 
               <View className="mt-4 flex-row items-center justify-between">
                 <Text className="text-lg text-black">
-                  Total:{' '}
-                  <Text className="font-medium">
-                    {totalQty} ticket{totalQty === 1 ? '' : 's'}
-                  </Text>
+                  {translate('tickets.total')}{' '}
+                  <Text className="font-medium">{translate('tickets.ticketCount', { count: totalQty })}</Text>
                 </Text>
                 <Text className="text-lg font-semibold text-black">{formatMoney(totalPriceCents, currency)}</Text>
               </View>
 
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Proceed to checkout"
+                accessibilityLabel={translate('tickets.proceedToCheckout')}
                 onPress={onProceed}
                 className="mt-4 rounded-2xl bg-black py-4 items-center justify-center"
                 style={{
@@ -302,7 +307,7 @@ export default function TicketQuantitySheet({
                   elevation: 10,
                 }}
               >
-                <Text className="text-white text-base font-semibold">Proceed to Checkout</Text>
+                <Text className="text-white text-base font-semibold">{translate('tickets.proceedToCheckout')}</Text>
               </Pressable>
             </>
           ) : null}

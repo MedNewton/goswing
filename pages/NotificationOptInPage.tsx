@@ -4,6 +4,7 @@ import { View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
+import { useTranslation } from 'react-i18next';
 
 type Props = Readonly<{
   onAllow: () => Promise<void>;
@@ -11,6 +12,7 @@ type Props = Readonly<{
 }>;
 
 export default function NotificationOptInPage({ onAllow, onSkip }: Props): ReactElement {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [requesting, setRequesting] = useState(false);
 
@@ -31,16 +33,16 @@ export default function NotificationOptInPage({ onAllow, onSkip }: Props): React
         await onAllow();
       } else {
         Alert.alert(
-          'Notifications not enabled',
-          "You can always enable notifications later from your device settings."
+          t('onboarding.notifications.notEnabledTitle'),
+          t('onboarding.notifications.notEnabledMessage')
         );
         await onSkip();
       }
     } catch (err) {
       console.warn('Notification permission error:', err);
       Alert.alert(
-        'Something went wrong',
-        'We could not request notifications right now.'
+        t('onboarding.notifications.requestFailedTitle'),
+        t('onboarding.notifications.requestFailedMessage')
       );
       await onSkip();
     } finally {
@@ -58,7 +60,7 @@ export default function NotificationOptInPage({ onAllow, onSkip }: Props): React
           disabled={requesting}
           style={{ opacity: requesting ? 0.6 : 1 }}
         >
-          <Text className="text-[18px] text-[#0B0B15]">Skip</Text>
+          <Text className="text-[18px] text-[#0B0B15]">{t('common.skip')}</Text>
         </Pressable>
       </View>
 
@@ -67,12 +69,11 @@ export default function NotificationOptInPage({ onAllow, onSkip }: Props): React
         <Feather name="bell" size={80} color="#050515" />
 
         <Text className="mt-10 text-[28px] leading-snug text-black text-center">
-          Want to hear about cool stuff?
+          {t('onboarding.notifications.permissionTitle')}
         </Text>
 
         <Text className="mt-4 text-base text-gray600 text-center">
-          We&apos;ll send you updates about new events, changes to your reservations,
-          and other important info.
+          {t('onboarding.notifications.permissionDescription')}
         </Text>
       </View>
 
@@ -91,7 +92,7 @@ export default function NotificationOptInPage({ onAllow, onSkip }: Props): React
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text className="text-white text-[18px] font-semibold">
-              Allow Notifications
+              {t('onboarding.notifications.allow')}
             </Text>
           )}
         </Pressable>

@@ -299,18 +299,18 @@ export async function getStoriesWithUserInfo(
   const userIds = [...new Set(data.map((row: any) => row.user_id).filter(Boolean))];
 
   // Fetch user profiles separately (if we have user IDs)
-  let profilesMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
+  let profilesMap: Record<string, { display_name: string | null; avatar_url: string | null }> = {};
 
   if (userIds.length > 0) {
     try {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, full_name, avatar_url")
-        .in("id", userIds);
+        .select("user_id, display_name, avatar_url")
+        .in("user_id", userIds);
 
       if (profiles) {
-        for (const p of profiles) {
-          profilesMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+        for (const p of profiles as any[]) {
+          profilesMap[p.user_id] = { display_name: p.display_name, avatar_url: p.avatar_url };
         }
       }
     } catch {
@@ -320,7 +320,7 @@ export async function getStoriesWithUserInfo(
   }
 
   return data.map((row: any) => {
-    const profile = profilesMap[row.user_id] ?? { full_name: null, avatar_url: null };
+    const profile = profilesMap[row.user_id] ?? { display_name: null, avatar_url: null };
     return {
       id: asString(row.id),
       userId: asString(row.user_id),
@@ -329,7 +329,7 @@ export async function getStoriesWithUserInfo(
       caption: normalizeNullableString(row.caption),
       createdAt: asString(row.created_at),
       expiresAt: asString(row.expires_at),
-      userName: normalizeNullableString(profile.full_name),
+      userName: normalizeNullableString(profile.display_name),
       userAvatarUrl: normalizeNullableString(profile.avatar_url),
     };
   });
