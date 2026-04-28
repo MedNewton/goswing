@@ -43,3 +43,6 @@ yarn-error.*
 
 *.md
 *.sql
+
+# Track design specs even though *.md is ignored
+!docs/superpowers/specs/*.md
