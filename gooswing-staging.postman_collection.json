@@ -1,0 +1,288 @@
+{
+  "info": {
+    "name": "Gooswing API — Staging",
+    "description": "Collection de test pour les 7 routes /v1/events* du module goswing (staging).\n\nAuth Clerk JWT auto-minté à chaque requête via pre-request script.\nNécessite l'environnement 'Gooswing staging' importé en parallèle.\n\nDocs spec : C:\\Users\\X1\\Documents\\GoSwing\\odoo-api-spec\\routes\\events.json\nRapport tests : clients/goosw/cr/rapport-test-api-events-2026-05-18.html",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-mint d'un JWT Clerk frais avant chaque requête.",
+          "// Postman ne wait pas les callbacks pm.sendRequest nested → on utilise",
+          "// async/await + IIFE pour FORCER Postman à attendre la fin du flow",
+          "// avant d'envoyer la requête principale.",
+          "//",
+          "// Env vars requis :",
+          "//   clerk_secret        — sk_test_... (Dashboard Clerk → API Keys)",
+          "//   clerk_test_user_id  — Clerk user ID cible",
+          "//",
+          "// Si quelque chose plante : View → Show Postman Console (Ctrl+Alt+C)",
+          "",
+          "const secret = pm.environment.get('clerk_secret');",
+          "const userId = pm.environment.get('clerk_test_user_id');",
+          "",
+          "if (!secret || secret.includes('REPLACE_')) {",
+          "    throw new Error('clerk_secret env var manque ou contient encore le placeholder REPLACE_. Renseigner sk_test_... depuis le Dashboard Clerk → API Keys → Secret keys.');",
+          "}",
+          "if (!userId) {",
+          "    throw new Error('clerk_test_user_id env var manque. Dashboard Clerk → Users → copie l\\'ID du user de test.');",
+          "}",
+          "",
+          "const send = (opts) => new Promise((resolve, reject) => {",
+          "    pm.sendRequest(opts, (err, res) => {",
+          "        if (err) return reject(err);",
+          "        if (res.code !== 200) {",
+          "            return reject(new Error('HTTP ' + res.code + ': ' + (res.text() || '').substring(0, 200)));",
+          "        }",
+          "        resolve(res);",
+          "    });",
+          "});",
+          "",
+          "const headers = {",
+          "    'Authorization': 'Bearer ' + secret,",
+          "    'Content-Type': 'application/json',",
+          "    'User-Agent': 'Postman-OPTIDEEP/1.0'",
+          "};",
+          "",
+          "// Pattern : await chain dans IIFE async — Postman attend la résolution finale",
+          "await (async () => {",
+          "    const sessionRes = await send({",
+          "        url: 'https://api.clerk.com/v1/sessions',",
+          "        method: 'POST',",
+          "        header: headers,",
+          "        body: { mode: 'raw', raw: JSON.stringify({ user_id: userId }) }",
+          "    });",
+          "    const sessionId = sessionRes.json().id;",
+          "",
+          "    const tokenRes = await send({",
+          "        url: 'https://api.clerk.com/v1/sessions/' + sessionId + '/tokens',",
+          "        method: 'POST',",
+          "        header: headers",
+          "    });",
+          "",
+          "    pm.environment.set('jwt', tokenRes.json().jwt);",
+          "    console.log('[Gooswing] Fresh JWT minté pour ' + userId + ' (session ' + sessionId + ')');",
+          "})();"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://web.gooswing.com",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. (Manual) Refresh JWT now",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{clerk_secret}}"},
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "User-Agent", "value": "Postman-OPTIDEEP/1.0"}
+        ],
+        "body": {"mode": "raw", "raw": "{\"user_id\": \"{{clerk_test_user_id}}\"}"},
+        "url": {
+          "raw": "https://api.clerk.com/v1/sessions",
+          "host": ["api", "clerk", "com"],
+          "path": ["v1", "sessions"]
+        },
+        "description": "Fallback manuel si le pre-request script auto-mint plante. Clic Send → tu vois la response avec le session id. La Tests-script enchaîne automatiquement avec /v1/sessions/<id>/tokens et stocke le JWT dans la variable d'env. Après ça, les requêtes #1-7 marchent."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Cette requête principale crée la session. Le Tests script fait",
+              "// le 2e call (mint token) et stocke le JWT.",
+              "if (pm.response.code !== 200) {",
+              "    console.error('[Gooswing] /v1/sessions failed:', pm.response.text());",
+              "    return;",
+              "}",
+              "const sessionId = pm.response.json().id;",
+              "console.log('[Gooswing] Session créée :', sessionId);",
+              "",
+              "pm.sendRequest({",
+              "    url: 'https://api.clerk.com/v1/sessions/' + sessionId + '/tokens',",
+              "    method: 'POST',",
+              "    header: {",
+              "        'Authorization': 'Bearer ' + pm.environment.get('clerk_secret'),",
+              "        'Content-Type': 'application/json',",
+              "        'User-Agent': 'Postman-OPTIDEEP/1.0'",
+              "    }",
+              "}, (err, res) => {",
+              "    if (err || res.code !== 200) {",
+              "        console.error('[Gooswing] /tokens failed:', err || res.text());",
+              "        return;",
+              "    }",
+              "    const jwt = res.json().jwt;",
+              "    pm.environment.set('jwt', jwt);",
+              "    console.log('[Gooswing] JWT stocké dans env.jwt (' + jwt.substring(0, 30) + '...)');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. List published events",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "application/json"}],
+        "url": {
+          "raw": "{{base_url}}/v1/events",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "events"]
+        },
+        "description": "Spec : GET /v1/events — Liste tous les events publiés, triés par date_begin ascendant. Pas de query params."
+      }
+    },
+    {
+      "name": "2. Event detail (by UUID or slug)",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "application/json"}],
+        "url": {
+          "raw": "{{base_url}}/v1/events/:id",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "events", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "cafe-hafa-sunset-live",
+              "description": "UUID (gw_external_id) ou slug (gw_slug). Exemples seedés : tanjazz-festival, cap-spartel-beach-dj-sunset, asilah-acoustic-night, tetouan-andalusian-night, cafe-hafa-sunset-live, tangerine-late-night-house, movenpick-rooftop-lounge"
+            }
+          ]
+        },
+        "description": "Spec : GET /v1/events/:id — résolution UUID puis fallback slug."
+      }
+    },
+    {
+      "name": "3. Ticket types for event",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "application/json"}],
+        "url": {
+          "raw": "{{base_url}}/v1/events/:id/ticket-types",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "events", ":id", "ticket-types"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "tanjazz-festival",
+              "description": "UUID ou slug de l'event"
+            }
+          ]
+        },
+        "description": "Spec : GET /v1/events/:id/ticket-types — tickets dans la fenêtre de vente courante (sales_start_at <= now <= sales_end_at)."
+      }
+    },
+    {
+      "name": "4. Events by organizer",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "application/json"}],
+        "url": {
+          "raw": "{{base_url}}/v1/organizers/:organizerId/events?limit=5",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "organizers", ":organizerId", "events"],
+          "query": [
+            {"key": "limit", "value": "5", "description": "Default 5, min 1, max 50"},
+            {"key": "exclude", "value": "", "description": "UUID d'event à exclure (ex. l'event courant qu'on est en train de regarder)", "disabled": true}
+          ],
+          "variable": [
+            {
+              "key": "organizerId",
+              "value": "REPLACE_WITH_UUID_FROM_/v1/events_response",
+              "description": "UUID de l'organisateur (champ organizerId du payload Event). Récupère-le en lançant d'abord la requête #1."
+            }
+          ]
+        },
+        "description": "Spec : GET /v1/organizers/:organizerId/events — mini-cards des events de l'organisateur."
+      }
+    },
+    {
+      "name": "5. Similar events",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "application/json"}],
+        "url": {
+          "raw": "{{base_url}}/v1/events/:id/similar?limit=5",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "events", ":id", "similar"],
+          "query": [
+            {"key": "limit", "value": "5", "description": "Default 5, min 1, max 50"}
+          ],
+          "variable": [
+            {
+              "key": "id",
+              "value": "cap-spartel-beach-dj-sunset",
+              "description": "Events similaires : même gw_category sinon fallback tags."
+            }
+          ]
+        },
+        "description": "Spec : GET /v1/events/:id/similar — category-first, fallback tags."
+      }
+    },
+    {
+      "name": "6. Upcoming by venue and/or organizer",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "application/json"}],
+        "url": {
+          "raw": "{{base_url}}/v1/events/upcoming-by-venue-or-organizer?organizerId=&venueId=&limit=20",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "events", "upcoming-by-venue-or-organizer"],
+          "query": [
+            {"key": "organizerId", "value": "", "description": "UUID organisateur (optionnel SI venueId est passé)"},
+            {"key": "venueId", "value": "", "description": "UUID venue (optionnel SI organizerId est passé)"},
+            {"key": "exclude", "value": "", "description": "UUID d'event à exclure", "disabled": true},
+            {"key": "limit", "value": "20", "description": "Default 20, min 1, max 100"}
+          ]
+        },
+        "description": "Spec : GET /v1/events/upcoming-by-venue-or-organizer — union deduped venue + organizer.\n\n⚠️ Au moins UN des deux (organizerId / venueId) est requis, sinon 400 validation_failed."
+      }
+    },
+    {
+      "name": "7. Event attendees",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Accept", "value": "application/json"}],
+        "url": {
+          "raw": "{{base_url}}/v1/events/:id/attendees?limit=20",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "events", ":id", "attendees"],
+          "query": [
+            {"key": "limit", "value": "20", "description": "Default 20, min 1, max 100"}
+          ],
+          "variable": [
+            {
+              "key": "id",
+              "value": "tanjazz-festival",
+              "description": "UUID event (pas de fallback slug ici)"
+            }
+          ]
+        },
+        "description": "Spec : GET /v1/events/:id/attendees — { attendees, totalCount }. Distinct users (par clerk_user_id) avec réservations confirmed/completed."
+      }
+    }
+  ]
+}
