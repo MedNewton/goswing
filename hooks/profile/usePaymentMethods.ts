@@ -1,18 +1,54 @@
 // hooks/profile/usePaymentMethods.ts
-import { useEffect, useState, useCallback } from 'react';
+// Payment methods — backed by the Gooswing REST API (routes F.1–F.4).
+// Display info only; the PCI data lives with the payment provider.
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/lib/supabase';
-import type { PaymentMethod, ID, CardBrand } from '@/types/domain';
+import * as meApi from '@/lib/api/me';
+import type { ApiPaymentMethod } from '@/lib/api/types';
+import type { PaymentMethod, CardBrand, ID } from '@/types/domain';
 
 type UsePaymentMethodsReturn = {
   paymentMethods: ReadonlyArray<PaymentMethod>;
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
-  addPaymentMethod: (paymentMethod: Omit<PaymentMethod, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  addPaymentMethod: (
+    paymentMethod: Omit<PaymentMethod, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+  ) => Promise<void>;
   removePaymentMethod: (id: ID) => Promise<void>;
   setDefaultPaymentMethod: (id: ID) => Promise<void>;
 };
+
+const CARD_BRANDS: ReadonlySet<CardBrand> = new Set([
+  'visa',
+  'mastercard',
+  'amex',
+  'discover',
+  'other',
+]);
+
+function toCardBrand(v: unknown): CardBrand {
+  const s = typeof v === 'string' ? v.toLowerCase() : '';
+  return CARD_BRANDS.has(s as CardBrand) ? (s as CardBrand) : 'other';
+}
+
+function mapPaymentMethod(raw: ApiPaymentMethod): PaymentMethod {
+  return {
+    id: String(raw.id) as ID,
+    userId: String(raw.userId) as ID,
+    provider: raw.provider === 'stripe' ? 'stripe' : 'other',
+    providerPaymentMethodId: String(raw.providerPaymentMethodId ?? ''),
+    cardBrand: toCardBrand(raw.cardBrand),
+    cardLastFour: String(raw.cardLastFour ?? ''),
+    cardExpMonth: typeof raw.cardExpMonth === 'number' ? raw.cardExpMonth : 0,
+    cardExpYear: typeof raw.cardExpYear === 'number' ? raw.cardExpYear : 0,
+    cardholderName: raw.cardholderName ?? undefined,
+    isDefault: Boolean(raw.isDefault),
+    createdAt: raw.createdAt ?? undefined,
+    updatedAt: raw.updatedAt ?? undefined,
+  };
+}
 
 export function usePaymentMethods(): UsePaymentMethodsReturn {
   const { user: clerkUser } = useUser();
@@ -30,109 +66,78 @@ export function usePaymentMethods(): UsePaymentMethodsReturn {
     try {
       setIsLoading(true);
       setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from('user_payment_methods')
-        .select('*')
-        .eq('user_id', clerkUser.id)
-        .order('is_default', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      if (fetchError) throw fetchError;
-
-      const mapped: PaymentMethod[] = (data ?? []).map((pm: any) => ({
-        id: pm.id as ID,
-        userId: pm.user_id as ID,
-        provider: pm.provider,
-        providerPaymentMethodId: pm.provider_payment_method_id,
-        cardBrand: pm.card_brand as CardBrand,
-        cardLastFour: pm.card_last_four,
-        cardExpMonth: pm.card_exp_month,
-        cardExpYear: pm.card_exp_year,
-        cardholderName: pm.cardholder_name,
-        isDefault: pm.is_default,
-        createdAt: pm.created_at,
-        updatedAt: pm.updated_at,
-      }));
-
-      setPaymentMethods(mapped);
+      const page = await meApi.listMyPaymentMethods();
+      setPaymentMethods((page.items ?? []).map(mapPaymentMethod));
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch payment methods'));
+      setError(
+        err instanceof Error ? err : new Error('Failed to fetch payment methods'),
+      );
     } finally {
       setIsLoading(false);
     }
   }, [clerkUser?.id]);
 
   useEffect(() => {
-    fetchPaymentMethods();
+    void fetchPaymentMethods();
   }, [fetchPaymentMethods]);
 
-  const addPaymentMethod = useCallback(async (
-    paymentMethod: Omit<PaymentMethod, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
-  ) => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
+  const addPaymentMethod = useCallback(
+    async (
+      paymentMethod: Omit<PaymentMethod, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+    ) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
 
-    const { error: insertError } = await supabase
-      .from('user_payment_methods')
-      .insert({
-        user_id: clerkUser.id,
+      await meApi.addMyPaymentMethod({
         provider: paymentMethod.provider,
-        provider_payment_method_id: paymentMethod.providerPaymentMethodId,
-        card_brand: paymentMethod.cardBrand,
-        card_last_four: paymentMethod.cardLastFour,
-        card_exp_month: paymentMethod.cardExpMonth,
-        card_exp_year: paymentMethod.cardExpYear,
-        cardholder_name: paymentMethod.cardholderName,
-        is_default: paymentMethod.isDefault,
+        providerPaymentMethodId: paymentMethod.providerPaymentMethodId,
+        cardBrand: paymentMethod.cardBrand,
+        cardLastFour: paymentMethod.cardLastFour,
+        cardExpMonth: paymentMethod.cardExpMonth,
+        cardExpYear: paymentMethod.cardExpYear,
+        cardholderName: paymentMethod.cardholderName ?? null,
+        isDefault: paymentMethod.isDefault,
       });
+      await fetchPaymentMethods();
+    },
+    [clerkUser?.id, fetchPaymentMethods],
+  );
 
-    if (insertError) throw insertError;
+  const removePaymentMethod = useCallback(
+    async (id: ID) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      await meApi.deleteMyPaymentMethod(String(id));
+      await fetchPaymentMethods();
+    },
+    [clerkUser?.id, fetchPaymentMethods],
+  );
 
-    await fetchPaymentMethods();
-  }, [clerkUser?.id, fetchPaymentMethods]);
+  const setDefaultPaymentMethod = useCallback(
+    async (id: ID) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      await meApi.setDefaultPaymentMethod(String(id));
+      await fetchPaymentMethods();
+    },
+    [clerkUser?.id, fetchPaymentMethods],
+  );
 
-  const removePaymentMethod = useCallback(async (id: ID) => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
-
-    const { error: deleteError } = await supabase
-      .from('user_payment_methods')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', clerkUser.id);
-
-    if (deleteError) throw deleteError;
-
-    // Optimistic update
-    setPaymentMethods((prev) => prev.filter((pm) => pm.id !== id));
-  }, [clerkUser?.id]);
-
-  const setDefaultPaymentMethod = useCallback(async (id: ID) => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
-
-    const { error: updateError } = await supabase
-      .from('user_payment_methods')
-      .update({ is_default: true, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('user_id', clerkUser.id);
-
-    if (updateError) throw updateError;
-
-    // Optimistic update - the trigger will handle unsetting other defaults
-    setPaymentMethods((prev) =>
-      prev.map((pm) => ({
-        ...pm,
-        isDefault: pm.id === id,
-      }))
-    );
-  }, [clerkUser?.id]);
-
-  return {
-    paymentMethods,
-    isLoading,
-    error,
-    refetch: fetchPaymentMethods,
-    addPaymentMethod,
-    removePaymentMethod,
-    setDefaultPaymentMethod,
-  };
+  return useMemo(
+    () => ({
+      paymentMethods,
+      isLoading,
+      error,
+      refetch: fetchPaymentMethods,
+      addPaymentMethod,
+      removePaymentMethod,
+      setDefaultPaymentMethod,
+    }),
+    [
+      paymentMethods,
+      isLoading,
+      error,
+      fetchPaymentMethods,
+      addPaymentMethod,
+      removePaymentMethod,
+      setDefaultPaymentMethod,
+    ],
+  );
 }

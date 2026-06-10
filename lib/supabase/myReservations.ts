@@ -1,40 +1,37 @@
-// src/lib/supabase/myReservations.ts
-import { supabase } from '@/lib/supabase';
+// lib/supabase/myReservations.ts
+// My reservations — backed by GET /v1/me/reservations?include=qr (route L.2).
+// The server already splits active/past; labels are formatted client-side
+// exactly as before.
+
 import { buildTicketQr } from '@/lib/qr/ticketQr';
+import * as reservationsApi from '@/lib/api/reservations';
+import type { ApiMyReservation } from '@/lib/api/types';
 
 export type MyReservationTicket = Readonly<{
   id: string;
   holder: string;
-  qrLabel: string; // e.g. "#1"
-
-  // NEW: stable QR payload
+  qrLabel: string;
   qrValue: string;
   qrCaption?: string | null;
 }>;
 
 export type MyReservationGroup = Readonly<{
   id: string;
-  title: string; // ticket type name
-  subtitle: string; // e.g. "2 tickets • $60 each"
+  title: string;
+  subtitle: string;
   tickets: ReadonlyArray<MyReservationTicket>;
 }>;
 
 export type MyReservation = Readonly<{
   id: string;
-
   title: string;
   ticketsBadge: string;
-
   dateLabel: string;
   timeLabel: string;
   venueLabel: string;
-
   totalAmount: string;
-
   groups: ReadonlyArray<MyReservationGroup>;
   savedBadge: string | null;
-
-  // For internal sorting / tab split
   startsAtIso?: string | null;
   endsAtIso?: string | null;
 }>;
@@ -42,59 +39,6 @@ export type MyReservation = Readonly<{
 export type MyReservationsResult = Readonly<{
   active: ReadonlyArray<MyReservation>;
   past: ReadonlyArray<MyReservation>;
-}>;
-
-type DbVenue = Readonly<{
-  name: string | null;
-  city: string | null;
-}>;
-
-type DbEvent = Readonly<{
-  id: string;
-  title: string | null;
-  starts_at: string | null;
-  ends_at: string | null;
-  venues: DbVenue | null;
-}>;
-
-type DbReservationItem = Readonly<{
-  id: string;
-  ticket_type_id: string;
-  quantity: number;
-  unit_price_cents: number;
-  line_total_cents: number;
-  ticket_type_name_snapshot: string;
-}>;
-
-type DbTicket = Readonly<{
-  id: string;
-  reservation_item_id: string;
-  ticket_no: number;
-  ticket_code: string | null;
-  ticket_type_name_snapshot: string;
-}>;
-
-type DbTicketHolder = Readonly<{
-  id: string;
-  ticket_id: string;
-  first_name: string;
-  last_name: string;
-}>;
-
-type DbReservationRow = Readonly<{
-  id: string;
-
-  status: string;
-  ordered_at: string;
-  currency: string;
-
-  total_amount_cents: number;
-  savings_cents: number;
-
-  event: DbEvent | null;
-  items: DbReservationItem[] | null;
-  tickets: DbTicket[] | null;
-  holders: DbTicketHolder[] | null;
 }>;
 
 function safeTrim(v: unknown): string {
@@ -129,10 +73,6 @@ function pluralize(n: number, singular: string, plural = `${singular}s`): string
   return n === 1 ? singular : plural;
 }
 
-function buildTicketsBadge(totalTickets: number): string {
-  return `${totalTickets} ${pluralize(totalTickets, 'ticket')}`;
-}
-
 function buildVenueLabel(venueName: string, city?: string | null): string {
   const v = safeTrim(venueName);
   const c = safeTrim(city);
@@ -146,199 +86,91 @@ function groupSubtitle(quantity: number, unitPriceCents: number, currency: strin
   return `${qty} ${pluralize(qty, 'ticket')} • ${unit} each`;
 }
 
-/**
- * Fetches reservations for the currently-authenticated user (RLS expected).
- * Splits into:
- * - Active: upcoming OR ongoing
- * - Past: started AND ended (requires ends_at)
- */
-export async function getMyReservations(): Promise<MyReservationsResult> {
-  const { data, error } = await supabase
-    .from('reservations')
-    .select(
-      `
-      id,
-      status,
-      ordered_at,
-      currency,
-      total_amount_cents,
-      savings_cents,
+function holderFullName(holder: { firstName?: string | null; lastName?: string | null } | null | undefined): string {
+  const full = [safeTrim(holder?.firstName), safeTrim(holder?.lastName)]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return full || 'Ticket holder';
+}
 
-      event:events (
-        id,
-        title,
-        starts_at,
-        ends_at,
-        venues:venue_id ( name, city )
-      ),
+function mapReservation(r: ApiMyReservation): MyReservation {
+  const reservationId = String(r.id);
 
-      items:reservation_items (
-        id,
-        ticket_type_id,
-        quantity,
-        unit_price_cents,
-        line_total_cents,
-        ticket_type_name_snapshot
-      ),
+  const currency = safeTrim(r.currency).toUpperCase() || 'USD';
+  const totalCents = clampInt(r.totalAmountCents, 0, Number.MAX_SAFE_INTEGER);
+  const savingsCents = clampInt(r.savingsCents, 0, Number.MAX_SAFE_INTEGER);
 
-      tickets:tickets (
-        id,
-        reservation_item_id,
-        ticket_no,
-        ticket_code,
-        ticket_type_name_snapshot
-      ),
+  const startsAtIso = r.startsAtIso ?? null;
+  const endsAtIso = r.endsAtIso ?? null;
+  const { dateLabel, timeLabel } = formatDateTime(startsAtIso);
 
-      holders:ticket_holders (
-        id,
-        ticket_id,
-        first_name,
-        last_name
-      )
-    `
-    )
-    .order('ordered_at', { ascending: false });
+  const items = r.items ?? [];
+  const tickets = r.tickets ?? [];
 
-  if (error) throw new Error(error.message);
+  const totalTickets =
+    clampInt(r.totalTickets, 0, 999999) ||
+    (tickets.length > 0
+      ? tickets.length
+      : items.reduce((acc, it) => acc + clampInt(it.quantity, 0, 999), 0));
 
-  const rows = (data ?? []) as unknown as DbReservationRow[];
+  const groups: MyReservationGroup[] = items.map((it) => {
+    const groupTickets = tickets
+      .filter((t) => String(t.reservationItemId ?? '') === String(it.id))
+      .slice()
+      .sort((a, b) => clampInt(a.ticketNo, 0, 999999) - clampInt(b.ticketNo, 0, 999999))
+      .map<MyReservationTicket>((t) => {
+        const ticketNo = clampInt(t.ticketNo, 1, 999999);
+        // Prefer the server-built QR payload; fall back to the local builder.
+        const fallback = buildTicketQr({
+          reservationId,
+          ticketId: String(t.id),
+          ticketNo,
+          ticketCode: t.ticketCode ?? null,
+        });
 
-  const now = Date.now();
-
-  const mapped: MyReservation[] = rows.map((r) => {
-    const reservationId = String(r.id);
-
-    const event = r.event ?? null;
-    const venue = event?.venues ?? null;
-
-    const currency = safeTrim(r.currency).toUpperCase() || 'USD';
-    const totalCents = clampInt(r.total_amount_cents, 0, Number.MAX_SAFE_INTEGER);
-    const savingsCents = clampInt(r.savings_cents, 0, Number.MAX_SAFE_INTEGER);
-
-    const startsAtIso = event?.starts_at ?? null;
-    const endsAtIso = event?.ends_at ?? null;
-
-    const { dateLabel, timeLabel } = formatDateTime(startsAtIso);
-
-    const items = (r.items ?? []).map((it) => ({
-      id: String(it.id),
-      ticketTypeId: String(it.ticket_type_id),
-      quantity: clampInt(it.quantity, 0, 999),
-      unitPriceCents: clampInt(it.unit_price_cents, 0, Number.MAX_SAFE_INTEGER),
-      lineTotalCents: clampInt(it.line_total_cents, 0, Number.MAX_SAFE_INTEGER),
-      name: safeTrim(it.ticket_type_name_snapshot) || 'Ticket',
-    }));
-
-    const tickets = (r.tickets ?? []).map((t) => ({
-      id: String(t.id),
-      reservationItemId: String(t.reservation_item_id),
-      ticketNo: clampInt(t.ticket_no, 1, 999999),
-      ticketCode: t.ticket_code ? String(t.ticket_code) : null,
-      ticketTypeNameSnapshot: safeTrim(t.ticket_type_name_snapshot) || 'Ticket',
-    }));
-
-    const holderByTicketId = new Map<string, string>();
-    for (const h of r.holders ?? []) {
-      const first = safeTrim(h.first_name);
-      const last = safeTrim(h.last_name);
-      const full = [first, last].filter(Boolean).join(' ').trim();
-      holderByTicketId.set(String(h.ticket_id), full || 'Ticket holder');
-    }
-
-    const totalTickets =
-      tickets.length > 0
-        ? tickets.length
-        : items.reduce((acc, it) => acc + clampInt(it.quantity, 0, 999), 0);
-
-    const groups: MyReservationGroup[] =
-      items.length > 0
-        ? items.map((it) => {
-            const groupTickets = tickets
-              .filter((t) => t.reservationItemId === it.id)
-              .sort((a, b) => a.ticketNo - b.ticketNo)
-              .map<MyReservationTicket>((t) => {
-                const { qrValue, qrCaption } = buildTicketQr({
-                  reservationId,
-                  ticketId: String(t.id),
-                  ticketNo: t.ticketNo,
-                  ticketCode: t.ticketCode,
-                });
-
-                return {
-                  id: t.id,
-                  holder: holderByTicketId.get(t.id) ?? 'Ticket holder',
-                  qrLabel: `#${t.ticketNo}`,
-                  qrValue,
-                  qrCaption,
-                };
-              });
-
-            return {
-              id: it.id,
-              title: it.name,
-              subtitle: groupSubtitle(it.quantity, it.unitPriceCents, currency),
-              tickets: groupTickets,
-            };
-          })
-        : [];
-
-    const savedBadge = savingsCents > 0 ? `Saved ${formatMoneyCents(savingsCents, currency)}` : null;
+        return {
+          id: String(t.id),
+          holder: holderFullName(t.holder),
+          qrLabel: `#${ticketNo}`,
+          qrValue: safeTrim(t.qrValue) || fallback.qrValue,
+          qrCaption: t.qrCaption ?? fallback.qrCaption,
+        };
+      });
 
     return {
-      id: reservationId,
-      title: safeTrim(event?.title) || 'Event',
-      ticketsBadge: buildTicketsBadge(totalTickets),
-      dateLabel,
-      timeLabel,
-      venueLabel: buildVenueLabel(safeTrim(venue?.name), venue?.city),
-      totalAmount: formatMoneyCents(totalCents, currency),
-      groups,
-      savedBadge,
-      startsAtIso,
-      endsAtIso,
+      id: String(it.id),
+      title: safeTrim(it.ticketTypeName) || 'Ticket',
+      subtitle: groupSubtitle(
+        clampInt(it.quantity, 0, 999),
+        clampInt(it.unitPriceCents, 0, Number.MAX_SAFE_INTEGER),
+        currency,
+      ),
+      tickets: groupTickets,
     };
   });
 
-  const active: MyReservation[] = [];
-  const past: MyReservation[] = [];
+  const savedBadge = savingsCents > 0 ? `Saved ${formatMoneyCents(savingsCents, currency)}` : null;
 
-  for (const r of mapped) {
-    const startIso = r.startsAtIso;
-    const endIso = r.endsAtIso;
+  return {
+    id: reservationId,
+    title: safeTrim(r.title) || 'Event',
+    ticketsBadge: `${totalTickets} ${pluralize(totalTickets, 'ticket')}`,
+    dateLabel,
+    timeLabel,
+    venueLabel: buildVenueLabel(safeTrim(r.venueName), r.venueCity),
+    totalAmount: formatMoneyCents(totalCents, currency),
+    groups,
+    savedBadge,
+    startsAtIso,
+    endsAtIso,
+  };
+}
 
-    const startMs = startIso ? new Date(startIso).getTime() : NaN;
-    const endMs = endIso ? new Date(endIso).getTime() : NaN;
-
-    if (!Number.isFinite(startMs)) {
-      active.push(r);
-      continue;
-    }
-
-    if (now < startMs) {
-      active.push(r);
-      continue;
-    }
-
-    if (Number.isFinite(endMs)) {
-      if (endMs <= now) past.push(r);
-      else active.push(r);
-      continue;
-    }
-
-    active.push(r);
-  }
-
-  active.sort((a, b) => {
-    const am = a.startsAtIso ? new Date(a.startsAtIso).getTime() : Number.POSITIVE_INFINITY;
-    const bm = b.startsAtIso ? new Date(b.startsAtIso).getTime() : Number.POSITIVE_INFINITY;
-    return am - bm;
-  });
-
-  past.sort((a, b) => {
-    const am = a.startsAtIso ? new Date(a.startsAtIso).getTime() : 0;
-    const bm = b.startsAtIso ? new Date(b.startsAtIso).getTime() : 0;
-    return bm - am;
-  });
-
-  return { active, past };
+export async function getMyReservations(): Promise<MyReservationsResult> {
+  const res = await reservationsApi.getMyReservations({ includeQr: true, limit: 50 });
+  return {
+    active: (res.active ?? []).map(mapReservation),
+    past: (res.past ?? []).map(mapReservation),
+  };
 }

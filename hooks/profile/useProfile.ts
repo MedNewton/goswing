@@ -1,7 +1,10 @@
 // hooks/profile/useProfile.ts
-import { useEffect, useState, useCallback } from 'react';
+// Current user's profile — backed by the Gooswing REST API (routes C.1–C.6).
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/lib/supabase';
+import * as meApi from '@/lib/api/me';
+import type { ApiProfile } from '@/lib/api/types';
 import type { UserProfile, ID } from '@/types/domain';
 
 type UseProfileReturn = {
@@ -20,6 +23,35 @@ export function useProfile(): UseProfileReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  const mapProfile = useCallback(
+    (raw: ApiProfile): UserProfile => ({
+      id: (raw.id || clerkUser?.id || '') as ID,
+      name: raw.displayName ?? clerkUser?.fullName ?? '',
+      avatarUri: raw.avatarUrl ?? clerkUser?.imageUrl ?? null,
+      email: raw.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? null,
+      phone: raw.phone ?? clerkUser?.primaryPhoneNumber?.phoneNumber ?? null,
+      phoneVerified:
+        raw.phoneVerified ??
+        clerkUser?.primaryPhoneNumber?.verification?.status === 'verified',
+      city: raw.city ?? undefined,
+      countryCode: raw.countryCode ?? undefined,
+      profileVisibility: raw.profileVisibility ?? 'public',
+      accountStatus: raw.accountStatus ?? 'active',
+      createdAt: raw.createdAt ?? undefined,
+      updatedAt: raw.updatedAt ?? undefined,
+      deactivatedAt: raw.deactivatedAt ?? null,
+      deletedAt: raw.deletedAt ?? null,
+      occupation: raw.occupation ?? null,
+      interests: (raw.interests ?? []).map((i) => i.tagLabel),
+      stats: {
+        attendedCount: raw.stats?.attendedCount ?? 0,
+        savedCount: raw.stats?.savedCount ?? 0,
+        reviewsCount: raw.stats?.reviewsCount ?? 0,
+      },
+    }),
+    [clerkUser],
+  );
+
   const fetchProfile = useCallback(async () => {
     if (!clerkUser?.id) {
       setProfile(null);
@@ -30,187 +62,64 @@ export function useProfile(): UseProfileReturn {
     try {
       setIsLoading(true);
       setError(null);
-
-      // Fetch profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', clerkUser.id)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        throw profileError;
-      }
-
-      // Fetch stats in parallel
-      const now = new Date().toISOString();
-
-      const [attendedRes, savedRes, reviewsRes] = await Promise.all([
-        // Attended = past reservations (events that have ended)
-        // We need to join with events to check if the event has ended
-        supabase
-          .from('reservations')
-          .select(`
-            id,
-            events!inner (
-              id,
-              ends_at,
-              starts_at
-            )
-          `)
-          .eq('user_id', clerkUser.id)
-          .in('status', ['confirmed', 'completed']),
-
-        // Saved = favorites count
-        supabase
-          .from('event_favorites')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', clerkUser.id),
-
-        // Reviews count
-        supabase
-          .from('event_reviews')
-          .select('*', { count: 'exact', head: true })
-          .eq('clerk_user_id', clerkUser.id),
-      ]);
-
-      // Calculate attended count (past events)
-      let attendedCount = 0;
-      if (attendedRes.data) {
-        const nowMs = Date.now();
-        attendedCount = attendedRes.data.filter((r: any) => {
-          const event = r.events;
-          if (!event) return false;
-
-          const endsAt = event.ends_at;
-          const startsAt = event.starts_at;
-
-          // If ends_at exists and is in the past
-          if (endsAt) {
-            return new Date(endsAt).getTime() <= nowMs;
-          }
-
-          // If no ends_at but starts_at is in the past (assume event is over)
-          if (startsAt) {
-            return new Date(startsAt).getTime() <= nowMs;
-          }
-
-          return false;
-        }).length;
-      }
-
-      // Fetch interests with tag labels
-      const { data: interestsData } = await supabase
-        .from('user_interests')
-        .select('tag_id, tags(label)')
-        .eq('user_id', clerkUser.id);
-
-      const interests = interestsData?.map((i: any) => i.tags?.label).filter(Boolean) ?? [];
-
-      const mappedProfile: UserProfile = {
-        id: clerkUser.id as ID,
-        name: profileData?.display_name ?? clerkUser.fullName ?? '',
-        avatarUri: profileData?.avatar_url ?? clerkUser.imageUrl ?? null,
-        email: profileData?.email ?? clerkUser.primaryEmailAddress?.emailAddress ?? null,
-        phone: profileData?.phone_number ?? clerkUser.primaryPhoneNumber?.phoneNumber ?? null,
-        phoneVerified: profileData?.phone_verified ?? clerkUser.primaryPhoneNumber?.verification?.status === 'verified',
-        city: profileData?.location ?? undefined,
-        profileVisibility: profileData?.profile_visibility ?? 'public',
-        accountStatus: profileData?.account_status ?? 'active',
-        createdAt: profileData?.created_at,
-        updatedAt: profileData?.updated_at,
-        deactivatedAt: profileData?.deactivated_at,
-        deletedAt: profileData?.deleted_at,
-        occupation: profileData?.occupation ?? null,
-        interests,
-        stats: {
-          attendedCount,
-          savedCount: savedRes.count ?? 0,
-          reviewsCount: reviewsRes.count ?? 0,
-        },
-      };
-
-      setProfile(mappedProfile);
+      const raw = await meApi.getMyProfile();
+      setProfile(mapProfile(raw));
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch profile'));
     } finally {
       setIsLoading(false);
     }
-  }, [clerkUser?.id]);
+  }, [clerkUser?.id, mapProfile]);
 
   useEffect(() => {
-    fetchProfile();
+    void fetchProfile();
   }, [fetchProfile]);
 
-  const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
+  const updateProfile = useCallback(
+    async (updates: Partial<UserProfile>) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
 
-    const dbUpdates: Record<string, any> = {};
+      const body: Parameters<typeof meApi.patchMyProfile>[0] = {};
+      if (updates.name !== undefined) body.displayName = updates.name;
+      if (updates.avatarUri !== undefined) body.avatarUrl = updates.avatarUri ?? null;
+      if (updates.email !== undefined) body.email = updates.email ?? null;
+      if (updates.phone !== undefined) body.phone = updates.phone ?? null;
+      if (updates.phoneVerified !== undefined) body.phoneVerified = updates.phoneVerified;
+      if (updates.city !== undefined) body.city = updates.city ?? null;
+      if (updates.countryCode !== undefined) body.countryCode = updates.countryCode ?? null;
+      if (updates.occupation !== undefined) body.occupation = updates.occupation ?? null;
+      if (updates.profileVisibility !== undefined && updates.profileVisibility) {
+        body.profileVisibility = updates.profileVisibility;
+      }
 
-    if (updates.name !== undefined) dbUpdates.display_name = updates.name;
-    if (updates.avatarUri !== undefined) dbUpdates.avatar_url = updates.avatarUri;
-    if (updates.email !== undefined) dbUpdates.email = updates.email;
-    if (updates.phone !== undefined) dbUpdates.phone_number = updates.phone;
-    if (updates.phoneVerified !== undefined) dbUpdates.phone_verified = updates.phoneVerified;
-    if (updates.city !== undefined) dbUpdates.location = updates.city;
-    if (updates.profileVisibility !== undefined) dbUpdates.profile_visibility = updates.profileVisibility;
-    if (updates.occupation !== undefined) dbUpdates.occupation = updates.occupation;
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .upsert({
-        user_id: clerkUser.id,
-        ...dbUpdates,
-        updated_at: new Date().toISOString(),
-      });
-
-    if (updateError) throw updateError;
-
-    // Optimistic update
-    setProfile((prev) => prev ? { ...prev, ...updates } : null);
-  }, [clerkUser?.id]);
+      const raw = await meApi.patchMyProfile(body);
+      setProfile(mapProfile(raw));
+    },
+    [clerkUser?.id, mapProfile],
+  );
 
   const deactivateAccount = useCallback(async () => {
     if (!clerkUser?.id) throw new Error('Not authenticated');
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        account_status: 'deactivated',
-        deactivated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', clerkUser.id);
-
-    if (updateError) throw updateError;
-
-    setProfile((prev) => prev ? { ...prev, accountStatus: 'deactivated' } : null);
-  }, [clerkUser?.id]);
+    await meApi.deactivateMyAccount();
+    await fetchProfile();
+  }, [clerkUser?.id, fetchProfile]);
 
   const deleteAccount = useCallback(async () => {
     if (!clerkUser?.id) throw new Error('Not authenticated');
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        account_status: 'deleted',
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', clerkUser.id);
-
-    if (updateError) throw updateError;
-
-    setProfile((prev) => prev ? { ...prev, accountStatus: 'deleted' } : null);
+    await meApi.deleteMyAccount();
+    setProfile(null);
   }, [clerkUser?.id]);
 
-  return {
-    profile,
-    isLoading,
-    error,
-    refetch: fetchProfile,
-    updateProfile,
-    deactivateAccount,
-    deleteAccount,
-  };
+  return useMemo(
+    () => ({
+      profile,
+      isLoading,
+      error,
+      refetch: fetchProfile,
+      updateProfile,
+      deactivateAccount,
+      deleteAccount,
+    }),
+    [profile, isLoading, error, fetchProfile, updateProfile, deactivateAccount, deleteAccount],
+  );
 }

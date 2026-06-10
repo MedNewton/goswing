@@ -1,7 +1,10 @@
 // hooks/profile/useUserInterests.ts
-import { useEffect, useState, useCallback } from 'react';
+// User interests — backed by the Gooswing REST API (routes H.1–H.4).
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/lib/supabase';
+import * as meApi from '@/lib/api/me';
+import type { ApiUserInterest } from '@/lib/api/types';
 import type { UserInterest, ID } from '@/types/domain';
 
 type UseUserInterestsReturn = {
@@ -14,15 +17,25 @@ type UseUserInterestsReturn = {
   replaceAllInterests: (tagIds: ReadonlyArray<ID>) => Promise<void>;
 };
 
+function mapInterest(raw: ApiUserInterest): UserInterest {
+  return {
+    userId: String(raw.userId) as ID,
+    tagId: String(raw.tagId) as ID,
+    tagLabel: String(raw.tagLabel ?? ''),
+    tagSlug: String(raw.tagSlug ?? ''),
+    createdAt: raw.createdAt ?? undefined,
+  };
+}
+
 export function useUserInterests(): UseUserInterestsReturn {
   const { user: clerkUser } = useUser();
-  const [interests, setInterestsState] = useState<ReadonlyArray<UserInterest>>([]);
+  const [interests, setInterests] = useState<ReadonlyArray<UserInterest>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchInterests = useCallback(async () => {
     if (!clerkUser?.id) {
-      setInterestsState([]);
+      setInterests([]);
       setIsLoading(false);
       return;
     }
@@ -30,23 +43,8 @@ export function useUserInterests(): UseUserInterestsReturn {
     try {
       setIsLoading(true);
       setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from('user_interests')
-        .select('user_id, tag_id, created_at, tags(label, slug)')
-        .eq('user_id', clerkUser.id);
-
-      if (fetchError) throw fetchError;
-
-      const mapped: UserInterest[] = (data ?? []).map((item: any) => ({
-        userId: item.user_id as ID,
-        tagId: item.tag_id as ID,
-        tagLabel: item.tags?.label ?? '',
-        tagSlug: item.tags?.slug ?? '',
-        createdAt: item.created_at,
-      }));
-
-      setInterestsState(mapped);
+      const page = await meApi.getMyInterests();
+      setInterests((page.items ?? []).map(mapInterest));
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch interests'));
     } finally {
@@ -55,66 +53,46 @@ export function useUserInterests(): UseUserInterestsReturn {
   }, [clerkUser?.id]);
 
   useEffect(() => {
-    fetchInterests();
+    void fetchInterests();
   }, [fetchInterests]);
 
-  const addInterest = useCallback(async (tagId: ID) => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
+  const addInterest = useCallback(
+    async (tagId: ID) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      const page = await meApi.addMyInterest(String(tagId));
+      setInterests((page.items ?? []).map(mapInterest));
+    },
+    [clerkUser?.id],
+  );
 
-    const { error: insertError } = await supabase
-      .from('user_interests')
-      .insert({ user_id: clerkUser.id, tag_id: tagId });
+  const removeInterest = useCallback(
+    async (tagId: ID) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      await meApi.removeMyInterest(String(tagId));
+      setInterests((prev) => prev.filter((i) => String(i.tagId) !== String(tagId)));
+    },
+    [clerkUser?.id],
+  );
 
-    if (insertError) throw insertError;
+  const replaceAllInterests = useCallback(
+    async (tagIds: ReadonlyArray<ID>) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      const page = await meApi.replaceMyInterests(tagIds.map(String));
+      setInterests((page.items ?? []).map(mapInterest));
+    },
+    [clerkUser?.id],
+  );
 
-    await fetchInterests();
-  }, [clerkUser?.id, fetchInterests]);
-
-  const removeInterest = useCallback(async (tagId: ID) => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
-
-    const { error: deleteError } = await supabase
-      .from('user_interests')
-      .delete()
-      .eq('user_id', clerkUser.id)
-      .eq('tag_id', tagId);
-
-    if (deleteError) throw deleteError;
-
-    // Optimistic update
-    setInterestsState((prev) => prev.filter((i) => i.tagId !== tagId));
-  }, [clerkUser?.id]);
-
-  const replaceAllInterests = useCallback(async (tagIds: ReadonlyArray<ID>) => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
-
-    // Delete all existing interests
-    const { error: deleteError } = await supabase
-      .from('user_interests')
-      .delete()
-      .eq('user_id', clerkUser.id);
-
-    if (deleteError) throw deleteError;
-
-    // Insert new interests
-    if (tagIds.length > 0) {
-      const { error: insertError } = await supabase
-        .from('user_interests')
-        .insert(tagIds.map((tagId) => ({ user_id: clerkUser.id, tag_id: tagId })));
-
-      if (insertError) throw insertError;
-    }
-
-    await fetchInterests();
-  }, [clerkUser?.id, fetchInterests]);
-
-  return {
-    interests,
-    isLoading,
-    error,
-    refetch: fetchInterests,
-    addInterest,
-    removeInterest,
-    replaceAllInterests,
-  };
+  return useMemo(
+    () => ({
+      interests,
+      isLoading,
+      error,
+      refetch: fetchInterests,
+      addInterest,
+      removeInterest,
+      replaceAllInterests,
+    }),
+    [interests, isLoading, error, fetchInterests, addInterest, removeInterest, replaceAllInterests],
+  );
 }
