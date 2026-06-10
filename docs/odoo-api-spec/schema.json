@@ -1,0 +1,759 @@
+{
+  "spec_version": "0.1.0",
+  "generated_at": "2026-04-29",
+  "source": "context/database.sql (current Supabase Postgres schema)",
+  "purpose": "Source of truth for the Odoo data model that backs the GoSwing app once Supabase is decommissioned. Every Odoo model on this list is needed; the field lists are exhaustive (the existing app reads/writes them all).",
+
+  "conventions": {
+    "model_prefix": "All models are namespaced under `goswing.` (e.g. `goswing.event`). Underlying Postgres tables auto-derive from the dotted name with dots → underscores (e.g. `goswing_event`).",
+    "id_strategy": "Odoo's int `id` is internal-only and NEVER returned to the RN client. Every model has an `external_id` Char field (the original Supabase UUID, unique, indexed, required). The API surfaces `external_id` as the `id` field in JSON.",
+    "user_identity": "Every user-scoped table has `clerk_user_id` (Char, index=True). This is the Clerk JWT `sub` claim, populated by the controller from the verified JWT, never from request body. This is the replacement for Supabase RLS — every controller method enforces ownership against this column.",
+    "name_normalization": "Some Supabase tables use `user_id` for the Clerk identity, others use `clerk_user_id`. On Odoo, normalize ALL of them to `clerk_user_id`. The original Supabase column name is recorded in `supabase_column` for migration scripts.",
+    "external_id_collision": "The Supabase `events` table has a column called `external_id` (text alias like `evt_005`). On Odoo this is renamed to `slug` to free `external_id` for the UUID. The API exposes the slug as the JSON field `externalId`.",
+    "currency": "Supabase stored `currency` as `character` (length 1) — that is a bug. On Odoo, store as Char(size=3), default 'USD', uppercase ISO 4217.",
+    "timestamps": "All datetime columns in UTC. Odoo `fields.Datetime` is naive UTC by default — that's correct. JSON serialization adds trailing `Z`.",
+    "vestigial_columns_dropped": "The Supabase tables include columns named `odoo_model`, `odoo_id`, `last_synced_at`, `sync_state`, `last_sync_error` from a previous, abandoned bidirectional-sync attempt. These DO NOT exist on Odoo — drop them on migration."
+  },
+
+  "type_mapping": {
+    "uuid": "Char(size=36, index=True). For the row's primary public id, the field name is `external_id`. For UUID foreign keys see `many2one` below — store the relation as Many2one to the target Odoo model and resolve via `external_id`.",
+    "text": "Char (no size cap) or Text — Char is fine for short strings, Text for descriptions.",
+    "integer": "Integer.",
+    "boolean": "Boolean.",
+    "timestamp with time zone": "Datetime (naive UTC). Serialize with trailing `Z`.",
+    "time without time zone": "Char(size=5) holding `HH:MM` — there's no native Time field in Odoo; alternatively Float (e.g. 14.5 = 14:30) but Char is clearer.",
+    "jsonb": "Json (Odoo 15+). Falls back to Text + JSON serialization on older versions.",
+    "inet": "Char(size=45) — covers IPv4 + IPv6.",
+    "ARRAY (text[])": "Char with comma-joined values, OR a separate one2many model. Where it appears in this schema (`organizers.specialties`), treat as Char with comma-joined values for now — low write volume.",
+    "character (length 1) → currency": "Char(size=3). Fix legacy data on migration: `'$' → 'USD'` etc.",
+    "many2one": "Use `Many2one` with `comodel_name` set. The DB foreign key is on the relation column. Set `ondelete` to match the Supabase FK behavior (default RESTRICT — see per-field notes for SET NULL / CASCADE).",
+    "primary_key": "Odoo gives every model an int PK automatically. We add `external_id` Char as the public id."
+  },
+
+  "default_value_tokens": {
+    "now()": "Use Odoo `default=fields.Datetime.now`.",
+    "gen_random_uuid()": "Generate in the controller on `create` if not supplied (e.g. `str(uuid.uuid4())`). On data migration, preserve the original Supabase UUID.",
+    "requesting_user_id() | (auth.jwt() ->> 'sub')": "Set in the controller from the verified JWT `sub`. NEVER from request body."
+  },
+
+  "models": [
+    {
+      "odoo_name": "goswing.event",
+      "supabase_table": "events",
+      "description": "A scheduled event (the core entity). Sold via ticket_types; hosted by an organizer at a venue.",
+      "ownership": "organizer_member (creators are members of the organizer; reads are public for status='published').",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id", "supabase_type": "uuid", "help": "Public UUID. The RN client uses this as the event id." },
+        { "name": "slug", "odoo_type": "Char", "required": false, "unique": true, "index": true, "supabase_column": "external_id", "supabase_type": "text", "help": "Optional human-readable alias (e.g. 'evt_005'). Renamed from Supabase `external_id` to avoid collision." },
+        { "name": "title", "odoo_type": "Char", "required": true, "supabase_column": "title", "supabase_type": "text" },
+        { "name": "description", "odoo_type": "Text", "required": false, "supabase_column": "description", "supabase_type": "text" },
+        { "name": "category", "odoo_type": "Char", "required": false, "supabase_column": "category", "supabase_type": "text", "help": "Free-form category slug (e.g. 'rooftop', 'club')." },
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "restrict", "required": true, "supabase_column": "organizer_id", "supabase_type": "uuid" },
+        { "name": "venue_id", "odoo_type": "Many2one", "comodel": "goswing.venue", "ondelete": "set null", "required": false, "supabase_column": "venue_id", "supabase_type": "uuid" },
+        { "name": "hero_image_url", "odoo_type": "Char", "required": false, "supabase_column": "hero_image_url", "supabase_type": "text" },
+        { "name": "starts_at", "odoo_type": "Datetime", "required": true, "supabase_column": "starts_at", "supabase_type": "timestamptz" },
+        { "name": "ends_at", "odoo_type": "Datetime", "required": false, "supabase_column": "ends_at", "supabase_type": "timestamptz" },
+        { "name": "status", "odoo_type": "Selection", "selection": [["draft", "Draft"], ["published", "Published"], ["cancelled", "Cancelled"], ["completed", "Completed"]], "required": true, "default": "published", "supabase_column": "status", "supabase_type": "text" },
+        { "name": "currency", "odoo_type": "Char", "size": 3, "required": true, "default": "USD", "supabase_column": "currency", "supabase_type": "char(1)", "help": "ISO 4217 (3 letters). Fix legacy data on migration." },
+        { "name": "min_price_cents", "odoo_type": "Integer", "required": false, "supabase_column": "min_price_cents", "supabase_type": "integer", "help": "Cached cheapest ticket-type price across all ticket_types for this event. Recomputed when ticket_types change." },
+        { "name": "is_free", "odoo_type": "Boolean", "required": true, "default": false, "supabase_column": "is_free" },
+        { "name": "attendee_count", "odoo_type": "Integer", "required": true, "default": 0, "supabase_column": "attendee_count", "help": "Cached count of distinct users with confirmed/completed reservations. Server-recomputed; never from client." },
+        { "name": "waitlist_enabled", "odoo_type": "Boolean", "required": true, "default": false, "supabase_column": "waitlist_enabled" },
+        { "name": "approval_mode", "odoo_type": "Selection", "selection": [["auto", "Auto"], ["manual", "Manual"]], "required": true, "default": "auto", "supabase_column": "approval_mode" },
+        { "name": "sharing_enabled", "odoo_type": "Boolean", "required": true, "default": true, "supabase_column": "sharing_enabled" },
+        { "name": "policies", "odoo_type": "Json", "required": true, "default": [], "supabase_column": "policies", "supabase_type": "jsonb", "help": "Array of policy strings shown on the event page." },
+        { "name": "created_by_clerk_user_id", "odoo_type": "Char", "index": true, "required": false, "supabase_column": "created_by_user_id", "help": "Clerk JWT `sub` of the creator. Populated from JWT on create." },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "tag_ids", "odoo_type": "One2many", "comodel": "goswing.event_tag", "inverse_name": "event_id", "help": "Through `goswing.event_tag` to `goswing.tag`." },
+        { "name": "ticket_type_ids", "odoo_type": "One2many", "comodel": "goswing.ticket_type", "inverse_name": "event_id" },
+        { "name": "gallery_ids", "odoo_type": "One2many", "comodel": "goswing.event_gallery", "inverse_name": "event_id" }
+      ],
+      "indexes": [
+        { "fields": ["status", "starts_at"], "name": "ix_event_status_starts_at" },
+        { "fields": ["organizer_id"], "name": "ix_event_organizer_id" },
+        { "fields": ["venue_id"], "name": "ix_event_venue_id" },
+        { "fields": ["category"], "name": "ix_event_category" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.organizer",
+      "supabase_table": "organizers",
+      "description": "An organization that hosts events.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "name", "odoo_type": "Char", "required": true, "unique": true },
+        { "name": "owner_clerk_user_id", "odoo_type": "Char", "index": true, "supabase_column": "owner_user_id" },
+        { "name": "tagline", "odoo_type": "Char" },
+        { "name": "about", "odoo_type": "Text" },
+        { "name": "logo_url", "odoo_type": "Char" },
+        { "name": "cover_image_url", "odoo_type": "Char" },
+        { "name": "established_year", "odoo_type": "Integer" },
+        { "name": "is_verified", "odoo_type": "Boolean", "default": false },
+        { "name": "city", "odoo_type": "Char" },
+        { "name": "country_code", "odoo_type": "Char", "size": 2, "help": "ISO 3166-1 alpha-2." },
+        { "name": "phone", "odoo_type": "Char" },
+        { "name": "email", "odoo_type": "Char" },
+        { "name": "website_url", "odoo_type": "Char" },
+        { "name": "instagram_handle", "odoo_type": "Char" },
+        { "name": "facebook_handle", "odoo_type": "Char" },
+        { "name": "tiktok_handle", "odoo_type": "Char" },
+        { "name": "youtube_handle", "odoo_type": "Char" },
+        { "name": "twitter_handle", "odoo_type": "Char" },
+        { "name": "pinterest_handle", "odoo_type": "Char" },
+        { "name": "snapchat_handle", "odoo_type": "Char" },
+        { "name": "google_business_url", "odoo_type": "Char" },
+        { "name": "specialties", "odoo_type": "Char", "help": "Comma-joined list. Was `text[]` in Supabase." },
+        { "name": "cancellation_policy", "odoo_type": "Text" },
+        { "name": "refund_policy", "odoo_type": "Text" },
+        { "name": "custom_policies", "odoo_type": "Json", "default": [], "help": "Array of policy strings." },
+        { "name": "response_time_hours", "odoo_type": "Float", "digits": [10, 2] },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "default": "now()" },
+        { "name": "member_ids", "odoo_type": "One2many", "comodel": "goswing.organizer_member", "inverse_name": "organizer_id" },
+        { "name": "gallery_ids", "odoo_type": "One2many", "comodel": "goswing.organizer_gallery", "inverse_name": "organizer_id" }
+      ],
+      "indexes": [
+        { "fields": ["owner_clerk_user_id"], "name": "ix_organizer_owner" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.venue",
+      "supabase_table": "venues",
+      "description": "A physical location.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "name", "odoo_type": "Char", "required": true },
+        { "name": "address_line1", "odoo_type": "Char" },
+        { "name": "city", "odoo_type": "Char" },
+        { "name": "region", "odoo_type": "Char" },
+        { "name": "country_code", "odoo_type": "Char", "size": 2 },
+        { "name": "postal_code", "odoo_type": "Char" },
+        { "name": "lat", "odoo_type": "Float", "digits": [10, 6] },
+        { "name": "lng", "odoo_type": "Float", "digits": [10, 6] },
+        { "name": "timezone", "odoo_type": "Char", "help": "IANA tz (e.g. 'America/New_York')." },
+        { "name": "venue_type", "odoo_type": "Char" },
+        { "name": "capacity", "odoo_type": "Integer" },
+        { "name": "description", "odoo_type": "Text" },
+        { "name": "free_access", "odoo_type": "Boolean", "default": false },
+        { "name": "free_for_ladies", "odoo_type": "Boolean", "default": false },
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "set null", "unique": true, "help": "Optional 1:1 — venues that are owned/operated by an organizer." },
+        { "name": "created_by_clerk_user_id", "odoo_type": "Char", "supabase_column": "created_by_user_id" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.tag",
+      "supabase_table": "tags",
+      "description": "Taxonomy tag. `type` partitions tags into buckets (category / access / music / party).",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "type", "odoo_type": "Selection", "selection": [["category", "Category"], ["access", "Access"], ["music", "Music"], ["party", "Party"]], "required": true },
+        { "name": "slug", "odoo_type": "Char", "required": true },
+        { "name": "label", "odoo_type": "Char", "required": true },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["type", "slug"], "unique": true, "name": "uq_tag_type_slug" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.event_tag",
+      "supabase_table": "event_tags",
+      "description": "M:N join — events ↔ tags. Standalone model (not pure m2m) because of `created_at`.",
+      "fields": [
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "tag_id", "odoo_type": "Many2one", "comodel": "goswing.tag", "ondelete": "cascade", "required": true },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["event_id", "tag_id"], "unique": true, "name": "uq_event_tag" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.event_favorite",
+      "supabase_table": "event_favorites",
+      "description": "User → favorited event. Owner = clerk_user_id.",
+      "ownership": "record_owner (writes only by the user; reads only by the user).",
+      "fields": [
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id", "help": "Populated from JWT `sub`." },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "event_id"], "unique": true, "name": "uq_favorite" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.event_attendance",
+      "supabase_table": "event_attendance",
+      "description": "Soft RSVP / interest signal (not a paid reservation).",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "status", "odoo_type": "Selection", "selection": [["going", "Going"], ["interested", "Interested"], ["not_going", "Not Going"]], "required": true, "default": "going" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "event_id"], "unique": true, "name": "uq_attendance" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.event_gallery",
+      "supabase_table": "event_gallery",
+      "description": "Images/videos curated for an event by its organizer.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "media_url", "odoo_type": "Char", "required": true },
+        { "name": "media_type", "odoo_type": "Selection", "selection": [["image", "Image"], ["video", "Video"]], "required": true, "default": "image" },
+        { "name": "caption", "odoo_type": "Text" },
+        { "name": "sort_order", "odoo_type": "Integer", "default": 0 },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.event_review",
+      "supabase_table": "event_reviews",
+      "description": "User-submitted review of an event.",
+      "ownership": "record_owner for write/delete; reads are public (per event).",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "reservation_id", "odoo_type": "Many2one", "comodel": "goswing.reservation", "ondelete": "set null", "required": false },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "clerk_user_id" },
+        { "name": "rating", "odoo_type": "Integer", "required": true, "check": "rating >= 1 AND rating <= 5" },
+        { "name": "comment", "odoo_type": "Text" },
+        { "name": "admin_liked", "odoo_type": "Boolean", "default": false },
+        { "name": "admin_reply", "odoo_type": "Text" },
+        { "name": "admin_reply_at", "odoo_type": "Datetime" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "event_id"], "unique": true, "name": "uq_event_review_per_user", "note": "One review per user per event." }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.venue_review",
+      "supabase_table": "venue_reviews",
+      "description": "User-submitted review of a venue.",
+      "ownership": "record_owner for write/delete; reads are public.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "venue_id", "odoo_type": "Many2one", "comodel": "goswing.venue", "ondelete": "cascade", "required": true },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "clerk_user_id" },
+        { "name": "rating", "odoo_type": "Integer", "required": true, "check": "rating >= 1 AND rating <= 5" },
+        { "name": "comment", "odoo_type": "Text" },
+        { "name": "admin_liked", "odoo_type": "Boolean", "default": false },
+        { "name": "admin_reply", "odoo_type": "Text" },
+        { "name": "admin_reply_at", "odoo_type": "Datetime" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "venue_id"], "unique": true, "name": "uq_venue_review_per_user" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.event_song_suggestion",
+      "supabase_table": "event_song_suggestions",
+      "description": "User-submitted song suggestion for an event (Deezer-backed).",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "clerk_user_id" },
+        { "name": "reservation_id", "odoo_type": "Many2one", "comodel": "goswing.reservation", "ondelete": "set null" },
+        { "name": "deezer_track_id", "odoo_type": "Char", "required": true },
+        { "name": "track_title", "odoo_type": "Char", "required": true },
+        { "name": "artist_name", "odoo_type": "Char", "required": true },
+        { "name": "deezer_artist_id", "odoo_type": "Char" },
+        { "name": "deezer_album_id", "odoo_type": "Char" },
+        { "name": "album_title", "odoo_type": "Char" },
+        { "name": "artwork_url", "odoo_type": "Char" },
+        { "name": "deezer_link", "odoo_type": "Char" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "event_id", "deezer_track_id"], "unique": true, "name": "uq_song_suggestion", "note": "One user can't suggest the same track twice for the same event." }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.event_story",
+      "supabase_table": "event_stories",
+      "description": "User-uploaded photo for an event. Auto-expires after 24h. Photo storage decision pending — see README § 10.",
+      "ownership": "record_owner for write/delete; reads are public per event.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "reservation_id", "odoo_type": "Many2one", "comodel": "goswing.reservation", "ondelete": "set null" },
+        { "name": "photo_url", "odoo_type": "Char", "required": true, "help": "Public URL. Either an `ir.attachment` URL (option A) or external CDN URL (option B)." },
+        { "name": "caption", "odoo_type": "Text" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "expires_at", "odoo_type": "Datetime", "required": true, "default": "now() + 24h", "help": "Server-set on create. Expired rows hidden from queries; pruned by daily cron." }
+      ],
+      "indexes": [
+        { "fields": ["event_id", "expires_at"], "name": "ix_story_event_expires" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.organizer_follow",
+      "supabase_table": "organizer_follows",
+      "description": "User → followed organizer.",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "cascade", "required": true },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "organizer_id"], "unique": true, "name": "uq_organizer_follow" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.organizer_gallery",
+      "supabase_table": "organizer_gallery",
+      "description": "Images/videos curated by an organizer for their profile.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "cascade", "required": true },
+        { "name": "image_url", "odoo_type": "Char", "required": true },
+        { "name": "caption", "odoo_type": "Text" },
+        { "name": "media_type", "odoo_type": "Selection", "selection": [["image", "Image"], ["video", "Video"]], "required": true, "default": "image" },
+        { "name": "sort_order", "odoo_type": "Integer", "default": 0 },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.organizer_member",
+      "supabase_table": "organizer_members",
+      "description": "Users who can act on behalf of an organizer (admin / staff).",
+      "ownership": "organizer admins manage their own membership list.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "cascade", "required": true },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "role", "odoo_type": "Selection", "selection": [["admin", "Admin"], ["staff", "Staff"], ["scanner", "Scanner"]], "required": true, "default": "admin" },
+        { "name": "invited_by_clerk_user_id", "odoo_type": "Char", "supabase_column": "invited_by" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["organizer_id", "clerk_user_id"], "unique": true, "name": "uq_organizer_member" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.organizer_payment_method",
+      "supabase_table": "organizer_payment_methods",
+      "description": "Payment / withdrawal methods for an organizer (e.g. Stripe Connect account).",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "cascade", "required": true },
+        { "name": "method_type", "odoo_type": "Selection", "selection": [["payment", "Payment"], ["withdrawal", "Withdrawal"]], "required": true },
+        { "name": "provider", "odoo_type": "Char", "required": true, "default": "stripe" },
+        { "name": "provider_account_id", "odoo_type": "Char" },
+        { "name": "label", "odoo_type": "Char" },
+        { "name": "is_default", "odoo_type": "Boolean", "default": false },
+        { "name": "details", "odoo_type": "Json", "default": {} },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.organizer_tag",
+      "supabase_table": "organizer_tags",
+      "description": "M:N join — organizers ↔ tags.",
+      "fields": [
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "cascade", "required": true },
+        { "name": "tag_id", "odoo_type": "Many2one", "comodel": "goswing.tag", "ondelete": "cascade", "required": true },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["organizer_id", "tag_id"], "unique": true, "name": "uq_organizer_tag" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.profile",
+      "supabase_table": "profiles",
+      "description": "User profile (one per Clerk user).",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "clerk_user_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "user_id", "help": "Acts as the public id for profile reads — there is no separate UUID." },
+        { "name": "display_name", "odoo_type": "Char" },
+        { "name": "initials", "odoo_type": "Char", "size": 4 },
+        { "name": "avatar_url", "odoo_type": "Char" },
+        { "name": "email", "odoo_type": "Char" },
+        { "name": "phone_number", "odoo_type": "Char" },
+        { "name": "phone_verified", "odoo_type": "Boolean", "default": false },
+        { "name": "location", "odoo_type": "Char" },
+        { "name": "occupation", "odoo_type": "Char" },
+        { "name": "profile_visibility", "odoo_type": "Selection", "selection": [["public", "Public"], ["private", "Private"]], "required": true, "default": "public" },
+        { "name": "account_status", "odoo_type": "Selection", "selection": [["active", "Active"], ["deactivated", "Deactivated"], ["deleted", "Deleted"]], "required": true, "default": "active" },
+        { "name": "deactivated_at", "odoo_type": "Datetime" },
+        { "name": "deleted_at", "odoo_type": "Datetime" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.user_settings",
+      "supabase_table": "user_settings",
+      "description": "Per-user app-level settings (one row per user).",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "clerk_user_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "user_id" },
+        { "name": "push_notifications_enabled", "odoo_type": "Boolean", "default": true },
+        { "name": "location_services_enabled", "odoo_type": "Boolean", "default": false },
+        { "name": "login_notifications_enabled", "odoo_type": "Boolean", "default": false },
+        { "name": "save_payment_info", "odoo_type": "Boolean", "default": true },
+        { "name": "auto_reload_wallet", "odoo_type": "Boolean", "default": false },
+        { "name": "email_receipts", "odoo_type": "Boolean", "default": true },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.notification_preferences",
+      "supabase_table": "notification_preferences",
+      "description": "Per-user push/email/SMS toggles.",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "clerk_user_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "user_id" },
+        { "name": "push_enabled", "odoo_type": "Boolean", "default": true },
+        { "name": "push_event_reminders", "odoo_type": "Boolean", "default": true },
+        { "name": "push_event_updates", "odoo_type": "Boolean", "default": true },
+        { "name": "push_new_followers", "odoo_type": "Boolean", "default": true },
+        { "name": "push_event_recommendations", "odoo_type": "Boolean", "default": true },
+        { "name": "email_enabled", "odoo_type": "Boolean", "default": true },
+        { "name": "email_weekly_digest", "odoo_type": "Boolean", "default": true },
+        { "name": "email_event_invites", "odoo_type": "Boolean", "default": true },
+        { "name": "email_promotions", "odoo_type": "Boolean", "default": false },
+        { "name": "email_newsletter", "odoo_type": "Boolean", "default": false },
+        { "name": "sms_enabled", "odoo_type": "Boolean", "default": false },
+        { "name": "sms_urgent_updates", "odoo_type": "Boolean", "default": false },
+        { "name": "sms_event_cancellations", "odoo_type": "Boolean", "default": true },
+        { "name": "personalized_ads", "odoo_type": "Boolean", "default": true },
+        { "name": "location_based_suggestions", "odoo_type": "Boolean", "default": true },
+        { "name": "quiet_hours_enabled", "odoo_type": "Boolean", "default": false },
+        { "name": "quiet_hours_start", "odoo_type": "Char", "size": 5, "help": "HH:MM" },
+        { "name": "quiet_hours_end", "odoo_type": "Char", "size": 5, "help": "HH:MM" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.user_interest",
+      "supabase_table": "user_interests",
+      "description": "User → tag (interests for personalization).",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "tag_id", "odoo_type": "Many2one", "comodel": "goswing.tag", "ondelete": "cascade", "required": true },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "tag_id"], "unique": true, "name": "uq_user_interest" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.login_history",
+      "supabase_table": "login_history",
+      "description": "Append-only login attempts. Read-only from the RN client.",
+      "ownership": "record_owner reads; server-only writes.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "logged_in_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "ip_address", "odoo_type": "Char", "size": 45 },
+        { "name": "user_agent", "odoo_type": "Char" },
+        { "name": "device_type", "odoo_type": "Selection", "selection": [["mobile", "Mobile"], ["desktop", "Desktop"], ["tablet", "Tablet"], ["unknown", "Unknown"]] },
+        { "name": "location", "odoo_type": "Char" },
+        { "name": "session_id", "odoo_type": "Char" },
+        { "name": "was_successful", "odoo_type": "Boolean", "default": true },
+        { "name": "failure_reason", "odoo_type": "Char" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.user_payment_method",
+      "supabase_table": "user_payment_methods",
+      "description": "Saved cards / payment methods for a user.",
+      "ownership": "record_owner.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "provider", "odoo_type": "Char", "required": true, "default": "stripe" },
+        { "name": "provider_payment_method_id", "odoo_type": "Char", "required": true },
+        { "name": "card_brand", "odoo_type": "Selection", "selection": [["visa", "Visa"], ["mastercard", "Mastercard"], ["amex", "Amex"], ["discover", "Discover"], ["other", "Other"]] },
+        { "name": "card_last_four", "odoo_type": "Char", "size": 4 },
+        { "name": "card_exp_month", "odoo_type": "Integer" },
+        { "name": "card_exp_year", "odoo_type": "Integer" },
+        { "name": "cardholder_name", "odoo_type": "Char" },
+        { "name": "is_default", "odoo_type": "Boolean", "default": false },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.ticket_type",
+      "supabase_table": "ticket_types",
+      "description": "Buyable ticket category for an event (e.g. 'GA', 'VIP').",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "cascade", "required": true },
+        { "name": "name", "odoo_type": "Char", "required": true },
+        { "name": "description", "odoo_type": "Text" },
+        { "name": "price_cents", "odoo_type": "Integer", "required": true },
+        { "name": "currency", "odoo_type": "Char", "size": 3, "required": true },
+        { "name": "benefits", "odoo_type": "Json", "default": [], "help": "Array of benefit strings." },
+        { "name": "capacity", "odoo_type": "Integer", "help": "Inventory limit (null = unlimited)." },
+        { "name": "sales_start_at", "odoo_type": "Datetime" },
+        { "name": "sales_end_at", "odoo_type": "Datetime" },
+        { "name": "is_free", "odoo_type": "Boolean", "default": false },
+        { "name": "free_for_ladies", "odoo_type": "Boolean", "default": false },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.reservation",
+      "supabase_table": "reservations",
+      "description": "An order. Created in `draft`, moves to `confirmed` after payment, then `completed` after the event.",
+      "ownership": "record_owner for read/write of own reservation.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "clerk_user_id", "odoo_type": "Char", "index": true, "required": true, "supabase_column": "user_id" },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "restrict", "required": true },
+        { "name": "status", "odoo_type": "Selection", "selection": [["draft", "Draft"], ["pending", "Pending"], ["confirmed", "Confirmed"], ["completed", "Completed"], ["cancelled", "Cancelled"], ["refunded", "Refunded"]], "required": true, "default": "draft" },
+        { "name": "ordered_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "expires_at", "odoo_type": "Datetime", "help": "If set, draft reservations auto-cancel after this time." },
+        { "name": "price_locked_at", "odoo_type": "Datetime" },
+        { "name": "currency", "odoo_type": "Char", "size": 3, "required": true },
+        { "name": "subtotal_cents", "odoo_type": "Integer", "required": true, "default": 0 },
+        { "name": "service_fees_cents", "odoo_type": "Integer", "required": true, "default": 0 },
+        { "name": "tax_cents", "odoo_type": "Integer", "required": true, "default": 0 },
+        { "name": "discount_cents", "odoo_type": "Integer", "required": true, "default": 0 },
+        { "name": "savings_cents", "odoo_type": "Integer", "required": true, "default": 0 },
+        { "name": "total_amount_cents", "odoo_type": "Integer", "required": true, "default": 0 },
+        { "name": "terms_accepted_at", "odoo_type": "Datetime" },
+        { "name": "terms_accepted_ip", "odoo_type": "Char", "size": 45 },
+        { "name": "billing_email", "odoo_type": "Char" },
+        { "name": "billing_first_name", "odoo_type": "Char" },
+        { "name": "billing_last_name", "odoo_type": "Char" },
+        { "name": "billing_zip", "odoo_type": "Char" },
+        { "name": "billing_country", "odoo_type": "Char", "size": 2 },
+        { "name": "payment_provider", "odoo_type": "Char" },
+        { "name": "payment_ref", "odoo_type": "Char" },
+        { "name": "metadata", "odoo_type": "Json", "default": {} },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "item_ids", "odoo_type": "One2many", "comodel": "goswing.reservation_item", "inverse_name": "reservation_id" },
+        { "name": "ticket_ids", "odoo_type": "One2many", "comodel": "goswing.ticket", "inverse_name": "reservation_id" },
+        { "name": "holder_ids", "odoo_type": "One2many", "comodel": "goswing.ticket_holder", "inverse_name": "reservation_id" }
+      ],
+      "indexes": [
+        { "fields": ["clerk_user_id", "status"], "name": "ix_reservation_user_status" },
+        { "fields": ["event_id", "status"], "name": "ix_reservation_event_status" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.reservation_item",
+      "supabase_table": "reservation_items",
+      "description": "Line item on a reservation: N tickets of one ticket_type. Snapshots fields so prices are stable post-purchase.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "reservation_id", "odoo_type": "Many2one", "comodel": "goswing.reservation", "ondelete": "cascade", "required": true },
+        { "name": "ticket_type_id", "odoo_type": "Many2one", "comodel": "goswing.ticket_type", "ondelete": "restrict", "required": true },
+        { "name": "quantity", "odoo_type": "Integer", "required": true, "check": "quantity >= 0" },
+        { "name": "unit_price_cents", "odoo_type": "Integer", "required": true },
+        { "name": "currency", "odoo_type": "Char", "size": 3, "required": true },
+        { "name": "line_total_cents", "odoo_type": "Integer", "required": true },
+        { "name": "ticket_type_name_snapshot", "odoo_type": "Char", "required": true, "help": "Name of the ticket type at purchase time." },
+        { "name": "benefits_snapshot", "odoo_type": "Json", "default": [], "help": "Benefits array at purchase time." },
+        { "name": "is_removed", "odoo_type": "Boolean", "default": false },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.ticket",
+      "supabase_table": "tickets",
+      "description": "An individual ticket (one row per attendee). Carries the QR data.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "reservation_id", "odoo_type": "Many2one", "comodel": "goswing.reservation", "ondelete": "cascade", "required": true },
+        { "name": "reservation_item_id", "odoo_type": "Many2one", "comodel": "goswing.reservation_item", "ondelete": "cascade", "required": true },
+        { "name": "event_id", "odoo_type": "Many2one", "comodel": "goswing.event", "ondelete": "restrict", "required": true },
+        { "name": "ticket_type_id", "odoo_type": "Many2one", "comodel": "goswing.ticket_type", "ondelete": "restrict", "required": true },
+        { "name": "ticket_no", "odoo_type": "Integer", "required": true, "help": "Sequence number within the reservation (1, 2, 3, ...)." },
+        { "name": "status", "odoo_type": "Selection", "selection": [["draft", "Draft"], ["issued", "Issued"], ["used", "Used"], ["void", "Void"]], "required": true, "default": "draft" },
+        { "name": "issued_at", "odoo_type": "Datetime" },
+        { "name": "price_cents", "odoo_type": "Integer", "required": true },
+        { "name": "currency", "odoo_type": "Char", "size": 3, "required": true },
+        { "name": "ticket_code", "odoo_type": "Char", "unique": true, "help": "Public code printed on the ticket." },
+        { "name": "qr_secret_hash", "odoo_type": "Char", "help": "Hash of the QR signing secret. Server-only." },
+        { "name": "qr_payload_version", "odoo_type": "Integer", "required": true, "default": 1 },
+        { "name": "ticket_type_name_snapshot", "odoo_type": "Char", "required": true },
+        { "name": "benefits_snapshot", "odoo_type": "Json", "default": [] },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["event_id", "status"], "name": "ix_ticket_event_status" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.ticket_holder",
+      "supabase_table": "ticket_holders",
+      "description": "Per-ticket attendee details captured at checkout.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "reservation_id", "odoo_type": "Many2one", "comodel": "goswing.reservation", "ondelete": "cascade", "required": true },
+        { "name": "ticket_id", "odoo_type": "Many2one", "comodel": "goswing.ticket", "ondelete": "cascade", "required": true },
+        { "name": "first_name", "odoo_type": "Char", "required": true },
+        { "name": "last_name", "odoo_type": "Char", "required": true },
+        { "name": "email", "odoo_type": "Char", "required": true },
+        { "name": "phone_number", "odoo_type": "Char" },
+        { "name": "dietary_restrictions", "odoo_type": "Text" },
+        { "name": "emergency_contact", "odoo_type": "Char" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.ticket_attendee",
+      "supabase_table": "ticket_attendees",
+      "description": "Alternate / extended attendee profile per ticket. (Schema duplicates ticket_holders somewhat — keep both for now, audit later.)",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "ticket_id", "odoo_type": "Many2one", "comodel": "goswing.ticket", "ondelete": "cascade", "required": true, "unique": true },
+        { "name": "first_name", "odoo_type": "Char", "required": true },
+        { "name": "last_name", "odoo_type": "Char", "required": true },
+        { "name": "email", "odoo_type": "Char", "required": true },
+        { "name": "phone", "odoo_type": "Char" },
+        { "name": "dietary_restrictions", "odoo_type": "Text" },
+        { "name": "emergency_contact_name", "odoo_type": "Char" },
+        { "name": "emergency_contact_phone", "odoo_type": "Char" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.ticket_checkin",
+      "supabase_table": "ticket_checkins",
+      "description": "Append-only log of QR scans at the door.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "ticket_id", "odoo_type": "Many2one", "comodel": "goswing.ticket", "ondelete": "cascade", "required": true },
+        { "name": "scanned_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "scanner_clerk_user_id", "odoo_type": "Char", "supabase_column": "scanner_user_id" },
+        { "name": "location", "odoo_type": "Char" },
+        { "name": "result", "odoo_type": "Selection", "selection": [["accepted", "Accepted"], ["rejected_already_used", "Already Used"], ["rejected_invalid", "Invalid"], ["rejected_wrong_event", "Wrong Event"]], "required": true, "default": "accepted" },
+        { "name": "reason", "odoo_type": "Char" }
+      ],
+      "indexes": [
+        { "fields": ["ticket_id", "scanned_at"], "name": "ix_checkin_ticket_at" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.payment",
+      "supabase_table": "payments",
+      "description": "Payment intents for a reservation. Written by Stripe webhook handler (out of scope for now — see README § 11).",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "reservation_id", "odoo_type": "Many2one", "comodel": "goswing.reservation", "ondelete": "restrict", "required": true },
+        { "name": "provider", "odoo_type": "Char", "required": true },
+        { "name": "provider_intent_id", "odoo_type": "Char", "required": true },
+        { "name": "status", "odoo_type": "Selection", "selection": [["pending", "Pending"], ["succeeded", "Succeeded"], ["failed", "Failed"], ["refunded", "Refunded"], ["cancelled", "Cancelled"]], "required": true },
+        { "name": "amount_cents", "odoo_type": "Integer", "required": true },
+        { "name": "currency", "odoo_type": "Char", "size": 3, "required": true },
+        { "name": "payment_method_type", "odoo_type": "Char" },
+        { "name": "failure_code", "odoo_type": "Char" },
+        { "name": "failure_message", "odoo_type": "Text" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ],
+      "indexes": [
+        { "fields": ["provider", "provider_intent_id"], "unique": true, "name": "uq_payment_provider_intent" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.payout",
+      "supabase_table": "payouts",
+      "description": "Scheduled / completed payouts to organizers.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "organizer_id", "odoo_type": "Many2one", "comodel": "goswing.organizer", "ondelete": "restrict", "required": true },
+        { "name": "amount_cents", "odoo_type": "Integer", "required": true },
+        { "name": "currency", "odoo_type": "Char", "size": 3, "required": true, "default": "USD" },
+        { "name": "status", "odoo_type": "Selection", "selection": [["pending", "Pending"], ["processing", "Processing"], ["completed", "Completed"], ["failed", "Failed"]], "required": true, "default": "pending" },
+        { "name": "scheduled_at", "odoo_type": "Datetime" },
+        { "name": "completed_at", "odoo_type": "Datetime" },
+        { "name": "provider", "odoo_type": "Char", "required": true, "default": "stripe" },
+        { "name": "provider_payout_id", "odoo_type": "Char" },
+        { "name": "period_start", "odoo_type": "Datetime" },
+        { "name": "period_end", "odoo_type": "Datetime" },
+        { "name": "created_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "updated_at", "odoo_type": "Datetime", "required": true, "default": "now()" }
+      ]
+    },
+
+    {
+      "odoo_name": "goswing.wallet_pass",
+      "supabase_table": "wallet_passes",
+      "description": "Apple Wallet / Google Wallet pass URL for a ticket.",
+      "fields": [
+        { "name": "external_id", "odoo_type": "Char", "required": true, "unique": true, "index": true, "supabase_column": "id" },
+        { "name": "ticket_id", "odoo_type": "Many2one", "comodel": "goswing.ticket", "ondelete": "cascade", "required": true, "unique": true },
+        { "name": "provider", "odoo_type": "Selection", "selection": [["apple", "Apple Wallet"], ["google", "Google Pay"]], "required": true },
+        { "name": "pass_url", "odoo_type": "Char", "required": true },
+        { "name": "issued_at", "odoo_type": "Datetime", "required": true, "default": "now()" },
+        { "name": "metadata", "odoo_type": "Json", "default": {} }
+      ]
+    }
+  ],
+
+  "model_count": 33,
+  "summary_by_domain": {
+    "events": ["goswing.event", "goswing.event_tag", "goswing.tag", "goswing.event_gallery"],
+    "organizers": ["goswing.organizer", "goswing.organizer_member", "goswing.organizer_gallery", "goswing.organizer_follow", "goswing.organizer_payment_method", "goswing.organizer_tag"],
+    "venues": ["goswing.venue"],
+    "users": ["goswing.profile", "goswing.user_settings", "goswing.notification_preferences", "goswing.user_interest", "goswing.login_history", "goswing.user_payment_method"],
+    "favorites_attendance": ["goswing.event_favorite", "goswing.event_attendance"],
+    "reservations_checkout": ["goswing.ticket_type", "goswing.reservation", "goswing.reservation_item", "goswing.ticket", "goswing.ticket_holder", "goswing.ticket_attendee", "goswing.ticket_checkin", "goswing.wallet_pass"],
+    "payments": ["goswing.payment", "goswing.payout"],
+    "stories": ["goswing.event_story"],
+    "reviews": ["goswing.event_review", "goswing.venue_review"],
+    "song_suggestions": ["goswing.event_song_suggestion"]
+  }
+}
