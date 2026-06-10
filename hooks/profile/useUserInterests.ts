@@ -1,7 +1,10 @@
 // hooks/profile/useUserInterests.ts
-// Phase 1 stub — interests are not exposed by the new API yet.
+// User interests — backed by the Gooswing REST API (routes H.1–H.4).
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useUser } from '@clerk/clerk-expo';
+import * as meApi from '@/lib/api/me';
+import type { ApiUserInterest } from '@/lib/api/types';
 import type { UserInterest, ID } from '@/types/domain';
 
 type UseUserInterestsReturn = {
@@ -14,42 +17,82 @@ type UseUserInterestsReturn = {
   replaceAllInterests: (tagIds: ReadonlyArray<ID>) => Promise<void>;
 };
 
-const EMPTY: ReadonlyArray<UserInterest> = [];
-
-function stubLog(name: string): void {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log(`[STUB] hooks/profile/useUserInterests.${name}()`);
-  }
+function mapInterest(raw: ApiUserInterest): UserInterest {
+  return {
+    userId: String(raw.userId) as ID,
+    tagId: String(raw.tagId) as ID,
+    tagLabel: String(raw.tagLabel ?? ''),
+    tagSlug: String(raw.tagSlug ?? ''),
+    createdAt: raw.createdAt ?? undefined,
+  };
 }
 
 export function useUserInterests(): UseUserInterestsReturn {
-  const refetch = useCallback(async () => {
-    stubLog('refetch');
-  }, []);
-  const addInterest = useCallback(async (_tagId: ID) => {
-    stubLog('addInterest');
-  }, []);
-  const removeInterest = useCallback(async (_tagId: ID) => {
-    stubLog('removeInterest');
-  }, []);
-  const replaceAllInterests = useCallback(
-    async (_tagIds: ReadonlyArray<ID>) => {
-      stubLog('replaceAllInterests');
+  const { user: clerkUser } = useUser();
+  const [interests, setInterests] = useState<ReadonlyArray<UserInterest>>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchInterests = useCallback(async () => {
+    if (!clerkUser?.id) {
+      setInterests([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      const page = await meApi.getMyInterests();
+      setInterests((page.items ?? []).map(mapInterest));
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to fetch interests'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clerkUser?.id]);
+
+  useEffect(() => {
+    void fetchInterests();
+  }, [fetchInterests]);
+
+  const addInterest = useCallback(
+    async (tagId: ID) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      const page = await meApi.addMyInterest(String(tagId));
+      setInterests((page.items ?? []).map(mapInterest));
     },
-    [],
+    [clerkUser?.id],
+  );
+
+  const removeInterest = useCallback(
+    async (tagId: ID) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      await meApi.removeMyInterest(String(tagId));
+      setInterests((prev) => prev.filter((i) => String(i.tagId) !== String(tagId)));
+    },
+    [clerkUser?.id],
+  );
+
+  const replaceAllInterests = useCallback(
+    async (tagIds: ReadonlyArray<ID>) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+      const page = await meApi.replaceMyInterests(tagIds.map(String));
+      setInterests((page.items ?? []).map(mapInterest));
+    },
+    [clerkUser?.id],
   );
 
   return useMemo(
     () => ({
-      interests: EMPTY,
-      isLoading: false,
-      error: null,
-      refetch,
+      interests,
+      isLoading,
+      error,
+      refetch: fetchInterests,
       addInterest,
       removeInterest,
       replaceAllInterests,
     }),
-    [refetch, addInterest, removeInterest, replaceAllInterests],
+    [interests, isLoading, error, fetchInterests, addInterest, removeInterest, replaceAllInterests],
   );
 }

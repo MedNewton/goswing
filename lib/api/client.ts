@@ -36,6 +36,7 @@ export type ApiCallOptions = Readonly<{
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   query?: Record<string, string | number | boolean | undefined | null>;
   body?: unknown;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 }>;
 
@@ -103,18 +104,24 @@ export async function apiCall<T>(
 
   const url = buildUrl(path, opts.query);
 
+  const isFormData = typeof FormData !== 'undefined' && opts.body instanceof FormData;
+
   const headers: Record<string, string> = {
     Accept: 'application/json',
     Authorization: `Bearer ${token}`,
+    ...(opts.headers ?? {}),
   };
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  // fetch sets the multipart boundary itself for FormData bodies.
+  if (opts.body !== undefined && !isFormData) headers['Content-Type'] = 'application/json';
 
   const init: RequestInit = {
     method: opts.method ?? 'GET',
     headers,
     signal: opts.signal,
   };
-  if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+  if (opts.body !== undefined) {
+    init.body = isFormData ? (opts.body as FormData) : JSON.stringify(opts.body);
+  }
 
   let res: Response;
   try {

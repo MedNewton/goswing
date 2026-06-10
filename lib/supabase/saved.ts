@@ -1,9 +1,7 @@
 // lib/supabase/saved.ts
-// Phase 1 stub — favorites are not supported by the new REST API in this phase.
-// Reads return empty results; writes resolve as no-ops.
-// See docs/superpowers/specs/2026-05-20-rest-api-read-side-migration.md § 6.3.
+// Favorites — backed by the Gooswing REST API (routes K.1–K.4).
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import * as engagementApi from '@/lib/api/engagement';
 
 export type FavoriteRow = Readonly<{
   user_id: string;
@@ -24,44 +22,34 @@ export type SavedEvent = Readonly<{
 
 export type SavedEventWithFavorite = SavedEvent & Readonly<{ favorite: boolean }>;
 
-function stubLog(name: string): void {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log(`[STUB] lib/supabase/saved.${name}()`);
-  }
+export async function addFavorite(params: { eventId: string }): Promise<void> {
+  await engagementApi.addFavorite(params.eventId);
 }
 
-export async function addFavorite(_params: {
-  supabase: SupabaseClient;
-  userId: string;
-  eventId: string;
-}): Promise<void> {
-  stubLog('addFavorite');
+export async function removeFavorite(params: { eventId: string }): Promise<void> {
+  await engagementApi.removeFavorite(params.eventId);
 }
 
-export async function removeFavorite(_params: {
-  supabase: SupabaseClient;
-  userId: string;
-  eventId: string;
-}): Promise<void> {
-  stubLog('removeFavorite');
+export async function listFavoriteEventIds(): Promise<ReadonlyArray<string>> {
+  const { eventIds } = await engagementApi.listFavoriteIds();
+  return (eventIds ?? []).map(String);
 }
 
-export async function listFavoriteEventIds(_params: {
-  supabase: SupabaseClient;
-  userId: string;
-}): Promise<ReadonlyArray<string>> {
-  stubLog('listFavoriteEventIds');
-  return [];
-}
-
-export async function listFavoriteEvents(_params: {
-  supabase: SupabaseClient;
-  userId: string;
+export async function listFavoriteEvents(params?: {
   limit?: number;
 }): Promise<ReadonlyArray<SavedEventWithFavorite>> {
-  stubLog('listFavoriteEvents');
-  return [];
+  const page = await engagementApi.listFavorites({ limit: params?.limit ?? 50 });
+  return (page.items ?? []).map((e) => ({
+    id: String(e.id),
+    title: String(e.title ?? ''),
+    organizer: String(e.organizer ?? ''),
+    venue: String(e.venue ?? ''),
+    city: e.city ?? null,
+    startsAtIso: String(e.startsAtIso ?? ''),
+    imageUrl: e.imageUrl ?? null,
+    priceLabel: e.priceLabel ?? null,
+    favorite: e.favorite ?? true,
+  }));
 }
 
 /** Pure utility — unchanged. */

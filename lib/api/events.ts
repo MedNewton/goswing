@@ -50,6 +50,34 @@ export function getOrganizerEvents(
   );
 }
 
+export type ApiOrganizerEventExpanded = ApiMiniEvent &
+  Readonly<{
+    externalId?: string | null;
+    endsAtIso?: string | null;
+    venue?: string | null;
+    city?: string | null;
+  }>;
+
+/** Phase 2 § I.5 — Route 4 extended with `when` + `expand=details`. */
+export function getOrganizerEventsExpanded(
+  organizerId: string,
+  params?: { when?: 'upcoming' | 'past' | 'all'; limit?: number; exclude?: string },
+  opts?: Opts,
+): Promise<ReadonlyArray<ApiOrganizerEventExpanded>> {
+  return call()<ReadonlyArray<ApiOrganizerEventExpanded>>(
+    `/v1/organizers/${encodeURIComponent(organizerId)}/events`,
+    {
+      query: {
+        when: params?.when,
+        expand: 'details',
+        limit: params?.limit,
+        exclude: params?.exclude,
+      },
+      signal: opts?.signal,
+    },
+  );
+}
+
 export function getSimilarEvents(
   idOrSlug: string,
   params?: { limit?: number },

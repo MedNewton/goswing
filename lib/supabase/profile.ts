@@ -1,7 +1,8 @@
 // lib/supabase/profile.ts
-// Phase 1 stub — onboarding writes are no-ops; users continue through the
-// onboarding gate without persisting profile data until Phase 2 wires it back up.
-// See docs/superpowers/specs/2026-05-20-rest-api-read-side-migration.md § 6.3.
+// Profile bootstrap — backed by the Gooswing REST API (routes C.2, C.4).
+// The server seeds profile + user_settings + notification_preferences on init.
+
+import * as meApi from '@/lib/api/me';
 
 type InitializeProfileParams = {
   userId: string;
@@ -13,23 +14,28 @@ type InitializeProfileParams = {
 };
 
 export async function initializeUserProfile(
-  _params: InitializeProfileParams,
+  params: InitializeProfileParams,
 ): Promise<void> {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log('[STUB] lib/supabase/profile.initializeUserProfile()');
-  }
+  await meApi.initMyProfile({
+    displayName: params.displayName ?? null,
+    email: params.email ?? null,
+    avatarUrl: params.avatarUrl ?? null,
+    phone: params.phone ?? null,
+    location: params.location ?? null,
+  });
 }
 
-export async function updateProfileFromOnboarding(_params: {
+export async function updateProfileFromOnboarding(params: {
   userId: string;
   phone?: string | null;
   location?: string | null;
   pushNotificationsEnabled?: boolean;
   locationServicesEnabled?: boolean;
 }): Promise<void> {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log('[STUB] lib/supabase/profile.updateProfileFromOnboarding()');
-  }
+  await meApi.completeOnboarding({
+    phone: params.phone ?? null,
+    location: params.location ?? null,
+    pushNotificationsEnabled: params.pushNotificationsEnabled,
+    locationServicesEnabled: params.locationServicesEnabled,
+  });
 }

@@ -34,9 +34,7 @@ import LocationPicker from '@/components/blocks/LocationPicker';
 import { getPublishedEvents, getEventDetailsById } from '@/lib/supabase/events';
 import type { TicketQuantities, TicketType } from '@/components/blocks/TicketQuantitySheet';
 
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
-import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 import { useProfile } from '@/hooks/profile/useProfile';
 
 
@@ -154,7 +152,6 @@ function filterByWhenKey(events: ReadonlyArray<Event>, key: WhenKey): ReadonlyAr
 
 export default function HomePage(): ReactElement {
   const { t } = useTranslation();
-  const { isSignedIn, getToken } = useClerkAuth();
   const { user: clerkUser } = useAuth();
   const user = getUser();
   const { profile } = useProfile();
@@ -207,33 +204,8 @@ export default function HomePage(): ReactElement {
   const [reservationsInitialTab, setReservationsInitialTab] = useState<'active' | 'past'>('active');
 
   const fav = useEventFavorites({
-    supabase,
     userId,
   });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      if (!isSignedIn) return;
-
-      // Wait until Clerk can actually produce the Supabase JWT
-      const token = await getToken({ template: 'supabase' });
-      if (cancelled) return;
-
-      if (!token) {
-        console.log('debug_auth_context skipped: no supabase token yet');
-        return;
-      }
-
-      const { data, error: rpcError } = await supabase.rpc('debug_auth_context');
-      if (!cancelled) console.log('debug_auth_context', { data, error: rpcError });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isSignedIn, getToken]);
 
   useEffect(() => {
     let cancelled = false;

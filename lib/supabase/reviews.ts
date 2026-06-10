@@ -1,7 +1,8 @@
 // lib/supabase/reviews.ts
-// Phase 1 stub — reviews are not exposed by the new REST API yet.
-// Reads return empty/null; writes resolve as no-ops.
-// See docs/superpowers/specs/2026-05-20-rest-api-read-side-migration.md § 6.3.
+// Event reviews — backed by the Gooswing REST API (routes N.1–N.5).
+
+import * as engagementApi from '@/lib/api/engagement';
+import type { ApiMyReview } from '@/lib/api/types';
 
 export type ReviewRating = 1 | 2 | 3 | 4 | 5;
 
@@ -44,38 +45,84 @@ export type UserReviewsResult = Readonly<{
   averageRating: number;
 }>;
 
-function stubLog(name: string): void {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log(`[STUB] lib/supabase/reviews.${name}()`);
-  }
+function toRating(v: unknown): ReviewRating {
+  const n = typeof v === 'number' ? Math.round(v) : Number(v);
+  if (n >= 1 && n <= 5) return n as ReviewRating;
+  return 5;
+}
+
+function mapUserReview(r: ApiMyReview): UserReview {
+  return {
+    id: String(r.id),
+    eventId: String(r.eventId ?? ''),
+    eventTitle: String(r.eventTitle ?? ''),
+    eventImageUrl: r.eventImageUrl ?? null,
+    organizerName: String(r.organizerName ?? ''),
+    eventDate: String(r.eventStartsAtIso ?? ''),
+    rating: toRating(r.rating),
+    comment: r.comment ?? null,
+    createdAt: String(r.createdAt ?? ''),
+    updatedAt: String(r.updatedAt ?? r.createdAt ?? ''),
+    helpfulCount: typeof r.helpfulCount === 'number' ? r.helpfulCount : 0,
+    images: (r.images ?? []).map(String),
+    isDraft: Boolean(r.isDraft),
+    adminLiked: Boolean(r.adminLiked),
+    adminReply: r.adminReply ?? null,
+    adminReplyAt: r.adminReplyAt ?? null,
+  };
 }
 
 export async function createEventReview(
-  _input: CreateEventReviewInput,
+  input: CreateEventReviewInput,
 ): Promise<void> {
-  stubLog('createEventReview');
+  await engagementApi.createReview(input.eventId, {
+    rating: input.rating,
+    comment: input.comment ?? null,
+    reservationId: input.reservationId ?? null,
+  });
 }
 
 export async function getMyReviewForEvent(
-  _eventId: string,
+  eventId: string,
 ): Promise<MyEventReview | null> {
-  stubLog('getMyReviewForEvent');
-  return null;
+  const { review } = await engagementApi.getMyReviewForEvent(eventId);
+  if (!review) return null;
+  return {
+    rating: toRating(review.rating),
+    comment: review.comment ?? null,
+    createdAt: String(review.createdAt ?? ''),
+  };
 }
 
 export async function getMyReviews(): Promise<UserReviewsResult> {
-  stubLog('getMyReviews');
-  return { published: [], drafts: [], totalCount: 0, averageRating: 0 };
+  const res = await engagementApi.getMyReviews({ limit: 100 });
+  const all = (res.items ?? []).map(mapUserReview);
+
+  const published = all.filter((r) => !r.isDraft);
+  const drafts = all.filter((r) => r.isDraft);
+
+  const totals = res.totals ?? null;
+  const totalCount =
+    typeof totals?.publishedCount === 'number'
+      ? totals.publishedCount
+      : published.length;
+  const averageRating =
+    typeof totals?.averageRating === 'number'
+      ? totals.averageRating
+      : published.length > 0
+        ? published.reduce((acc, r) => acc + r.rating, 0) / published.length
+        : 0;
+
+  return { published, drafts, totalCount, averageRating };
 }
 
 export async function updateReview(
-  _reviewId: string,
-  _input: { rating?: ReviewRating; comment?: string | null },
+  reviewId: string,
+  input: { rating?: ReviewRating; comment?: string | null },
 ): Promise<void> {
-  stubLog('updateReview');
+  await engagementApi.updateReview(reviewId, input);
 }
 
-export async function deleteReview(_reviewId: string): Promise<void> {
-  stubLog('deleteReview');
+export async function deleteReview(reviewId: string): Promise<void> {
+  await engagementApi.deleteReview(reviewId);
 }

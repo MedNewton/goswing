@@ -1,8 +1,10 @@
 // hooks/profile/useSettings.ts
-// Phase 1 stub — returns defaults; mutations are no-ops.
+// User settings — backed by the Gooswing REST API (routes D.1–D.2).
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/clerk-expo';
+import * as meApi from '@/lib/api/me';
+import type { ApiUserSettings } from '@/lib/api/types';
 import type { UserSettings, ID } from '@/types/domain';
 import { DEFAULT_USER_SETTINGS } from '@/types/domain';
 
@@ -14,41 +16,71 @@ type UseSettingsReturn = {
   updateSettings: (updates: Partial<UserSettings>) => Promise<void>;
 };
 
+function mapSettings(raw: ApiUserSettings, userId: string): UserSettings {
+  return {
+    userId: (raw.userId || userId) as ID,
+    pushNotificationsEnabled:
+      raw.pushNotificationsEnabled ?? DEFAULT_USER_SETTINGS.pushNotificationsEnabled,
+    locationServicesEnabled:
+      raw.locationServicesEnabled ?? DEFAULT_USER_SETTINGS.locationServicesEnabled,
+    loginNotificationsEnabled:
+      raw.loginNotificationsEnabled ?? DEFAULT_USER_SETTINGS.loginNotificationsEnabled,
+    savePaymentInfo: raw.savePaymentInfo ?? DEFAULT_USER_SETTINGS.savePaymentInfo,
+    autoReloadWallet: raw.autoReloadWallet ?? DEFAULT_USER_SETTINGS.autoReloadWallet,
+    emailReceipts: raw.emailReceipts ?? DEFAULT_USER_SETTINGS.emailReceipts,
+    createdAt: raw.createdAt ?? undefined,
+    updatedAt: raw.updatedAt ?? undefined,
+  };
+}
+
 export function useSettings(): UseSettingsReturn {
   const { user: clerkUser } = useUser();
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  const settings = useMemo<UserSettings | null>(() => {
-    if (!clerkUser?.id) return null;
-    return {
-      userId: clerkUser.id as ID,
-      ...DEFAULT_USER_SETTINGS,
-    };
+  const fetchSettings = useCallback(async () => {
+    if (!clerkUser?.id) {
+      setSettings(null);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      const raw = await meApi.getMySettings();
+      setSettings(mapSettings(raw, clerkUser.id));
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to fetch settings'));
+    } finally {
+      setIsLoading(false);
+    }
   }, [clerkUser?.id]);
 
-  const refetch = useCallback(async () => {
-    if (__DEV__) {
-      // eslint-disable-next-line no-console
-      console.log('[STUB] hooks/profile/useSettings.refetch()');
-    }
-  }, []);
+  useEffect(() => {
+    void fetchSettings();
+  }, [fetchSettings]);
+
   const updateSettings = useCallback(
-    async (_updates: Partial<UserSettings>) => {
-      if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.log('[STUB] hooks/profile/useSettings.updateSettings()');
-      }
+    async (updates: Partial<UserSettings>) => {
+      if (!clerkUser?.id) throw new Error('Not authenticated');
+
+      const { userId: _userId, createdAt: _c, updatedAt: _u, ...body } = updates;
+      const raw = await meApi.patchMySettings(body);
+      setSettings(mapSettings(raw, clerkUser.id));
     },
-    [],
+    [clerkUser?.id],
   );
 
   return useMemo(
     () => ({
       settings,
-      isLoading: false,
-      error: null,
-      refetch,
+      isLoading,
+      error,
+      refetch: fetchSettings,
       updateSettings,
     }),
-    [settings, refetch, updateSettings],
+    [settings, isLoading, error, fetchSettings, updateSettings],
   );
 }

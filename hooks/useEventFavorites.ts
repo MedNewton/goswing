@@ -1,39 +1,85 @@
 // hooks/useEventFavorites.ts
-// Phase 1 stub — favorites are disabled; toggle is a no-op so the heart icon
-// doesn't crash. Signature preserved (supabase + userId still accepted) so
-// HomePage's import site stays valid.
+// Favorites state — backed by the Gooswing REST API via lib/supabase/saved.
 
-import { useCallback, useMemo, useRef } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { addFavorite, listFavoriteEventIds, removeFavorite } from '@/lib/supabase/saved';
 
-export function useEventFavorites(_params: {
-  supabase: SupabaseClient;
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return 'Unknown error';
+}
+
+export function useEventFavorites(params: {
   userId: string | null | undefined;
 }) {
-  const emptySetRef = useRef<ReadonlySet<string>>(new Set<string>());
+  const { userId } = params;
 
-  const refresh = useCallback(async (): Promise<void> => {}, []);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const isFavorite = useCallback((_eventId: string): boolean => false, []);
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!userId) {
+      setFavoriteIds(new Set());
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const ids = await listFavoriteEventIds();
+      setFavoriteIds(new Set(ids.map(String)));
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const isFavorite = useCallback(
+    (eventId: string) => favoriteIds.has(String(eventId)),
+    [favoriteIds],
+  );
 
   const toggle = useCallback(
-    async (_eventId: string, _next: boolean): Promise<void> => {
-      if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.log('[STUB] hooks/useEventFavorites.toggle()');
+    async (eventId: string, next: boolean): Promise<void> => {
+      if (!userId) return;
+
+      const id = String(eventId);
+
+      // optimistic
+      setFavoriteIds((prev) => {
+        const copy = new Set(prev);
+        if (next) copy.add(id);
+        else copy.delete(id);
+        return copy;
+      });
+
+      try {
+        if (next) await addFavorite({ eventId: id });
+        else await removeFavorite({ eventId: id });
+      } catch (e: unknown) {
+        // rollback
+        setFavoriteIds((prev) => {
+          const copy = new Set(prev);
+          if (next) copy.delete(id);
+          else copy.add(id);
+          return copy;
+        });
+        throw new Error(errorMessage(e));
       }
     },
-    [],
+    [userId],
   );
 
   return useMemo(
     () => ({
-      favoriteIds: emptySetRef.current,
-      loading: false,
+      favoriteIds: favoriteIds as ReadonlySet<string>,
+      loading,
       refresh,
       isFavorite,
       toggle,
     }),
-    [refresh, isFavorite, toggle],
+    [favoriteIds, loading, refresh, isFavorite, toggle],
   );
 }

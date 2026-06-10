@@ -20,7 +20,6 @@ import {
   createReservation,
 } from '@/lib/supabase/checkout';
 
-import { supabase } from '@/lib/supabase';
 import { useProfile } from '@/hooks/profile/useProfile';
 
 type IncomingTicketType = Readonly<{
@@ -131,16 +130,6 @@ export default function CheckoutPage({
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { profile } = useProfile();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      const { data, error } = await supabase.rpc('debug_auth_context');
-      console.log('debug_auth_context', { data, error });
-      console.log("log")
-    })();
-  }, []);
 
   const [tab, setTab] = useState<TabKey>('summary');
   const [ctaHeight, setCtaHeight] = useState(0);

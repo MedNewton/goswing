@@ -3,7 +3,7 @@ import React, { useEffect, useState, type ReactElement } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/lib/supabase';
+import * as meApi from '@/lib/api/me';
 import { useTranslation } from 'react-i18next';
 
 type Tag = { id: string; label: string; slug: string };
@@ -32,13 +32,16 @@ export default function InterestsSelectionPage({
 
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('tags')
-          .select('id, label, slug')
-          .order('label');
+        const page = await meApi.listTags();
 
-        if (!cancelled && data) {
-          setTags(data as Tag[]);
+        if (!cancelled) {
+          setTags(
+            (page.items ?? []).map((t) => ({
+              id: String(t.id),
+              label: String(t.label),
+              slug: String(t.slug),
+            })),
+          );
         }
       } catch {
         // silently fail - user can skip
@@ -67,12 +70,11 @@ export default function InterestsSelectionPage({
       const ids = Array.from(selectedIds);
 
       if (ids.length > 0 && user?.id) {
-        // Save interests to supabase
-        const { error } = await supabase
-          .from('user_interests')
-          .insert(ids.map((tagId) => ({ user_id: user.id, tag_id: tagId })));
-
-        if (error) console.error('Failed to save interests:', error);
+        try {
+          await meApi.replaceMyInterests(ids);
+        } catch (error) {
+          console.error('Failed to save interests:', error);
+        }
       }
 
       await onDone(ids);

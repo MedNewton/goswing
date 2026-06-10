@@ -1,6 +1,7 @@
 // lib/supabase/songSuggestions.ts
-// Phase 1 stub — the new REST API does not expose song suggestions yet.
-// See docs/superpowers/specs/2026-05-20-rest-api-read-side-migration.md § 6.3.
+// Song suggestions — backed by the Gooswing REST API (routes O.1–O.3).
+
+import * as engagementApi from '@/lib/api/engagement';
 
 export type CreateDeezerSongSuggestionInput = Readonly<{
   eventId: string;
@@ -28,26 +29,40 @@ export type MySongSuggestion = Readonly<{
   createdAt: string;
 }>;
 
-function stubLog(name: string): void {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log(`[STUB] lib/supabase/songSuggestions.${name}()`);
-  }
-}
-
 export async function createDeezerSongSuggestion(
-  _input: CreateDeezerSongSuggestionInput,
+  input: CreateDeezerSongSuggestionInput,
 ): Promise<void> {
-  stubLog('createDeezerSongSuggestion');
+  await engagementApi.createSongSuggestion(input.eventId, {
+    deezerTrackId: input.deezerTrackId,
+    trackTitle: input.trackTitle,
+    artistName: input.artistName,
+    deezerArtistId: input.deezerArtistId ?? null,
+    deezerAlbumId: input.deezerAlbumId ?? null,
+    albumTitle: input.albumTitle ?? null,
+    artworkUrl: input.artworkUrl ?? null,
+    deezerLink: input.deezerLink ?? null,
+    reservationId: input.reservationId ?? null,
+  });
 }
 
 export async function getMySongSuggestionsForEvent(
-  _eventId: string,
+  eventId: string,
 ): Promise<ReadonlyArray<MySongSuggestion>> {
-  stubLog('getMySongSuggestionsForEvent');
-  return [];
+  const page = await engagementApi.getMySongSuggestions(eventId);
+  return (page.items ?? []).map((s) => ({
+    id: String(s.id),
+    deezerTrackId: String(s.deezerTrackId ?? ''),
+    trackTitle: String(s.trackTitle ?? ''),
+    artistName: String(s.artistName ?? ''),
+    deezerArtistId: s.deezerArtistId ?? null,
+    deezerAlbumId: s.deezerAlbumId ?? null,
+    albumTitle: s.albumTitle ?? null,
+    artworkUrl: s.artworkUrl ?? null,
+    deezerLink: s.deezerLink ?? null,
+    createdAt: String(s.createdAt ?? ''),
+  }));
 }
 
-export async function deleteMySongSuggestionById(_id: string): Promise<void> {
-  stubLog('deleteMySongSuggestionById');
+export async function deleteMySongSuggestionById(id: string): Promise<void> {
+  await engagementApi.deleteSongSuggestion(id);
 }

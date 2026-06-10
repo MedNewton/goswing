@@ -1,12 +1,12 @@
 // lib/supabase/checkout.ts
-// Phase 1 — write paths are disabled. Pure helpers (computeTotals, summarizeSelection,
-// buildAttendeeSlots, hasAnyTickets, formatCheckoutTotals) keep their existing
-// behavior. createReservation throws a clearly-labelled ApiError so the checkout
-// CTA surfaces an explicit error instead of silently succeeding.
-// getTicketTypesForEvent is rewired to the new REST API for read-only display.
+// Checkout — ticket types are read via the REST API; createReservation posts
+// to /v1/reservations, where the server recomputes prices and totals and
+// creates the reservation + items + tickets + holders in one transaction.
+// Pure helpers (computeTotals, summarizeSelection, buildAttendeeSlots,
+// hasAnyTickets, formatCheckoutTotals) keep their existing behavior.
 
-import { ApiError } from '@/lib/api/client';
 import * as eventsApi from '@/lib/api/events';
+import * as reservationsApi from '@/lib/api/reservations';
 
 export type CurrencyCode = string;
 
@@ -225,20 +225,57 @@ export function formatCheckoutTotals(totals: CheckoutTotals): Readonly<{
 }
 
 // ============================================
-// WRITE — disabled until Phase 2
+// WRITE — POST /v1/reservations
 // ============================================
 
+function makeIdempotencyKey(): string {
+  // RFC-4122-shaped v4 key; uniqueness (not cryptographic strength) is what
+  // the Idempotency-Key header needs.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export async function createReservation(
-  _args: CreateReservationArgs,
+  args: CreateReservationArgs,
 ): Promise<CreateReservationResult> {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log('[STUB] lib/supabase/checkout.createReservation()');
+  const quantities: Record<string, number> = {};
+  for (const [k, v] of Object.entries(args.quantities ?? {})) {
+    const q = clampInt(v, 0, 999);
+    if (q > 0) quantities[k] = q;
   }
-  throw new ApiError(
-    'checkout_disabled',
-    'Reservations are temporarily disabled while the booking flow is rewired to the new API.',
-    null,
-    503,
+
+  const result = await reservationsApi.createReservation(
+    {
+      eventId: args.eventId,
+      quantities,
+      attendees: args.attendees.map((a) => ({
+        ticketTypeId: a.ticketTypeId,
+        index: a.index,
+        firstName: a.firstName,
+        lastName: a.lastName,
+        email: a.email,
+        phoneNumber: a.phoneNumber ?? null,
+        dietaryRestrictions: a.dietaryRestrictions ?? null,
+        emergencyContact: a.emergencyContact ?? null,
+      })),
+      billing: args.billing,
+      status: args.status ?? 'pending',
+    },
+    makeIdempotencyKey(),
   );
+
+  const totals = result.totals ?? null;
+  return {
+    reservationId: String(result.reservationId),
+    totals: {
+      totalTickets: clampInt(totals?.totalTickets, 0, Number.MAX_SAFE_INTEGER),
+      subtotalCents: clampInt(totals?.subtotalCents, 0, Number.MAX_SAFE_INTEGER),
+      serviceFeeCents: clampInt(totals?.serviceFeeCents, 0, Number.MAX_SAFE_INTEGER),
+      totalCents: clampInt(totals?.totalCents, 0, Number.MAX_SAFE_INTEGER),
+      currency: normalizeCurrency(totals?.currency),
+    },
+  };
 }

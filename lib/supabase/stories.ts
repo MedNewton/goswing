@@ -1,7 +1,10 @@
 // lib/supabase/stories.ts
-// Phase 1 stub — story creation requires R2 storage (Phase 2). All reads return
-// empty results; writes resolve as no-ops; story counts surface as zero.
-// See docs/superpowers/specs/2026-05-20-rest-api-read-side-migration.md § 6.3.
+// Event stories — backed by the Gooswing REST API (routes P.1–P.5).
+// Photo upload is a multipart POST; the server stores the file and handles
+// the 24h expiry.
+
+import * as engagementApi from '@/lib/api/engagement';
+import type { ApiEventStory } from '@/lib/api/types';
 
 export type CreateEventStoryInput = Readonly<{
   eventId: string;
@@ -26,55 +29,73 @@ export type EventStoryWithUser = EventStory &
     userAvatarUrl: string | null;
   }>;
 
-function stubLog(name: string): void {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log(`[STUB] lib/supabase/stories.${name}()`);
-  }
-}
-
-export async function createEventStory(
-  _input: CreateEventStoryInput,
-): Promise<EventStory> {
-  stubLog('createEventStory');
-  const now = new Date().toISOString();
+function mapStory(raw: ApiEventStory, eventId?: string): EventStory {
   return {
-    id: '',
-    userId: '',
-    eventId: '',
-    photoUrl: '',
-    caption: null,
-    createdAt: now,
-    expiresAt: now,
+    id: String(raw.id),
+    userId: String(raw.userId ?? ''),
+    eventId: String(raw.eventId ?? eventId ?? ''),
+    photoUrl: String(raw.photoUrl ?? ''),
+    caption: raw.caption ?? null,
+    createdAt: String(raw.createdAt ?? ''),
+    expiresAt: String(raw.expiresAt ?? ''),
   };
 }
 
+function photoPartFromUri(photoUri: string): { uri: string; name: string; type: string } {
+  const cleanPath = photoUri.split('?')[0] ?? photoUri;
+  const ext = (cleanPath.split('.').pop() ?? '').toLowerCase();
+  const isPng = ext === 'png';
+  return {
+    uri: photoUri,
+    name: `story.${isPng ? 'png' : 'jpg'}`,
+    type: isPng ? 'image/png' : 'image/jpeg',
+  };
+}
+
+export async function createEventStory(
+  input: CreateEventStoryInput,
+): Promise<EventStory> {
+  const raw = await engagementApi.createStory(
+    input.eventId,
+    photoPartFromUri(input.photoUri),
+    {
+      caption: input.caption ?? null,
+      reservationId: input.reservationId ?? null,
+    },
+  );
+  return mapStory(raw, input.eventId);
+}
+
 export async function getStoriesForEvent(
-  _eventId: string,
+  eventId: string,
 ): Promise<ReadonlyArray<EventStory>> {
-  stubLog('getStoriesForEvent');
-  return [];
+  const page = await engagementApi.listStories(eventId, { limit: 100 });
+  return (page.items ?? []).map((s) => mapStory(s, eventId));
 }
 
 export async function getMyStoryForEvent(
-  _eventId: string,
+  eventId: string,
 ): Promise<EventStory | null> {
-  stubLog('getMyStoryForEvent');
-  return null;
+  const { story } = await engagementApi.getMyStory(eventId);
+  return story ? mapStory(story, eventId) : null;
 }
 
-export async function getStoryCountForEvent(_eventId: string): Promise<number> {
-  stubLog('getStoryCountForEvent');
-  return 0;
+export async function getStoryCountForEvent(eventId: string): Promise<number> {
+  const { count } = await engagementApi.getStoryCount(eventId);
+  return typeof count === 'number' ? count : 0;
 }
 
 export async function getStoriesWithUserInfo(
-  _eventId: string,
+  eventId: string,
 ): Promise<ReadonlyArray<EventStoryWithUser>> {
-  stubLog('getStoriesWithUserInfo');
-  return [];
+  const page = await engagementApi.listStories(eventId, { limit: 100 });
+  return (page.items ?? []).map((s) => ({
+    ...mapStory(s, eventId),
+    userName: s.userName ?? null,
+    userAvatarUrl: s.userAvatarUrl ?? null,
+  }));
 }
 
-export async function deleteStory(_storyId: string): Promise<void> {
-  stubLog('deleteStory');
+export async function deleteStory(storyId: string): Promise<void> {
+  await engagementApi.deleteStory(storyId);
 }
