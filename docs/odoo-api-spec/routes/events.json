@@ -1,0 +1,358 @@
+{
+  "domain": "events",
+  "supabase_source_file": "lib/supabase/events.ts",
+  "description": "Event browsing, detail, ticket types, attendees, and 'related events' lookups. Read-only from the RN client; writes happen via the checkout / favorites / reviews domains.",
+
+  "$types": {
+    "Event": {
+      "description": "Top-level event object as consumed by the RN app. The Odoo controller MUST return exactly these fields with these names. Field ordering doesn't matter; presence and types do.",
+      "shape": {
+        "id":               { "type": "string", "format": "uuid", "required": true,  "source": "goswing.event.external_id" },
+        "externalId":       { "type": "string", "required": false, "source": "goswing.event.slug",            "note": "Optional human alias like 'evt_005'. Omit field entirely when null." },
+        "title":            { "type": "string", "required": true,  "source": "goswing.event.title" },
+        "description":      { "type": "string|null", "required": true, "source": "goswing.event.description" },
+        "organizer":        { "type": "string", "required": true,  "source": "goswing.organizer.name (joined)" },
+        "organizerId":      { "type": "string", "format": "uuid", "required": false, "source": "goswing.organizer.external_id (joined)" },
+        "imageUrl":         { "type": "string", "required": true,  "source": "goswing.event.hero_image_url", "note": "Empty string if null." },
+        "startsAtIso":      { "type": "string", "format": "iso8601", "required": true, "source": "goswing.event.starts_at" },
+        "endsAtIso":        { "type": "string|null", "format": "iso8601", "required": false, "source": "goswing.event.ends_at" },
+        "venue":            { "type": "string", "required": true,  "source": "goswing.venue.name (joined)", "note": "Empty string if no venue or venue has no name." },
+        "venueId":          { "type": "string", "format": "uuid", "required": false, "source": "goswing.event.venue_id" },
+        "venueType":        { "type": "string", "required": false, "source": "goswing.venue.venue_type (joined)" },
+        "city":             { "type": "string", "required": false, "source": "goswing.venue.city (joined)" },
+        "countryCode":      { "type": "string", "required": false, "source": "goswing.venue.country_code (joined)" },
+        "location":         { "type": "object|undefined", "required": false, "shape": { "lat": "number", "lng": "number" }, "source": "goswing.venue.lat / lng (joined)", "note": "Omit field if either lat or lng is null." },
+        "category":         { "type": "string|null", "required": true, "source": "goswing.event.category" },
+        "categories":       { "type": "string[]",  "required": true,  "source": "tag.slug WHERE tag.type='category' (joined via event_tag)" },
+        "access":           { "type": "string[]",  "required": true,  "source": "tag.slug WHERE tag.type='access'",   "note": "Values are 'free' or 'free_ladies'." },
+        "musicStyles":      { "type": "string[]",  "required": true,  "source": "tag.slug WHERE tag.type='music'" },
+        "partyTypes":       { "type": "string[]",  "required": true,  "source": "tag.slug WHERE tag.type='party'" },
+        "basePrice":        { "type": "number",    "required": true,  "source": "goswing.event.min_price_cents / 100" },
+        "priceLabel":       { "type": "string",    "required": true,  "source": "computed: 'Free' if is_free or min_price_cents=0; else 'From $<round(min/100)>'" },
+        "favorite":         { "type": "boolean",   "required": true,  "default": false, "note": "Always send false. The RN client merges in the user's favorite state from the favorites endpoint." },
+        "attendees":        { "type": "array",     "required": true,  "default": [],    "note": "Always send []. Populated by getEventAttendees." },
+        "attendeesExtraCount": { "type": "integer", "required": true, "source": "goswing.event.attendee_count" },
+        "attendeeCount":    { "type": "integer",   "required": true,  "source": "goswing.event.attendee_count" },
+        "waitlistEnabled":  { "type": "boolean",   "required": true,  "source": "goswing.event.waitlist_enabled" },
+        "approvalMode":     { "type": "string",    "required": false, "source": "goswing.event.approval_mode" },
+        "sharingEnabled":   { "type": "boolean",   "required": true,  "source": "goswing.event.sharing_enabled" },
+        "policies":         { "type": "array",     "required": true,  "source": "goswing.event.policies" }
+      }
+    },
+
+    "TicketType": {
+      "description": "Buyable ticket category for an event.",
+      "shape": {
+        "id":             { "type": "string", "format": "uuid", "required": true, "source": "goswing.ticket_type.external_id" },
+        "name":           { "type": "string", "required": true, "source": "goswing.ticket_type.name" },
+        "description":    { "type": "string|null", "required": false, "source": "goswing.ticket_type.description" },
+        "priceCents":     { "type": "integer", "required": true, "source": "goswing.ticket_type.price_cents" },
+        "currency":       { "type": "string", "required": true, "source": "goswing.ticket_type.currency", "note": "3-letter uppercase." },
+        "inventory":      { "type": "integer|null", "required": false, "source": "goswing.ticket_type.capacity" },
+        "benefits":       { "type": "string[]|null", "required": false, "source": "goswing.ticket_type.benefits", "note": "JSON array of strings." },
+        "isFree":         { "type": "boolean", "required": false, "source": "goswing.ticket_type.is_free" },
+        "freeForLadies":  { "type": "boolean", "required": false, "source": "goswing.ticket_type.free_for_ladies" }
+      },
+      "filtering": "Only return ticket_types where (sales_start_at IS NULL OR sales_start_at <= now()) AND (sales_end_at IS NULL OR sales_end_at >= now()). Sort ascending by created_at."
+    },
+
+    "MiniEventRow": {
+      "description": "Compact event card used for lists like 'More from this organizer' / 'Similar events' / 'Upcoming nearby'.",
+      "shape": {
+        "id":           { "type": "string", "format": "uuid", "required": true, "source": "goswing.event.external_id" },
+        "title":        { "type": "string", "required": true },
+        "imageUrl":     { "type": "string|null", "required": true, "source": "goswing.event.hero_image_url" },
+        "startsAtIso":  { "type": "string|null", "format": "iso8601", "required": true, "source": "goswing.event.starts_at" },
+        "priceLabel":   { "type": "string|null", "required": true, "note": "Same computed rule as Event.priceLabel." }
+      }
+    },
+
+    "MiniEventRowWithVenue": {
+      "description": "Same as MiniEventRow with the venue name folded in.",
+      "extends": "MiniEventRow",
+      "additional_shape": {
+        "venue": { "type": "string|null", "required": false, "source": "goswing.venue.name (joined)" }
+      }
+    },
+
+    "EventAttendee": {
+      "description": "User shown in the attendee list for an event.",
+      "shape": {
+        "userId":      { "type": "string", "required": true,  "source": "goswing.reservation.clerk_user_id" },
+        "displayName": { "type": "string", "required": true,  "source": "goswing.profile.display_name (joined). Fallback to 'Attendee' if blank." },
+        "initials":    { "type": "string", "required": true,  "source": "goswing.profile.initials. Fallback: first letter of each word in displayName, uppercase, max 2 chars." },
+        "avatarUrl":   { "type": "string|null", "required": true, "source": "goswing.profile.avatar_url" }
+      }
+    }
+  },
+
+  "routes": [
+    {
+      "name": "getPublishedEvents",
+      "method": "GET",
+      "path": "/v1/events",
+      "summary": "List all published events ordered by start time ascending.",
+      "auth":           { "required": true, "type": "clerk_jwt" },
+      "authorization":  "any_authenticated_user",
+      "request": {
+        "path_params": {},
+        "query":       {},
+        "body":        null
+      },
+      "response": {
+        "status": 200,
+        "body": { "type": "array", "items": { "$ref": "#/$types/Event" } }
+      },
+      "errors": [
+        { "status": 401, "code": "unauthenticated" },
+        { "status": 500, "code": "internal_error" }
+      ],
+      "supabase_source": "lib/supabase/events.ts:getPublishedEvents (line 150)",
+      "odoo_hint": "search_read('goswing.event', [('status','=','published')], [...all event fields...]) ordered by starts_at asc. Eager-load `organizer_id` (name only), `venue_id` (name, city, country_code, lat, lng, venue_type), and `tag_ids` → `tag` (type, slug). One query each via prefetch is fine.",
+      "example_response": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "externalId": "evt_005",
+          "title": "Summer Rooftop Sessions",
+          "description": "Open-air DJ set on the roof of the Aria Hotel.",
+          "organizer": "Aria Events",
+          "organizerId": "11111111-1111-1111-1111-111111111111",
+          "imageUrl": "https://cdn.goswing.app/events/aria-rooftop.jpg",
+          "startsAtIso": "2026-06-15T19:00:00Z",
+          "endsAtIso": "2026-06-16T02:00:00Z",
+          "venue": "Aria Hotel Rooftop",
+          "venueId": "22222222-2222-2222-2222-222222222222",
+          "venueType": "rooftop",
+          "city": "New York",
+          "countryCode": "US",
+          "location": { "lat": 40.7589, "lng": -73.9851 },
+          "category": "rooftop",
+          "categories": ["rooftop", "lounge"],
+          "access": ["free_ladies"],
+          "musicStyles": ["house", "deep_house"],
+          "partyTypes": ["dj_set"],
+          "basePrice": 25,
+          "priceLabel": "From $25",
+          "favorite": false,
+          "attendees": [],
+          "attendeesExtraCount": 142,
+          "attendeeCount": 142,
+          "waitlistEnabled": false,
+          "approvalMode": "auto",
+          "sharingEnabled": true,
+          "policies": []
+        }
+      ]
+    },
+
+    {
+      "name": "getEventDetailsById",
+      "method": "GET",
+      "path": "/v1/events/:id",
+      "summary": "Fetch a single event by UUID (or by `slug` if the param looks like a slug).",
+      "auth":           { "required": true, "type": "clerk_jwt" },
+      "authorization":  "any_authenticated_user",
+      "request": {
+        "path_params": {
+          "id": { "type": "string", "required": true, "note": "Either a UUID (matches `external_id`) or a slug like 'evt_005' (matches `slug`). The controller MUST resolve in this order: try external_id first; if not a UUID, try slug." }
+        },
+        "query": {},
+        "body":  null
+      },
+      "response": {
+        "status": 200,
+        "body":   { "$ref": "#/$types/Event" }
+      },
+      "errors": [
+        { "status": 401, "code": "unauthenticated" },
+        { "status": 404, "code": "not_found", "trigger": "no event matches the id or slug" },
+        { "status": 500, "code": "internal_error" }
+      ],
+      "supabase_source": "lib/supabase/events.ts:getEventDetailsById (line 324)",
+      "odoo_hint": "UUID detection regex: `^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` (case-insensitive). If the id matches, query by `external_id`; else by `slug`. Same join shape as /v1/events."
+    },
+
+    {
+      "name": "getTicketTypesForEvent",
+      "method": "GET",
+      "path": "/v1/events/:id/ticket-types",
+      "summary": "List all ticket types for an event that are currently within their sales window.",
+      "auth":           { "required": true, "type": "clerk_jwt" },
+      "authorization":  "any_authenticated_user",
+      "request": {
+        "path_params": {
+          "id": { "type": "string", "required": true, "note": "Same UUID-or-slug resolution as /v1/events/:id." }
+        },
+        "query": {},
+        "body":  null
+      },
+      "response": {
+        "status": 200,
+        "body": { "type": "array", "items": { "$ref": "#/$types/TicketType" } }
+      },
+      "errors": [
+        { "status": 401, "code": "unauthenticated" },
+        { "status": 404, "code": "not_found", "trigger": "event not found" },
+        { "status": 500, "code": "internal_error" }
+      ],
+      "supabase_source": "lib/supabase/events.ts:getTicketTypesForEvent (line 264)",
+      "odoo_hint": "Resolve event first (UUID or slug → goswing.event). Then search_read('goswing.ticket_type', [('event_id','=', event.id)], [...]) and filter sales window in code OR via Odoo domain operators ((sales_start_at = false OR sales_start_at <= now()) AND (sales_end_at = false OR sales_end_at >= now())). Sort ascending by created_at. Currency MUST be uppercased before serialization.",
+      "example_response": [
+        {
+          "id": "33333333-3333-3333-3333-333333333333",
+          "name": "General Admission",
+          "description": "Entry only.",
+          "priceCents": 2500,
+          "currency": "USD",
+          "inventory": 200,
+          "benefits": ["Entry"],
+          "isFree": false,
+          "freeForLadies": false
+        },
+        {
+          "id": "44444444-4444-4444-4444-444444444444",
+          "name": "VIP",
+          "description": "Entry + 2 drinks + reserved table.",
+          "priceCents": 7500,
+          "currency": "USD",
+          "inventory": 30,
+          "benefits": ["Entry", "2 Drinks", "Reserved Table"],
+          "isFree": false,
+          "freeForLadies": false
+        }
+      ]
+    },
+
+    {
+      "name": "getEventsByOrganizer",
+      "method": "GET",
+      "path": "/v1/organizers/:organizerId/events",
+      "summary": "Compact list of an organizer's published events (for the 'More from <organizer>' section).",
+      "auth":           { "required": true, "type": "clerk_jwt" },
+      "authorization":  "any_authenticated_user",
+      "request": {
+        "path_params": {
+          "organizerId": { "type": "string", "format": "uuid", "required": true }
+        },
+        "query": {
+          "exclude":  { "type": "string", "format": "uuid", "required": false, "note": "Event id to exclude (so the current event isn't shown in 'More from')." },
+          "limit":    { "type": "integer", "required": false, "default": 5, "min": 1, "max": 50 }
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "body": { "type": "array", "items": { "$ref": "#/$types/MiniEventRow" } }
+      },
+      "errors": [
+        { "status": 401, "code": "unauthenticated" },
+        { "status": 404, "code": "not_found", "trigger": "organizer not found" },
+        { "status": 500, "code": "internal_error" }
+      ],
+      "supabase_source": "lib/supabase/events.ts:getEventsByOrganizer (line 350)",
+      "odoo_hint": "search_read('goswing.event', [('organizer_id.external_id','=', organizerId), ('status','=','published'), '!', ('external_id','=', exclude)], [id, title, hero_image_url, starts_at, is_free, min_price_cents]). Order by starts_at asc, limit `limit`."
+    },
+
+    {
+      "name": "getSimilarEvents",
+      "method": "GET",
+      "path": "/v1/events/:id/similar",
+      "summary": "Compact list of events similar to the given one. Tries category match first; falls back to shared tags.",
+      "auth":           { "required": true, "type": "clerk_jwt" },
+      "authorization":  "any_authenticated_user",
+      "request": {
+        "path_params": {
+          "id": { "type": "string", "required": true, "note": "Same UUID-or-slug resolution as /v1/events/:id." }
+        },
+        "query": {
+          "limit": { "type": "integer", "required": false, "default": 5, "min": 1, "max": 50 }
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "body":   { "type": "array", "items": { "$ref": "#/$types/MiniEventRow" } }
+      },
+      "errors": [
+        { "status": 401, "code": "unauthenticated" },
+        { "status": 404, "code": "not_found", "trigger": "event not found" },
+        { "status": 500, "code": "internal_error" }
+      ],
+      "supabase_source": "lib/supabase/events.ts:getSimilarEvents (line 383)",
+      "odoo_hint": "Two-step: (1) Resolve event. (2) If the event has a non-null `category`, search_read events with the same category, status='published', id != current, ordered by starts_at asc, limit. Return immediately if non-empty. (3) Else, find tag_ids from `goswing.event_tag` for the current event; find other events sharing any of those tags; return up to `limit`."
+    },
+
+    {
+      "name": "getUpcomingEventsByVenueOrOrganizer",
+      "method": "GET",
+      "path": "/v1/events/upcoming-by-venue-or-organizer",
+      "summary": "Compact list of upcoming published events from a given venue and/or organizer (used on event detail to show 'Upcoming at this venue / from this organizer').",
+      "auth":           { "required": true, "type": "clerk_jwt" },
+      "authorization":  "any_authenticated_user",
+      "request": {
+        "path_params": {},
+        "query": {
+          "venueId":     { "type": "string", "format": "uuid", "required": false },
+          "organizerId": { "type": "string", "format": "uuid", "required": false },
+          "exclude":     { "type": "string", "format": "uuid", "required": false, "note": "Event to exclude from results." },
+          "limit":       { "type": "integer", "required": false, "default": 20, "min": 1, "max": 100 }
+        },
+        "body": null,
+        "validation": "At least one of `venueId` or `organizerId` MUST be provided. If neither, return 400 validation_failed with details.field='venueId|organizerId'."
+      },
+      "response": {
+        "status": 200,
+        "body":   { "type": "array", "items": { "$ref": "#/$types/MiniEventRowWithVenue" } }
+      },
+      "errors": [
+        { "status": 400, "code": "validation_failed" },
+        { "status": 401, "code": "unauthenticated" },
+        { "status": 500, "code": "internal_error" }
+      ],
+      "supabase_source": "lib/supabase/events.ts:getUpcomingEventsByVenueOrOrganizer (line 450)",
+      "odoo_hint": "Run two parallel queries (venue match + organizer match) with status='published', starts_at >= now(), exclude id != exclude, ordered by starts_at asc, limit each. Merge, dedupe by event id, sort by starts_at asc, slice to `limit`. Each row includes the venue name."
+    },
+
+    {
+      "name": "getEventAttendees",
+      "method": "GET",
+      "path": "/v1/events/:id/attendees",
+      "summary": "Up to N distinct users with confirmed/completed reservations for the event, plus a total count.",
+      "auth":           { "required": true, "type": "clerk_jwt" },
+      "authorization":  "any_authenticated_user",
+      "request": {
+        "path_params": {
+          "id": { "type": "string", "required": true, "note": "Event UUID (no slug fallback for this route)." }
+        },
+        "query": {
+          "limit": { "type": "integer", "required": false, "default": 20, "min": 1, "max": 100 }
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "shape": {
+            "attendees":  { "type": "array", "items": { "$ref": "#/$types/EventAttendee" } },
+            "totalCount": { "type": "integer", "note": "Total distinct users with confirmed/completed reservations for this event." }
+          }
+        }
+      },
+      "errors": [
+        { "status": 401, "code": "unauthenticated" },
+        { "status": 404, "code": "not_found", "trigger": "event not found" },
+        { "status": 500, "code": "internal_error" }
+      ],
+      "supabase_source": "lib/supabase/events.ts:getEventAttendees (line 521)",
+      "odoo_hint": "search_read('goswing.reservation', [('event_id.external_id','=', id), ('status','in',['confirmed','completed'])], [clerk_user_id], limit=limit). Dedupe by clerk_user_id. For each, look up the matching `goswing.profile` (display_name, initials, avatar_url). Compute initials fallback in code. Total count = read_group on the same domain with `count_distinct` on clerk_user_id (or a separate count query).",
+      "example_response": {
+        "attendees": [
+          { "userId": "user_2abc", "displayName": "Jane Doe",   "initials": "JD", "avatarUrl": "https://cdn.goswing.app/avatars/jane.jpg" },
+          { "userId": "user_2def", "displayName": "John Smith", "initials": "JS", "avatarUrl": null }
+        ],
+        "totalCount": 142
+      }
+    }
+  ]
+}
