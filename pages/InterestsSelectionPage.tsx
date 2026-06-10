@@ -32,7 +32,7 @@ export default function InterestsSelectionPage({
 
     (async () => {
       try {
-        const page = await meApi.listTags();
+        const page = await meApi.listTags({ type: 'interest' });
 
         if (!cancelled) {
           setTags(

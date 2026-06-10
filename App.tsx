@@ -32,13 +32,13 @@ export default function App(): ReactElement {
   return (
     <SafeAreaProvider>
       <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
-        <AuthProvider>
-          <AuthGate>
-            <ApiClerkBridge>
+        <ApiClerkBridge>
+          <AuthProvider>
+            <AuthGate>
               <HomePage />
-            </ApiClerkBridge>
-          </AuthGate>
-        </AuthProvider>
+            </AuthGate>
+          </AuthProvider>
+        </ApiClerkBridge>
       </ClerkProvider>
     </SafeAreaProvider>
   );

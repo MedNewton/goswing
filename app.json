@@ -86,7 +86,7 @@
       "eas": {
         "projectId": "c8935135-acf0-4784-aad6-b9a045c51191"
       },
-      "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_YWNjdXJhdGUtbWFncGllLTcuY2xlcmsuYWNjb3VudHMuZGV2JA",
+      "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZWFzeS1zbmFwcGVyLTE4LmNsZXJrLmFjY291bnRzLmRldiQ",
       "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAElJiLEaPb1Qg-XjzE8WmjuxrQJkFsw4w",
       "EXPO_PUBLIC_API_BASE_URL": "https://web.gooswing.com"
     },
