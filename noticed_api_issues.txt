@@ -1,0 +1,1 @@
+- GET /v1/tags?type=interest : le retour est vide, du coup, les utilisateur ne peuvent pas selectionner leurs interets durant "Onboarding". La base de données doit etre populée.
