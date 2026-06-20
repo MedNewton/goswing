@@ -42,6 +42,7 @@ export type EventDetailsPageProps = Readonly<{
   onBack?: () => void;
   onPressEvent?: (eventId: string) => void;
   onOpenOrganizer?: (payload: { organizerId: string; organizerName?: string }) => void;
+  onOpenAttendee?: (userId: string) => void;
   isFavorite?: boolean;
   onToggleFavorite?: (eventId: string, next: boolean) => void;
 
@@ -182,6 +183,7 @@ export default function EventDetailsPage({
   initialTab = 'about',
   onBack,
   onPressEvent,
+  onOpenAttendee,
   onBook,
   route,
   onOpenOrganizer,
@@ -964,44 +966,53 @@ export default function EventDetailsPage({
               <View className="px-5 mt-6">
                 <Text className="text-base font-semibold text-black">{t('eventDetails.attendees', { count: dbAttendeesTotal })}</Text>
                 <View className="mt-2 flex-row items-center flex-wrap gap-2">
-                  {dbAttendees.slice(0, 8).map((u) => (
-                    <View
-                      key={u.userId}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: '#F3F4F6',
-                        borderRadius: 20,
-                        paddingRight: 10,
-                        gap: 6,
-                      }}
-                    >
-                      {u.avatarUrl ? (
-                        <Image
-                          source={{ uri: u.avatarUrl }}
-                          style={{ width: 28, height: 28, borderRadius: 14 }}
-                        />
-                      ) : (
-                        <View
-                          style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 14,
-                            backgroundColor: '#D1D5DB',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#374151' }}>
-                            {u.initials}
-                          </Text>
-                        </View>
-                      )}
-                      <Text style={{ fontSize: 12, color: '#374151', fontWeight: '500' }} numberOfLines={1}>
-                        {u.displayName}
-                      </Text>
-                    </View>
-                  ))}
+                  {dbAttendees.slice(0, 8).map((u) => {
+                    const openable = Boolean(onOpenAttendee) && u.isPublic;
+                    return (
+                      <Pressable
+                        key={u.userId}
+                        disabled={!openable}
+                        onPress={() => openable && onOpenAttendee?.(u.userId)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#F3F4F6',
+                          borderRadius: 20,
+                          paddingRight: 10,
+                          gap: 6,
+                          opacity: u.isPublic ? 1 : 0.6,
+                        }}
+                      >
+                        {u.avatarUrl ? (
+                          <Image
+                            source={{ uri: u.avatarUrl }}
+                            style={{ width: 28, height: 28, borderRadius: 14 }}
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 14,
+                              backgroundColor: '#D1D5DB',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#374151' }}>
+                              {u.initials}
+                            </Text>
+                          </View>
+                        )}
+                        <Text style={{ fontSize: 12, color: '#374151', fontWeight: '500' }} numberOfLines={1}>
+                          {u.displayName}
+                        </Text>
+                        {!u.isPublic ? (
+                          <Feather name="lock" size={11} color="#9CA3AF" />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
                   {dbAttendeesTotal > 8 && (
                     <Text className="text-gray600 ml-1">{t('eventDetails.othersSuffix', { count: dbAttendeesTotal - 8 })}</Text>
                   )}

@@ -516,6 +516,8 @@ export type EventAttendee = Readonly<{
   displayName: string;
   initials: string;
   avatarUrl: string | null;
+  /** Whether this attendee's profile is public (and therefore openable). */
+  isPublic: boolean;
 }>;
 
 export async function getEventAttendees(
@@ -527,7 +529,7 @@ export async function getEventAttendees(
     .from('reservations')
     .select(`
       user_id,
-      profiles!inner ( display_name, initials, avatar_url )
+      profiles!inner ( display_name, initials, avatar_url, profile_visibility )
     `)
     .eq('event_id', eventId)
     .in('status', ['confirmed', 'completed'])
@@ -561,6 +563,7 @@ export async function getEventAttendees(
       displayName,
       initials,
       avatarUrl: p?.avatar_url ?? null,
+      isPublic: String(p?.profile_visibility ?? 'public') !== 'private',
     });
   }
 

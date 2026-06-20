@@ -23,6 +23,7 @@ import CheckoutPage from '@/pages/CheckoutPage';
 import ReservationDetailsRoutePage from '@/pages/ReservationDetailsRoutePage';
 import OrganizerProfilePage from '@/pages/OrganizerProfilePage';
 import NotificationsPage from '@/pages/NotificationsPage';
+import SocialProfilePage from '@/pages/social/SocialProfilePage';
 
 import { getUser } from '@/data/loaders';
 import type { Event } from '@/types/domain';
@@ -64,7 +65,8 @@ type Route =
     };
   }
   | { name: 'reservationDetails'; reservationId: string }
-  | { name: 'notifications' };
+  | { name: 'notifications' }
+  | { name: 'socialProfile'; userId: string };
 
 function filterByWhenKey(events: ReadonlyArray<Event>, key: WhenKey): ReadonlyArray<Event> {
   const now = new Date();
@@ -513,6 +515,9 @@ export default function HomePage(): ReactElement {
           onOpenOrganizer={({ organizerId, organizerName }) => {
             setRoute({ name: 'organizerProfile', organizerId, organizerName });
           }}
+          onOpenAttendee={(attendeeId) => {
+            setRoute({ name: 'socialProfile', userId: attendeeId });
+          }}
           onPressEvent={async (eventId) => {
             const local = allEvents.find((e) => String(e.id) === String(eventId));
             if (local) {
@@ -543,6 +548,8 @@ export default function HomePage(): ReactElement {
         />
       ) : route.name === 'notifications' ? (
         <NotificationsPage onBack={closeOverlay} />
+      ) : route.name === 'socialProfile' ? (
+        <SocialProfilePage userId={route.userId} onBack={closeOverlay} />
       ) : route.name === 'reservationDetails' ? (
         <ReservationDetailsRoutePage
           reservationId={route.reservationId}
