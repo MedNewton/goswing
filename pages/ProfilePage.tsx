@@ -27,6 +27,7 @@ import PrivacySecurityPage from '@/pages/Privacysecuritypage';
 import HelpSupportPage from '@/pages/Helpsupportpage';
 import TermsConditionsPage from '@/pages/Termsconditionspage';
 import EditProfilePage from '@/pages/Editprofilepage';
+import SocialProfilePage from '@/pages/social/SocialProfilePage';
 
 const ONBOARDING_FLAG = '@gs:onboardPending';
 
@@ -42,7 +43,8 @@ type ProfileRoute =
   | { name: 'privacySecurity' }
   | { name: 'helpSupport' }
   | { name: 'termsConditions' }
-  | { name: 'editProfile' };
+  | { name: 'editProfile' }
+  | { name: 'socialProfile' };
 
 type ProfilePageProps = Readonly<{
   onNavigateToReservations?: (tab: 'active' | 'past') => void;
@@ -185,6 +187,10 @@ export default function ProfilePage({
     return <EditProfilePage onBack={() => setRoute({ name: 'root' })} />;
   }
 
+  if (route.name === 'socialProfile') {
+    return <SocialProfilePage onBack={() => setRoute({ name: 'root' })} />;
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -249,6 +255,21 @@ export default function ProfilePage({
             </Pressable>
           </View>
         </View>
+
+        {/* View social profile */}
+        <Pressable
+          onPress={() => setRoute({ name: 'socialProfile' })}
+          className="mx-5 mt-4 rounded-2xl bg-brand px-5 py-4 flex-row items-center justify-between active:opacity-90"
+        >
+          <View className="flex-row items-center gap-x-3">
+            <Feather name="user" size={18} color="#FFFFFF" />
+            <View>
+              <Text className="text-white font-semibold">{t('profile.viewMyProfile')}</Text>
+              <Text className="text-white/80 text-xs mt-0.5">{t('profile.viewMyProfileSubtitle')}</Text>
+            </View>
+          </View>
+          <Feather name="chevron-right" size={20} color="#FFFFFF" />
+        </Pressable>
 
         {/* Stats Row - Now Pressable */}
         <View className="mx-5 mt-4 flex-row gap-x-3">

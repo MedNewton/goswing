@@ -248,6 +248,8 @@ const en = {
   'profile.signingOut': 'Signing out...',
   'profile.tryAgain': 'Please try again.',
   'profile.couldNotUpdateSetting': 'Could not update setting.',
+  'profile.viewMyProfile': 'View my profile',
+  'profile.viewMyProfileSubtitle': 'Your photos, videos, stories & friends',
   'profile.eventsAttended': 'Events Attended',
   'profile.eventsSaved': 'Events Saved',
   'profile.reviews': 'Reviews',

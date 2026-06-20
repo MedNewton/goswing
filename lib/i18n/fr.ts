@@ -249,6 +249,8 @@ const fr = {
   'profile.signingOut': 'Deconnexion...',
   'profile.tryAgain': 'Veuillez reessayer.',
   'profile.couldNotUpdateSetting': "Impossible de mettre a jour le parametre.",
+  'profile.viewMyProfile': 'Voir mon profil',
+  'profile.viewMyProfileSubtitle': 'Vos photos, videos, stories et amis',
   'profile.eventsAttended': 'Evenements participes',
   'profile.eventsSaved': 'Evenements sauvegardes',
   'profile.reviews': 'Avis',
