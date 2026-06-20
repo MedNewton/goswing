@@ -26,9 +26,12 @@ import MediaViewerModal from '@/components/social/MediaViewerModal';
 import ComposeMediaModal from '@/components/social/ComposeMediaModal';
 import UserStoryViewerModal from '@/components/social/UserStoryViewerModal';
 import { choosePickSource, type PickedAsset } from '@/components/social/mediaPicker';
+import FriendButton from '@/components/social/FriendButton';
+import { useFriendRequests } from '@/hooks/social/useFriends';
 import type { UserMedia } from '@/lib/social/types';
 import EditSocialProfilePage from '@/pages/social/EditSocialProfilePage';
 import ProfilePrivacyPage from '@/pages/social/ProfilePrivacyPage';
+import FriendRequestsPage from '@/pages/social/FriendRequestsPage';
 
 type TabKey = 'about' | 'photos' | 'videos' | 'friends';
 
@@ -36,8 +39,8 @@ type Props = Readonly<{
   /** Target user. Omit to show the signed-in user's own profile. */
   userId?: string;
   onBack?: () => void;
-  /** Provided in a later slice to enable the "Add friend" action. */
-  onAddFriend?: (userId: string) => void;
+  /** Open another user's profile (e.g. from the friends list). */
+  onOpenUser?: (userId: string) => void;
   /** Provided in a later slice to open the full friends list. */
   onOpenFriends?: (userId: string) => void;
 }>;
@@ -45,17 +48,26 @@ type Props = Readonly<{
 export default function SocialProfilePage({
   userId,
   onBack,
-  onAddFriend,
+  onOpenUser,
   onOpenFriends,
 }: Props): ReactElement {
   const { user } = useUser();
   const viewerId = user?.id ?? null;
   const targetId = userId ?? viewerId ?? undefined;
 
-  const [subRoute, setSubRoute] = useState<'root' | 'edit' | 'privacy'>('root');
+  const [subRoute, setSubRoute] = useState<'root' | 'edit' | 'privacy' | 'requests'>('root');
   const [tab, setTab] = useState<TabKey>('about');
 
   const { profile, isLoading, refetch } = useSocialProfile(targetId);
+  const friendRequests = useFriendRequests();
+
+  // Opening another user (from requests / friends list) pushes a nested profile
+  // so navigation stays self-contained regardless of where this page is mounted.
+  const [pushedUser, setPushedUser] = useState<string | null>(null);
+  const handleOpenUser = (uid: string): void => {
+    if (onOpenUser) onOpenUser(uid);
+    else if (uid && uid !== targetId) setPushedUser(uid);
+  };
   const canLoadContent = !!profile?.canView && !!targetId;
   const media = useUserMedia(canLoadContent ? targetId : null);
   const stories = useUserStories(canLoadContent ? targetId : null);
@@ -88,6 +100,21 @@ export default function SocialProfilePage({
   }
   if (subRoute === 'privacy') {
     return <ProfilePrivacyPage onBack={() => setSubRoute('root')} onSaved={refetch} />;
+  }
+  if (subRoute === 'requests') {
+    return (
+      <FriendRequestsPage
+        onBack={() => {
+          setSubRoute('root');
+          friendRequests.refetch();
+          refetch();
+        }}
+        onOpenUser={handleOpenUser}
+      />
+    );
+  }
+  if (pushedUser) {
+    return <SocialProfilePage userId={pushedUser} onBack={() => setPushedUser(null)} />;
   }
 
   // ---- Loading / not found ----
@@ -217,6 +244,17 @@ export default function SocialProfilePage({
             {isSelf ? (
               <View className="flex-row items-center gap-x-2 mb-1">
                 <Pressable
+                  onPress={() => setSubRoute('requests')}
+                  className="px-3 py-2 rounded-xl border border-gray300 bg-white active:opacity-90"
+                >
+                  <Feather name="user-plus" size={16} color="#111827" />
+                  {friendRequests.count > 0 ? (
+                    <View className="absolute -top-1.5 -right-1.5 bg-danger rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
+                      <Text className="text-white text-[10px] font-bold">{friendRequests.count}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+                <Pressable
                   onPress={() => setSubRoute('privacy')}
                   className="px-3 py-2 rounded-xl border border-gray300 bg-white active:opacity-90"
                 >
@@ -230,14 +268,10 @@ export default function SocialProfilePage({
                   <Text className="text-sm text-gray900">Edit</Text>
                 </Pressable>
               </View>
-            ) : onAddFriend && profile.canView ? (
-              <Pressable
-                onPress={() => onAddFriend(profile.userId)}
-                className="flex-row items-center gap-x-2 px-4 py-2 rounded-xl bg-brand active:opacity-90 mb-1"
-              >
-                <Feather name="user-plus" size={16} color="#FFFFFF" />
-                <Text className="text-sm text-white font-medium">Add friend</Text>
-              </Pressable>
+            ) : profile.canView ? (
+              <View className="mb-1">
+                <FriendButton targetId={profile.userId} onChanged={refetch} />
+              </View>
             ) : null}
           </View>
 
