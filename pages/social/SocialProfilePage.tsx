@@ -27,7 +27,8 @@ import ComposeMediaModal from '@/components/social/ComposeMediaModal';
 import UserStoryViewerModal from '@/components/social/UserStoryViewerModal';
 import { choosePickSource, type PickedAsset } from '@/components/social/mediaPicker';
 import FriendButton from '@/components/social/FriendButton';
-import { useFriendRequests } from '@/hooks/social/useFriends';
+import FriendsList from '@/components/social/FriendsList';
+import { useFriendRequests, useFriendship } from '@/hooks/social/useFriends';
 import type { UserMedia } from '@/lib/social/types';
 import EditSocialProfilePage from '@/pages/social/EditSocialProfilePage';
 import ProfilePrivacyPage from '@/pages/social/ProfilePrivacyPage';
@@ -41,15 +42,12 @@ type Props = Readonly<{
   onBack?: () => void;
   /** Open another user's profile (e.g. from the friends list). */
   onOpenUser?: (userId: string) => void;
-  /** Provided in a later slice to open the full friends list. */
-  onOpenFriends?: (userId: string) => void;
 }>;
 
 export default function SocialProfilePage({
   userId,
   onBack,
   onOpenUser,
-  onOpenFriends,
 }: Props): ReactElement {
   const { user } = useUser();
   const viewerId = user?.id ?? null;
@@ -60,6 +58,7 @@ export default function SocialProfilePage({
 
   const { profile, isLoading, refetch } = useSocialProfile(targetId);
   const friendRequests = useFriendRequests();
+  const friendship = useFriendship(targetId);
 
   // Opening another user (from requests / friends list) pushes a nested profile
   // so navigation stays self-contained regardless of where this page is mounted.
@@ -216,6 +215,12 @@ export default function SocialProfilePage({
 
   const stat = profile.stats;
 
+  // Friends-list privacy (Feature 5): owner always; others per friends_visibility.
+  const canSeeFriends =
+    isSelf ||
+    profile.friendsVisibility === 'public' ||
+    (profile.friendsVisibility === 'friends' && friendship.state.status === 'friends');
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
       <Header onBack={onBack} title={isSelf ? 'My profile' : profile.displayName} />
@@ -310,7 +315,7 @@ export default function SocialProfilePage({
                 icon="users"
                 value={stat.friendsCount}
                 label="Friends"
-                onPress={onOpenFriends ? () => onOpenFriends(profile.userId) : undefined}
+                onPress={() => setTab('friends')}
               />
             </View>
 
@@ -369,11 +374,14 @@ export default function SocialProfilePage({
                   emptyLabel={isSelf ? 'Add your first video' : 'No videos yet'}
                   onPressItem={(item) => setViewerItem(item)}
                 />
-              ) : (
-                <FriendsTabPlaceholder
-                  count={stat.friendsCount}
-                  onOpen={onOpenFriends ? () => onOpenFriends(profile.userId) : undefined}
+              ) : canSeeFriends ? (
+                <FriendsList
+                  userId={profile.userId}
+                  emptyLabel={isSelf ? 'You have no friends yet' : 'No friends to show'}
+                  onOpenUser={handleOpenUser}
                 />
+              ) : (
+                <HiddenFriends visibility={profile.friendsVisibility} />
               )}
             </View>
           </>
@@ -495,24 +503,19 @@ function Row({ icon, text, top }: { icon: keyof typeof Feather.glyphMap; text: s
   );
 }
 
-function FriendsTabPlaceholder({
-  count,
-  onOpen,
+function HiddenFriends({
+  visibility,
 }: {
-  count: number;
-  onOpen?: () => void;
+  visibility: 'public' | 'friends' | 'private';
 }): ReactElement {
+  const msg =
+    visibility === 'private'
+      ? 'This friends list is private.'
+      : 'Only friends can see this list.';
   return (
     <View className="items-center justify-center py-12">
-      <Feather name="users" size={26} color="#9CA3AF" />
-      <Text className="text-gray600 text-sm mt-3">
-        {count > 0 ? `${count} friend${count === 1 ? '' : 's'}` : 'No friends yet'}
-      </Text>
-      {onOpen ? (
-        <Pressable onPress={onOpen} className="mt-3 px-4 py-2 rounded-xl border border-gray300 active:opacity-80">
-          <Text className="text-sm text-gray900">View all</Text>
-        </Pressable>
-      ) : null}
+      <Feather name="lock" size={26} color="#9CA3AF" />
+      <Text className="text-gray500 text-sm mt-3">{msg}</Text>
     </View>
   );
 }
