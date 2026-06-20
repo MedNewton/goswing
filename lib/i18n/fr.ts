@@ -251,6 +251,8 @@ const fr = {
   'profile.couldNotUpdateSetting': "Impossible de mettre a jour le parametre.",
   'profile.viewMyProfile': 'Voir mon profil',
   'profile.viewMyProfileSubtitle': 'Vos photos, videos, stories et amis',
+  'profile.groups': 'Groupes',
+  'profile.groupsSubtitle': 'Creer et rejoindre des groupes',
   'profile.eventsAttended': 'Evenements participes',
   'profile.eventsSaved': 'Evenements sauvegardes',
   'profile.reviews': 'Avis',

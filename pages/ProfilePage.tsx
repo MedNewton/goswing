@@ -28,6 +28,7 @@ import HelpSupportPage from '@/pages/Helpsupportpage';
 import TermsConditionsPage from '@/pages/Termsconditionspage';
 import EditProfilePage from '@/pages/Editprofilepage';
 import SocialProfilePage from '@/pages/social/SocialProfilePage';
+import GroupsListPage from '@/pages/social/GroupsListPage';
 
 const ONBOARDING_FLAG = '@gs:onboardPending';
 
@@ -44,7 +45,8 @@ type ProfileRoute =
   | { name: 'helpSupport' }
   | { name: 'termsConditions' }
   | { name: 'editProfile' }
-  | { name: 'socialProfile' };
+  | { name: 'socialProfile' }
+  | { name: 'groups' };
 
 type ProfilePageProps = Readonly<{
   onNavigateToReservations?: (tab: 'active' | 'past') => void;
@@ -191,6 +193,10 @@ export default function ProfilePage({
     return <SocialProfilePage onBack={() => setRoute({ name: 'root' })} />;
   }
 
+  if (route.name === 'groups') {
+    return <GroupsListPage onBack={() => setRoute({ name: 'root' })} />;
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -270,6 +276,16 @@ export default function ProfilePage({
           </View>
           <Feather name="chevron-right" size={20} color="#FFFFFF" />
         </Pressable>
+
+        {/* Groups */}
+        <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white overflow-hidden">
+          <SettingsRow
+            icon="users"
+            title={t('profile.groups')}
+            subtitle={t('profile.groupsSubtitle')}
+            onPress={() => setRoute({ name: 'groups' })}
+          />
+        </View>
 
         {/* Stats Row - Now Pressable */}
         <View className="mx-5 mt-4 flex-row gap-x-3">

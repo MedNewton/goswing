@@ -250,6 +250,8 @@ const en = {
   'profile.couldNotUpdateSetting': 'Could not update setting.',
   'profile.viewMyProfile': 'View my profile',
   'profile.viewMyProfileSubtitle': 'Your photos, videos, stories & friends',
+  'profile.groups': 'Groups',
+  'profile.groupsSubtitle': 'Create and join group walls',
   'profile.eventsAttended': 'Events Attended',
   'profile.eventsSaved': 'Events Saved',
   'profile.reviews': 'Reviews',
