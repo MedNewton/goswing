@@ -9,7 +9,7 @@ import { ClerkProvider, type TokenCache } from '@clerk/clerk-expo';
 
 import { AuthProvider, AuthGate } from '@/providers/AuthProvider';
 import HomePage from '@/pages/HomePage';
-import ApiClerkBridge from '@/lib/ApiClerkBridge';
+import SupabaseClerkBridge from '@/lib/SupabaseClerkBridge';
 
 // ===== Clerk token cache using expo-secure-store ============================
 const clerkTokenCache: TokenCache = {
@@ -32,13 +32,13 @@ export default function App(): ReactElement {
   return (
     <SafeAreaProvider>
       <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
-        <ApiClerkBridge>
-          <AuthProvider>
-            <AuthGate>
+        <AuthProvider>
+          <AuthGate>
+            <SupabaseClerkBridge> 
               <HomePage />
-            </AuthGate>
-          </AuthProvider>
-        </ApiClerkBridge>
+            </SupabaseClerkBridge>
+          </AuthGate>
+        </AuthProvider>
       </ClerkProvider>
     </SafeAreaProvider>
   );

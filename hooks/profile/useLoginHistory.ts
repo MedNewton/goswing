@@ -1,11 +1,8 @@
 // hooks/profile/useLoginHistory.ts
-// Login history — backed by the Gooswing REST API (route G.1).
-
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-expo';
-import * as meApi from '@/lib/api/me';
-import type { ApiLoginHistoryEntry } from '@/lib/api/types';
-import type { LoginHistoryEntry, DeviceType, ID } from '@/types/domain';
+import { supabase } from '@/lib/supabase';
+import type { LoginHistoryEntry, ID, DeviceType } from '@/types/domain';
 
 type UseLoginHistoryReturn = {
   history: ReadonlyArray<LoginHistoryEntry>;
@@ -13,33 +10,6 @@ type UseLoginHistoryReturn = {
   error: Error | null;
   refetch: () => Promise<void>;
 };
-
-const DEVICE_TYPES: ReadonlySet<DeviceType> = new Set([
-  'mobile',
-  'desktop',
-  'tablet',
-  'unknown',
-]);
-
-function toDeviceType(v: unknown): DeviceType {
-  const s = typeof v === 'string' ? v.toLowerCase() : '';
-  return DEVICE_TYPES.has(s as DeviceType) ? (s as DeviceType) : 'unknown';
-}
-
-function mapEntry(raw: ApiLoginHistoryEntry): LoginHistoryEntry {
-  return {
-    id: String(raw.id) as ID,
-    userId: String(raw.userId) as ID,
-    loggedInAt: String(raw.loggedInAt ?? ''),
-    ipAddress: raw.ipAddress ?? null,
-    userAgent: raw.userAgent ?? null,
-    deviceType: toDeviceType(raw.deviceType),
-    location: raw.location ?? null,
-    sessionId: raw.sessionId ?? null,
-    wasSuccessful: raw.wasSuccessful ?? true,
-    failureReason: raw.failureReason ?? null,
-  };
-}
 
 export function useLoginHistory(limit: number = 20): UseLoginHistoryReturn {
   const { user: clerkUser } = useUser();
@@ -57,8 +27,30 @@ export function useLoginHistory(limit: number = 20): UseLoginHistoryReturn {
     try {
       setIsLoading(true);
       setError(null);
-      const page = await meApi.getMyLoginHistory({ limit });
-      setHistory((page.items ?? []).map(mapEntry));
+
+      const { data, error: fetchError } = await supabase
+        .from('login_history')
+        .select('*')
+        .eq('user_id', clerkUser.id)
+        .order('logged_in_at', { ascending: false })
+        .limit(limit);
+
+      if (fetchError) throw fetchError;
+
+      const mapped: LoginHistoryEntry[] = (data ?? []).map((entry: any) => ({
+        id: entry.id as ID,
+        userId: entry.user_id as ID,
+        loggedInAt: entry.logged_in_at,
+        ipAddress: entry.ip_address,
+        userAgent: entry.user_agent,
+        deviceType: (entry.device_type as DeviceType) ?? 'unknown',
+        location: entry.location,
+        sessionId: entry.session_id,
+        wasSuccessful: entry.was_successful,
+        failureReason: entry.failure_reason,
+      }));
+
+      setHistory(mapped);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch login history'));
     } finally {
@@ -67,16 +59,13 @@ export function useLoginHistory(limit: number = 20): UseLoginHistoryReturn {
   }, [clerkUser?.id, limit]);
 
   useEffect(() => {
-    void fetchHistory();
+    fetchHistory();
   }, [fetchHistory]);
 
-  return useMemo(
-    () => ({
-      history,
-      isLoading,
-      error,
-      refetch: fetchHistory,
-    }),
-    [history, isLoading, error, fetchHistory],
-  );
+  return {
+    history,
+    isLoading,
+    error,
+    refetch: fetchHistory,
+  };
 }

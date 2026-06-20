@@ -1,36 +1,111 @@
-// lib/supabase/reservationDetails.ts
-// Single reservation detail — backed by GET /v1/reservations/:id (route L.3).
-// Labels are formatted client-side exactly as before.
-
+// src/lib/supabase/reservationDetails.ts
+import { supabase } from '@/lib/supabase';
 import { buildTicketQr } from '@/lib/qr/ticketQr';
-import * as reservationsApi from '@/lib/api/reservations';
 
 export type ReservationTicketDetails = Readonly<{
   id: string;
-  ticketLabel: string;
-  ticketTypeLabel: string;
-  priceLabel: string;
+
+  ticketLabel: string; // "Ticket #1"
+  ticketTypeLabel: string; // "Early Bird"
+  priceLabel: string; // "$60"
+
   holderName: string;
   holderEmail: string;
-  qrValue: string;
-  qrCaption?: string | null;
+
+  qrValue: string; // raw value encoded in QR
+  qrCaption?: string | null; // shown under QR
+
   included?: ReadonlyArray<string>;
 }>;
 
 export type ReservationDetails = Readonly<{
   id: string;
-  statusLabel: string;
-  ticketsCountLabel: string;
+
+  statusLabel: string; // "Confirmed"
+  ticketsCountLabel: string; // "3 tickets"
+
   eventTitle: string;
   dateLabel: string;
   timeLabel: string;
   venueLabel: string;
-  eventStartsAt: string | null;
+  eventStartsAt: string | null; // ISO date string for calendar functionality
+
   orderDateLabel: string;
   totalTicketsNumber: number;
   totalAmountLabel: string;
+
   tickets: ReadonlyArray<ReservationTicketDetails>;
 }>;
+
+/* ---------------------------------------------
+   DB row types (PostgREST nested)
+---------------------------------------------- */
+
+type DbVenue = Readonly<{
+  name: string | null;
+  city: string | null;
+}>;
+
+type DbEvent = Readonly<{
+  id: string;
+  title: string | null;
+  starts_at: string | null;
+  venues: DbVenue | null;
+}>;
+
+type DbTicketType = Readonly<{
+  id: string;
+  name: string | null;
+  benefits: unknown; // json or text
+}>;
+
+type DbReservationItem = Readonly<{
+  id: string;
+  ticket_type_id: string;
+  quantity: number;
+  unit_price_cents: number;
+  ticket_type_name_snapshot: string | null;
+
+  // join
+  ticket_type: DbTicketType | null;
+}>;
+
+type DbTicket = Readonly<{
+  id: string;
+  reservation_item_id: string;
+  ticket_no: number;
+  ticket_code: string | null;
+  ticket_type_name_snapshot: string | null;
+}>;
+
+type DbTicketHolder = Readonly<{
+  id: string;
+  ticket_id: string;
+  first_name: string | null;
+  last_name: string | null;
+
+  // optional — if your table doesn’t have it, it will be undefined at runtime
+  email?: string | null;
+}>;
+
+type DbReservationRow = Readonly<{
+  id: string;
+
+  status: string | null;
+  ordered_at: string | null;
+  currency: string | null;
+
+  total_amount_cents: number | null;
+
+  event: DbEvent | null;
+  items: DbReservationItem[] | null;
+  tickets: DbTicket[] | null;
+  holders: DbTicketHolder[] | null;
+}>;
+
+/* ---------------------------------------------
+   Helpers
+---------------------------------------------- */
 
 function safeTrim(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -69,7 +144,7 @@ function pluralize(n: number, singular: string, plural = `${singular}s`): string
   return n === 1 ? singular : plural;
 }
 
-function normalizeStatusLabel(status: string | null | undefined): string {
+function normalizeStatusLabel(status: string | null): string {
   const s = safeTrim(status).toLowerCase();
   if (!s) return 'Confirmed';
 
@@ -78,70 +153,190 @@ function normalizeStatusLabel(status: string | null | undefined): string {
   if (s === 'cancelled' || s === 'canceled') return 'Cancelled';
   if (s === 'refunded') return 'Refunded';
 
+  // fallback: Title Case
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function parseBenefits(v: unknown): ReadonlyArray<string> {
+  if (Array.isArray(v)) return v.map(String).map((x) => x.trim()).filter(Boolean);
+
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return [];
+    if (s.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(s);
+        return Array.isArray(parsed) ? parsed.map(String).map((x) => x.trim()).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    }
+    if (s.includes(',')) return s.split(',').map((x) => x.trim()).filter(Boolean);
+    return [s];
+  }
+
+  if (v && typeof v === 'object') {
+    // sometimes jsonb can be returned as object; treat as empty
+    return [];
+  }
+
+  return [];
+}
+
+/* ---------------------------------------------
+   Public API
+---------------------------------------------- */
+
+/**
+ * Fetch a single reservation with event + items + tickets + holders.
+ * Assumes RLS/JWT already scopes to current user. If you don't use RLS yet,
+ * this still works but you must ensure your client is allowed to read it.
+ */
 export async function getReservationDetails(params: {
   reservationId: string;
 }): Promise<ReservationDetails> {
-  const row = await reservationsApi.getReservation(params.reservationId);
+  const { reservationId } = params;
+
+  const { data, error } = await supabase
+    .from('reservations')
+    .select(
+      `
+      id,
+      status,
+      ordered_at,
+      currency,
+      total_amount_cents,
+
+      event:events (
+        id,
+        title,
+        starts_at,
+        venues:venue_id ( name, city )
+      ),
+
+      items:reservation_items (
+        id,
+        ticket_type_id,
+        quantity,
+        unit_price_cents,
+        ticket_type_name_snapshot,
+        ticket_type:ticket_types ( id, name, benefits )
+      ),
+
+      tickets:tickets (
+        id,
+        reservation_item_id,
+        ticket_no,
+        ticket_code,
+        ticket_type_name_snapshot
+      ),
+
+      holders:ticket_holders (
+        id,
+        ticket_id,
+        first_name,
+        last_name,
+        email
+      )
+    `,
+    )
+    .eq('id', reservationId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Reservation not found.');
+
+  const row = data as unknown as DbReservationRow;
 
   const currency = safeTrim(row.currency).toUpperCase() || 'USD';
-  const totalCents = clampInt(row.totalAmountCents, 0, Number.MAX_SAFE_INTEGER);
+  const totalCents = clampInt(row.total_amount_cents, 0, Number.MAX_SAFE_INTEGER);
 
   const event = row.event ?? null;
-  const startsAt = event?.startsAtIso ?? null;
+  const venue = event?.venues ?? null;
+
+  const startsAt = event?.starts_at ?? null;
 
   const eventTitle = safeTrim(event?.title) || 'Event';
-  const venueLabel =
-    [safeTrim(event?.venueName), safeTrim(event?.venueCity)].filter(Boolean).join(', ') || '-';
+  const dateLabel = formatDateLabel(startsAt);
+  const timeLabel = formatTimeLabel(startsAt);
+  const venueLabel = [safeTrim(venue?.name), safeTrim(venue?.city)].filter(Boolean).join(', ') || '-';
 
-  const items = row.items ?? [];
-  const tickets = row.tickets ?? [];
+  const orderedAt = row.ordered_at ?? null;
+  const orderDateLabel = formatDateLabel(orderedAt);
 
-  const itemById = new Map(items.map((it) => [String(it.id), it]));
+  const tickets = (row.tickets ?? []).map((t) => ({
+    id: String(t.id),
+    reservationItemId: String(t.reservation_item_id),
+    ticketNo: clampInt(t.ticket_no, 1, 999999),
+    ticketCode: t.ticket_code ? String(t.ticket_code) : null,
+    ticketTypeNameSnapshot: safeTrim(t.ticket_type_name_snapshot) || '',
+  }));
 
+  const items = (row.items ?? []).map((it) => ({
+    id: String(it.id),
+    ticketTypeId: String(it.ticket_type_id),
+    quantity: clampInt(it.quantity, 0, 999),
+    unitPriceCents: clampInt(it.unit_price_cents, 0, Number.MAX_SAFE_INTEGER),
+    ticketTypeNameSnapshot: safeTrim(it.ticket_type_name_snapshot) || '',
+    benefits: parseBenefits(it.ticket_type?.benefits),
+    ticketTypeName: safeTrim(it.ticket_type?.name) || '',
+  }));
+
+  // holder map by ticket_id (IMPORTANT: holders.ticket_id refers to tickets.id)
+  const holderByTicketId = new Map<string, { name: string; email: string }>();
+  for (const h of row.holders ?? []) {
+    const first = safeTrim(h.first_name);
+    const last = safeTrim(h.last_name);
+    const full = [first, last].filter(Boolean).join(' ').trim() || 'Ticket holder';
+    const email = safeTrim((h as any)?.email) || '—';
+    holderByTicketId.set(String(h.ticket_id), { name: full, email });
+  }
+
+  // Map benefits by reservation_item_id
+  const benefitsByItemId = new Map<string, ReadonlyArray<string>>();
+  for (const it of items) benefitsByItemId.set(it.id, it.benefits);
+
+  // Helper: find item for ticket
+  const itemById = new Map<string, (typeof items)[number]>();
+  for (const it of items) itemById.set(it.id, it);
+
+  // Build ticket cards (sorted by ticket_no)
   const ticketCards: ReservationTicketDetails[] = tickets
     .slice()
-    .sort((a, b) => clampInt(a.ticketNo, 0, 999999) - clampInt(b.ticketNo, 0, 999999))
+    .sort((a, b) => a.ticketNo - b.ticketNo)
     .map((t) => {
-      const ticketNo = clampInt(t.ticketNo, 1, 999999);
-      const item = itemById.get(String(t.reservationItemId ?? '')) ?? null;
+      const item = itemById.get(t.reservationItemId) ?? null;
 
       const typeLabel =
-        safeTrim(t.ticketTypeName) || safeTrim(item?.ticketTypeName) || 'Ticket';
+        safeTrim(t.ticketTypeNameSnapshot) ||
+        safeTrim(item?.ticketTypeNameSnapshot) ||
+        safeTrim(item?.ticketTypeName) ||
+        'Ticket';
 
-      const unitPriceCents = clampInt(
-        t.unitPriceCents ?? item?.unitPriceCents,
-        0,
-        Number.MAX_SAFE_INTEGER,
-      );
+      const unitPriceCents = item?.unitPriceCents ?? 0;
+      const priceLabel = formatMoneyCents(unitPriceCents, currency);
 
-      const holderName =
-        [safeTrim(t.holder?.firstName), safeTrim(t.holder?.lastName)]
-          .filter(Boolean)
-          .join(' ')
-          .trim() || 'Ticket holder';
-      const holderEmail = safeTrim(t.holder?.email) || '—';
+      const holder = holderByTicketId.get(t.id) ?? { name: 'Ticket holder', email: '—' };
 
-      // Prefer the server-built QR payload; fall back to the local builder.
-      const fallback = buildTicketQr({
+      const { qrValue, qrCaption } = buildTicketQr({
         reservationId: String(row.id),
         ticketId: String(t.id),
-        ticketNo,
-        ticketCode: t.ticketCode ?? null,
+        ticketNo: t.ticketNo,
+        ticketCode: t.ticketCode,
       });
 
+      const included = benefitsByItemId.get(t.reservationItemId) ?? [];
+
       return {
-        id: String(t.id),
-        ticketLabel: `Ticket #${ticketNo}`,
+        id: t.id,
+        ticketLabel: `Ticket #${t.ticketNo}`,
         ticketTypeLabel: typeLabel,
-        priceLabel: formatMoneyCents(unitPriceCents, currency),
-        holderName,
-        holderEmail,
-        qrValue: safeTrim(t.qrValue) || fallback.qrValue,
-        qrCaption: t.qrCaption ?? fallback.qrCaption,
-        included: (item?.benefits ?? []).map(String).map((x) => x.trim()).filter(Boolean),
+        priceLabel,
+        holderName: holder.name,
+        holderEmail: holder.email,
+        qrValue,
+        qrCaption,
+        included,
       };
     });
 
@@ -157,12 +352,12 @@ export async function getReservationDetails(params: {
     ticketsCountLabel: `${totalTicketsNumber} ${pluralize(totalTicketsNumber, 'ticket')}`,
 
     eventTitle,
-    dateLabel: formatDateLabel(startsAt),
-    timeLabel: formatTimeLabel(startsAt),
+    dateLabel,
+    timeLabel,
     venueLabel,
     eventStartsAt: startsAt,
 
-    orderDateLabel: formatDateLabel(row.orderedAt ?? null),
+    orderDateLabel,
     totalTicketsNumber,
     totalAmountLabel: formatMoneyCents(totalCents, currency),
 

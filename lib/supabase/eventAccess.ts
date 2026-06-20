@@ -1,15 +1,7 @@
-// lib/supabase/eventAccess.ts
-// Per-event reservation state — backed by GET /v1/events/:id/my-access
-// (route M.1). The server picks the user's best reservation and computes
-// the step flags.
+// src/lib/supabase/eventAccess.ts
+import { supabase } from '@/lib/supabase';
 
-import { ApiError } from '@/lib/api/client';
-import * as reservationsApi from '@/lib/api/reservations';
-
-export type ReservationStepKey =
-  | 'ticketsPurchased'
-  | 'reservationConfirmed'
-  | 'checkedIn';
+export type ReservationStepKey = 'ticketsPurchased' | 'reservationConfirmed' | 'checkedIn';
 
 export type ReservationSteps = Readonly<{
   ticketsPurchased: boolean;
@@ -28,80 +20,150 @@ export type NormalizedReservationStatus =
 
 export type EventAccess = Readonly<{
   eventId: string;
+
+  // Reservation existence (any status counts)
   hasReservation: boolean;
+
+  // "Best" reservation for this event (if user has multiple)
   reservationId: string | null;
   statusRaw: string | null;
   status: NormalizedReservationStatus;
+
+  // For your progress card
   steps: ReservationSteps;
+
+  // For gating action buttons (Suggest Songs / Take Story / Give Review)
   canUseCheckedInActions: boolean;
 }>;
 
-const EMPTY_STEPS: ReservationSteps = {
-  ticketsPurchased: false,
-  reservationConfirmed: false,
-  checkedIn: false,
-};
+type DbReservationRow = Readonly<{
+  id: string;
+  status: string | null;
+  ordered_at?: string | null;
+}>;
 
-const KNOWN_STATUSES: ReadonlySet<NormalizedReservationStatus> = new Set([
-  'none',
-  'pending',
-  'confirmed',
-  'checkedIn',
-  'cancelled',
-  'refunded',
-  'unknown',
-]);
-
-function normalizeStatus(v: unknown): NormalizedReservationStatus {
-  const s = typeof v === 'string' ? v : '';
-  return KNOWN_STATUSES.has(s as NormalizedReservationStatus)
-    ? (s as NormalizedReservationStatus)
-    : 'unknown';
+function safeTrim(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
 }
 
-function noAccess(eventId: string): EventAccess {
-  return {
-    eventId,
-    hasReservation: false,
-    reservationId: null,
-    statusRaw: null,
-    status: 'none',
-    steps: EMPTY_STEPS,
-    canUseCheckedInActions: false,
-  };
+function normalizeStatus(raw: string | null | undefined): NormalizedReservationStatus {
+  const s = safeTrim(raw).toLowerCase();
+  if (!s) return 'unknown';
+
+  // Map your common variants to one of the states you care about
+  if (s === 'checkedin' || s === 'checked_in' || s === 'checked-in') return 'checkedIn';
+  if (s === 'confirmed' || s === 'paid') return 'confirmed';
+  if (s === 'pending' || s === 'created' || s === 'processing') return 'pending';
+  if (s === 'cancelled' || s === 'canceled') return 'cancelled';
+  if (s === 'refunded') return 'refunded';
+
+  return 'unknown';
 }
 
+function statusScore(s: NormalizedReservationStatus): number {
+  // Higher = more progressed
+  if (s === 'checkedIn') return 3;
+  if (s === 'confirmed') return 2;
+  if (s === 'pending') return 1;
+
+  // reservation exists but not usable for progress
+  if (s === 'cancelled' || s === 'refunded') return 0;
+
+  // unknown still means “reservation exists” (we’ll treat it like purchased only)
+  if (s === 'unknown') return 1;
+
+  return 0;
+}
+
+function buildSteps(hasReservation: boolean, status: NormalizedReservationStatus): ReservationSteps {
+  if (!hasReservation) {
+    return { ticketsPurchased: false, reservationConfirmed: false, checkedIn: false };
+  }
+
+  // Any reservation (even pending/unknown) => Tickets Purchased true
+  const purchased = true;
+  const confirmed = status === 'confirmed' || status === 'checkedIn';
+  const checkedIn = status === 'checkedIn';
+
+  return { ticketsPurchased: purchased, reservationConfirmed: confirmed, checkedIn };
+}
+
+/**
+ * Fetch access + progress for the current user on a given event.
+ *
+ * Assumptions:
+ * - RLS/JWT limits `reservations` to current user (recommended).
+ * - `reservations` has columns: `event_id`, `status`, and ideally `ordered_at`.
+ *
+ * If your column is not `event_id`, we’ll adjust the query next.
+ */
 export async function getEventAccess(params: {
   eventId: string;
 }): Promise<EventAccess> {
-  const eventId = typeof params.eventId === 'string' ? params.eventId.trim() : '';
-  if (!eventId) return noAccess('');
-
-  let raw;
-  try {
-    raw = await reservationsApi.getEventAccess(eventId);
-  } catch (e) {
-    // Unknown event (or transient failure) renders the pre-purchase state
-    // rather than blocking the event page.
-    if (e instanceof ApiError && (e.status === 404 || e.code === 'not_found')) {
-      return noAccess(eventId);
-    }
-    throw e;
+  const eventId = safeTrim(params.eventId);
+  if (!eventId) {
+    return {
+      eventId: '',
+      hasReservation: false,
+      reservationId: null,
+      statusRaw: null,
+      status: 'none',
+      steps: { ticketsPurchased: false, reservationConfirmed: false, checkedIn: false },
+      canUseCheckedInActions: false,
+    };
   }
 
-  if (!raw.hasReservation) return noAccess(String(raw.eventId ?? eventId));
+  // Pull a small set (in case user has multiple reservations for same event)
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('id, status, ordered_at')
+    .eq('event_id', eventId)
+    .order('ordered_at', { ascending: false })
+    .limit(10);
+
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as unknown as DbReservationRow[];
+
+  if (rows.length === 0) {
+    return {
+      eventId,
+      hasReservation: false,
+      reservationId: null,
+      statusRaw: null,
+      status: 'none',
+      steps: { ticketsPurchased: false, reservationConfirmed: false, checkedIn: false },
+      canUseCheckedInActions: false,
+    };
+  }
+
+  // Choose the "best" reservation by status progress.
+  // Tie-breaker: newest ordered_at (we already ordered desc, but we still score first).
+  let best = rows[0];
+  let bestStatus = normalizeStatus(best.status);
+  let bestScore = statusScore(bestStatus);
+
+  for (const r of rows) {
+    const st = normalizeStatus(r.status);
+    const sc = statusScore(st);
+
+    if (sc > bestScore) {
+      best = r;
+      bestStatus = st;
+      bestScore = sc;
+    }
+  }
+
+  const hasReservation = true;
+  const steps = buildSteps(hasReservation, bestStatus);
 
   return {
-    eventId: String(raw.eventId ?? eventId),
-    hasReservation: true,
-    reservationId: raw.reservationId == null ? null : String(raw.reservationId),
-    statusRaw: raw.statusRaw ?? null,
-    status: normalizeStatus(raw.status),
-    steps: {
-      ticketsPurchased: Boolean(raw.steps?.ticketsPurchased),
-      reservationConfirmed: Boolean(raw.steps?.reservationConfirmed),
-      checkedIn: Boolean(raw.steps?.checkedIn),
-    },
-    canUseCheckedInActions: Boolean(raw.canUseCheckedInActions),
+    eventId,
+    hasReservation,
+    reservationId: String(best.id),
+    statusRaw: best.status ?? null,
+    status: bestStatus,
+    steps,
+    canUseCheckedInActions: bestStatus === 'checkedIn',
   };
 }

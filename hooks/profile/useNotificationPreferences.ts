@@ -1,10 +1,7 @@
 // hooks/profile/useNotificationPreferences.ts
-// Notification preferences — backed by the Gooswing REST API (routes E.1–E.2).
-
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-expo';
-import * as meApi from '@/lib/api/me';
-import type { ApiNotificationPreferences } from '@/lib/api/types';
+import { supabase } from '@/lib/supabase';
 import type { NotificationPreferences, ID } from '@/types/domain';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '@/types/domain';
 
@@ -15,39 +12,6 @@ type UseNotificationPreferencesReturn = {
   refetch: () => Promise<void>;
   updatePreferences: (updates: Partial<NotificationPreferences>) => Promise<void>;
 };
-
-const D = DEFAULT_NOTIFICATION_PREFERENCES;
-
-function mapPreferences(
-  raw: ApiNotificationPreferences,
-  userId: string,
-): NotificationPreferences {
-  return {
-    userId: (raw.userId || userId) as ID,
-    pushEnabled: raw.pushEnabled ?? D.pushEnabled,
-    pushEventReminders: raw.pushEventReminders ?? D.pushEventReminders,
-    pushEventUpdates: raw.pushEventUpdates ?? D.pushEventUpdates,
-    pushNewFollowers: raw.pushNewFollowers ?? D.pushNewFollowers,
-    pushEventRecommendations:
-      raw.pushEventRecommendations ?? D.pushEventRecommendations,
-    emailEnabled: raw.emailEnabled ?? D.emailEnabled,
-    emailWeeklyDigest: raw.emailWeeklyDigest ?? D.emailWeeklyDigest,
-    emailEventInvites: raw.emailEventInvites ?? D.emailEventInvites,
-    emailPromotions: raw.emailPromotions ?? D.emailPromotions,
-    emailNewsletter: raw.emailNewsletter ?? D.emailNewsletter,
-    smsEnabled: raw.smsEnabled ?? D.smsEnabled,
-    smsUrgentUpdates: raw.smsUrgentUpdates ?? D.smsUrgentUpdates,
-    smsEventCancellations: raw.smsEventCancellations ?? D.smsEventCancellations,
-    personalizedAds: raw.personalizedAds ?? D.personalizedAds,
-    locationBasedSuggestions:
-      raw.locationBasedSuggestions ?? D.locationBasedSuggestions,
-    quietHoursEnabled: raw.quietHoursEnabled ?? D.quietHoursEnabled,
-    quietHoursStart: raw.quietHoursStart ?? null,
-    quietHoursEnd: raw.quietHoursEnd ?? null,
-    createdAt: raw.createdAt ?? undefined,
-    updatedAt: raw.updatedAt ?? undefined,
-  };
-}
 
 export function useNotificationPreferences(): UseNotificationPreferencesReturn {
   const { user: clerkUser } = useUser();
@@ -65,40 +29,110 @@ export function useNotificationPreferences(): UseNotificationPreferencesReturn {
     try {
       setIsLoading(true);
       setError(null);
-      const raw = await meApi.getMyNotificationPreferences();
-      setPreferences(mapPreferences(raw, clerkUser.id));
+
+      const { data, error: fetchError } = await supabase
+        .from('notification_preferences')
+        .select('*')
+        .eq('user_id', clerkUser.id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      if (data) {
+        setPreferences({
+          userId: clerkUser.id as ID,
+          pushEnabled: data.push_enabled,
+          pushEventReminders: data.push_event_reminders,
+          pushEventUpdates: data.push_event_updates,
+          pushNewFollowers: data.push_new_followers,
+          pushEventRecommendations: data.push_event_recommendations,
+          emailEnabled: data.email_enabled,
+          emailWeeklyDigest: data.email_weekly_digest,
+          emailEventInvites: data.email_event_invites,
+          emailPromotions: data.email_promotions,
+          emailNewsletter: data.email_newsletter,
+          smsEnabled: data.sms_enabled,
+          smsUrgentUpdates: data.sms_urgent_updates,
+          smsEventCancellations: data.sms_event_cancellations,
+          personalizedAds: data.personalized_ads,
+          locationBasedSuggestions: data.location_based_suggestions,
+          quietHoursEnabled: data.quiet_hours_enabled,
+          quietHoursStart: data.quiet_hours_start,
+          quietHoursEnd: data.quiet_hours_end,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        });
+      } else {
+        setPreferences({
+          userId: clerkUser.id as ID,
+          ...DEFAULT_NOTIFICATION_PREFERENCES,
+        });
+      }
     } catch (err) {
-      setError(
-        err instanceof Error ? err : new Error('Failed to fetch notification preferences'),
-      );
+      setError(err instanceof Error ? err : new Error('Failed to fetch notification preferences'));
     } finally {
       setIsLoading(false);
     }
   }, [clerkUser?.id]);
 
   useEffect(() => {
-    void fetchPreferences();
+    fetchPreferences();
   }, [fetchPreferences]);
 
-  const updatePreferences = useCallback(
-    async (updates: Partial<NotificationPreferences>) => {
-      if (!clerkUser?.id) throw new Error('Not authenticated');
+  const updatePreferences = useCallback(async (updates: Partial<NotificationPreferences>) => {
+    if (!clerkUser?.id) throw new Error('Not authenticated');
 
-      const { userId: _userId, createdAt: _c, updatedAt: _u, ...body } = updates;
-      const raw = await meApi.patchMyNotificationPreferences(body);
-      setPreferences(mapPreferences(raw, clerkUser.id));
-    },
-    [clerkUser?.id],
-  );
+    const dbUpdates: Record<string, any> = {};
 
-  return useMemo(
-    () => ({
-      preferences,
-      isLoading,
-      error,
-      refetch: fetchPreferences,
-      updatePreferences,
-    }),
-    [preferences, isLoading, error, fetchPreferences, updatePreferences],
-  );
+    // Map all fields
+    const fieldMap: Record<string, string> = {
+      pushEnabled: 'push_enabled',
+      pushEventReminders: 'push_event_reminders',
+      pushEventUpdates: 'push_event_updates',
+      pushNewFollowers: 'push_new_followers',
+      pushEventRecommendations: 'push_event_recommendations',
+      emailEnabled: 'email_enabled',
+      emailWeeklyDigest: 'email_weekly_digest',
+      emailEventInvites: 'email_event_invites',
+      emailPromotions: 'email_promotions',
+      emailNewsletter: 'email_newsletter',
+      smsEnabled: 'sms_enabled',
+      smsUrgentUpdates: 'sms_urgent_updates',
+      smsEventCancellations: 'sms_event_cancellations',
+      personalizedAds: 'personalized_ads',
+      locationBasedSuggestions: 'location_based_suggestions',
+      quietHoursEnabled: 'quiet_hours_enabled',
+      quietHoursStart: 'quiet_hours_start',
+      quietHoursEnd: 'quiet_hours_end',
+    };
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (fieldMap[key] && value !== undefined) {
+        dbUpdates[fieldMap[key]] = value;
+      }
+    }
+
+    const { error: upsertError } = await supabase
+      .from('notification_preferences')
+      .upsert({
+        user_id: clerkUser.id,
+        ...dbUpdates,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (upsertError) throw upsertError;
+
+    // Optimistic update
+    setPreferences((prev) => prev ? { ...prev, ...updates } : null);
+  }, [clerkUser?.id]);
+
+  return {
+    preferences,
+    isLoading,
+    error,
+    refetch: fetchPreferences,
+    updatePreferences,
+  };
 }

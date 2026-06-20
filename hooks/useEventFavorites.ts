@@ -1,7 +1,6 @@
-// hooks/useEventFavorites.ts
-// Favorites state — backed by the Gooswing REST API via lib/supabase/saved.
-
+// src/hooks/useEventFavorites.ts
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { addFavorite, listFavoriteEventIds, removeFavorite } from '@/lib/supabase/saved';
 
 function errorMessage(e: unknown): string {
@@ -10,9 +9,10 @@ function errorMessage(e: unknown): string {
 }
 
 export function useEventFavorites(params: {
+  supabase: SupabaseClient;
   userId: string | null | undefined;
 }) {
-  const { userId } = params;
+  const { supabase, userId } = params;
 
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState<boolean>(false);
@@ -25,12 +25,12 @@ export function useEventFavorites(params: {
 
     setLoading(true);
     try {
-      const ids = await listFavoriteEventIds();
+      const ids = await listFavoriteEventIds({ supabase, userId });
       setFavoriteIds(new Set(ids.map(String)));
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [supabase, userId]);
 
   useEffect(() => {
     void refresh();
@@ -56,8 +56,8 @@ export function useEventFavorites(params: {
       });
 
       try {
-        if (next) await addFavorite({ eventId: id });
-        else await removeFavorite({ eventId: id });
+        if (next) await addFavorite({ supabase, userId, eventId: id });
+        else await removeFavorite({ supabase, userId, eventId: id });
       } catch (e: unknown) {
         // rollback
         setFavoriteIds((prev) => {
@@ -69,7 +69,7 @@ export function useEventFavorites(params: {
         throw new Error(errorMessage(e));
       }
     },
-    [userId],
+    [supabase, userId],
   );
 
   return useMemo(

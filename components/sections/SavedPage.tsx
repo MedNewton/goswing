@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import SearchResultCard, { type SearchResultItem } from '@/components/ui/SearchResultCard';
 
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@clerk/clerk-expo';
 
 import { listFavoriteEvents } from '@/lib/supabase/saved';
@@ -104,7 +105,11 @@ export default function SavedPage({
         setLoading(true);
         setErrMsg(null);
 
-        const rows = await listFavoriteEvents({ limit: 100 });
+        const rows = await listFavoriteEvents({
+          supabase,
+          userId,
+          limit: 100,
+        });
 
         if (!mounted) return;
 
