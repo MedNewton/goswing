@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "goswing",
+    "name": "GoSwing",
     "slug": "goswing",
     "scheme": "goswing",
     "version": "1.0.0",
@@ -21,6 +21,7 @@
         "backgroundColor": "#0B0B15"
       },
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "GoSwing uses your location to show nearby events and experiences.",
         "NSCalendarsUsageDescription": "GoSwing needs calendar access to add event reminders to your calendar.",
         "NSCalendarsFullAccessUsageDescription": "GoSwing needs calendar access to add event reminders to your calendar."
