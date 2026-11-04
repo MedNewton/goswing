@@ -13,6 +13,10 @@ import {
   Animated,
   Modal,
   StatusBar,
+  Share,
+  Linking,
+  Platform,
+  ActionSheetIOS,
   type DimensionValue,
 } from 'react-native';
 import { Pressable as RNPressable } from 'react-native';
@@ -22,6 +26,7 @@ import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { useTranslation } from 'react-i18next';
 
 import Card from '@/components/ui/Card';
+import EventCalendar, { dateKeyOf } from '@/components/event/EventCalendar';
 import {
   getOrganizerById,
   getOrganizerEvents,
@@ -49,7 +54,54 @@ export type OrganizerProfilePageProps = Readonly<{
   organizerId: string;
   organizerName?: string;
   onBack?: () => void;
+  /** Open an event's detail page (event cards in the Events tab). */
+  onOpenEvent?: (eventId: string) => void;
+  /** Open another organizer's profile (Similar tab). */
+  onOpenOrganizer?: (payload: { organizerId: string; organizerName?: string }) => void;
 }>;
+
+type MenuAction = Readonly<{ label: string; onPress: () => void; destructive?: boolean }>;
+
+/** Native-feeling action menu: action sheet on iOS, alert buttons on Android. */
+function showActionMenu(title: string, actions: ReadonlyArray<MenuAction>, cancelLabel: string): void {
+  if (actions.length === 0) return;
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title,
+        options: [...actions.map((a) => a.label), cancelLabel],
+        cancelButtonIndex: actions.length,
+        destructiveButtonIndex: actions.some((a) => a.destructive)
+          ? actions.findIndex((a) => a.destructive)
+          : undefined,
+      },
+      (index) => {
+        if (index < actions.length) actions[index]?.onPress();
+      },
+    );
+    return;
+  }
+  Alert.alert(title, undefined, [
+    ...actions.map((a) => ({
+      text: a.label,
+      onPress: a.onPress,
+      style: a.destructive ? ('destructive' as const) : ('default' as const),
+    })),
+    { text: cancelLabel, style: 'cancel' as const },
+  ]);
+}
+
+async function openUrl(url: string, failMessage: string): Promise<void> {
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert(failMessage);
+  }
+}
+
+function normalizeWebsite(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
 
 function formatCompactNumber(n: number): string {
   if (!Number.isFinite(n)) return '0';
@@ -282,11 +334,23 @@ function MetricItem({
   );
 }
 
-function OrganizerEventCard({ item }: { item: OrganizerEvent }): ReactElement {
+function OrganizerEventCard({
+  item,
+  onPress,
+}: {
+  item: OrganizerEvent;
+  onPress?: (eventId: string) => void;
+}): ReactElement {
   const { t } = useTranslation();
   const dt = useMemo(() => formatDateTime(item.startsAt), [item.startsAt]);
 
   return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={!onPress}
+      onPress={() => onPress?.(item.id)}
+      className="active:opacity-80"
+    >
     <Card variant="outlined" padding="md" className="mt-3">
       <View className="flex-row items-start gap-x-3">
         {item.imageUrl ? (
@@ -330,6 +394,7 @@ function OrganizerEventCard({ item }: { item: OrganizerEvent }): ReactElement {
         </View>
       </View>
     </Card>
+    </Pressable>
   );
 }
 
@@ -389,10 +454,41 @@ function ReviewCard({ review }: { review: OrganizerReview }): ReactElement {
   );
 }
 
-function SimilarOrganizerCard({ organizer }: { organizer: SimilarOrganizer }): ReactElement {
+function SimilarOrganizerCard({
+  organizer,
+  onPress,
+}: {
+  organizer: SimilarOrganizer;
+  onPress?: (organizer: SimilarOrganizer) => void;
+}): ReactElement {
   const { t } = useTranslation();
   const initials = getInitials(organizer.name);
+  const [following, setFollowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const toggleFollow = async (): Promise<void> => {
+    if (busy) return;
+    const next = !following;
+    setBusy(true);
+    setFollowing(next);
+    try {
+      if (next) await followOrganizer(organizer.id);
+      else await unfollowOrganizer(organizer.id);
+    } catch (e: unknown) {
+      setFollowing(!next);
+      Alert.alert(t('organizer.followFailed'), errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={!onPress}
+      onPress={() => onPress?.(organizer)}
+      className="active:opacity-80"
+    >
     <Card variant="outlined" padding="md" className="mt-3">
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-x-3 flex-1">
@@ -425,11 +521,25 @@ function SimilarOrganizerCard({ organizer }: { organizer: SimilarOrganizer }): R
             </View>
           </View>
         </View>
-        <Pressable className="rounded-full border border-gray300 px-4 py-2 bg-white ml-2">
-          <Text className="text-sm font-medium text-gray800">{t('organizer.follow')}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={(e) => {
+            e.stopPropagation();
+            void toggleFollow();
+          }}
+          disabled={busy}
+          className={cx(
+            'rounded-full border px-4 py-2 ml-2',
+            following ? 'bg-black border-black' : 'bg-white border-gray300',
+          )}
+        >
+          <Text className={cx('text-sm font-medium', following ? 'text-white' : 'text-gray800')}>
+            {following ? t('organizer.following') : t('organizer.follow')}
+          </Text>
         </Pressable>
       </View>
     </Card>
+    </Pressable>
   );
 }
 
@@ -441,11 +551,16 @@ export default function OrganizerProfilePage({
   organizerId,
   organizerName,
   onBack,
+  onOpenEvent,
+  onOpenOrganizer,
 }: OrganizerProfilePageProps): ReactElement {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<OrganizerTab>('about');
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarDate, setCalendarDate] = useState<string | null>(null);
+  const [showAllPast, setShowAllPast] = useState(false);
   const [organizer, setOrganizer] = useState<OrganizerWithStats | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
 
@@ -627,6 +742,93 @@ export default function OrganizerProfilePage({
     }
   };
 
+  const hasLocation = Boolean(organizer?.city);
+
+  const handleShare = async (): Promise<void> => {
+    const lines = [
+      t('organizer.share.message', { name: displayName }),
+      organizer?.tagline ?? null,
+      hasLocation ? locationLabel : null,
+      organizer?.websiteUrl ? normalizeWebsite(organizer.websiteUrl) : null,
+    ].filter(Boolean);
+    try {
+      await Share.share({ title: displayName, message: lines.join('\n') });
+    } catch {
+      // user cancelled or share failed
+    }
+  };
+
+  const contactActions: MenuAction[] = [];
+  const couldNotOpen = t('organizer.contact.couldNotOpen');
+  if (organizer?.phone) {
+    const phone = organizer.phone;
+    contactActions.push({
+      label: t('organizer.contact.call', { phone }),
+      onPress: () => void openUrl(`tel:${phone.replace(/[^+\d]/g, '')}`, couldNotOpen),
+    });
+    contactActions.push({
+      label: t('organizer.contact.whatsapp'),
+      onPress: () => void openUrl(`https://wa.me/${phone.replace(/[^\d]/g, '')}`, couldNotOpen),
+    });
+  }
+  if (organizer?.email) {
+    const email = organizer.email;
+    contactActions.push({
+      label: t('organizer.contact.email', { email }),
+      onPress: () => void openUrl(`mailto:${email}`, couldNotOpen),
+    });
+  }
+  if (organizer?.instagramHandle) {
+    const handle = organizer.instagramHandle.replace(/^@/, '');
+    contactActions.push({
+      label: t('organizer.contact.instagram'),
+      onPress: () => void openUrl(`https://instagram.com/${handle}`, couldNotOpen),
+    });
+  }
+  if (organizer?.websiteUrl) {
+    const website = normalizeWebsite(organizer.websiteUrl);
+    contactActions.push({
+      label: t('organizer.contact.website'),
+      onPress: () => void openUrl(website, couldNotOpen),
+    });
+  }
+
+  const handleContact = (): void => {
+    if (contactActions.length === 0) {
+      Alert.alert(t('organizer.contact.title'), t('organizer.contact.none'));
+      return;
+    }
+    showActionMenu(t('organizer.contact.choose', { name: displayName }), contactActions, t('common.cancel'));
+  };
+
+  const handleViewOnMap = (): void => {
+    if (!hasLocation) {
+      Alert.alert(t('organizer.viewOnMap'), t('organizer.map.noLocation'));
+      return;
+    }
+    const query = encodeURIComponent(`${displayName}, ${locationLabel}`);
+    const url = Platform.OS === 'ios' ? `http://maps.apple.com/?q=${query}` : `geo:0,0?q=${query}`;
+    void openUrl(url, t('organizer.map.couldNotOpen'));
+  };
+
+  const handleMore = (): void => {
+    const actions: MenuAction[] = [
+      { label: t('organizer.menu.share'), onPress: () => void handleShare() },
+      { label: t('organizer.menu.contact'), onPress: handleContact },
+    ];
+    if (hasLocation) actions.push({ label: t('organizer.viewOnMap'), onPress: handleViewOnMap });
+    actions.push({
+      label: isFollowing ? t('organizer.menu.unfollow') : t('organizer.follow'),
+      onPress: () => void handleToggleFollow(),
+      destructive: isFollowing,
+    });
+    showActionMenu(displayName, actions, t('common.cancel'));
+  };
+
+  const upcomingForList = calendarDate
+    ? events.upcoming.filter((ev) => dateKeyOf(ev.startsAt) === calendarDate)
+    : events.upcoming;
+
   return (
     <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
       <ScrollView
@@ -661,7 +863,12 @@ export default function OrganizerProfilePage({
             >
               <Feather name="arrow-left" size={18} color="#111827" />
             </Pressable>
-            <Pressable className="h-10 w-10 rounded-full bg-white/90 items-center justify-center">
+            <Pressable
+              onPress={handleMore}
+              accessibilityRole="button"
+              accessibilityLabel={t('organizer.menu.title')}
+              className="h-10 w-10 rounded-full bg-white/90 items-center justify-center"
+            >
               <Feather name="more-horizontal" size={18} color="#111827" />
             </Pressable>
           </View>
@@ -731,10 +938,20 @@ export default function OrganizerProfilePage({
                 {isFollowing ? t('organizer.following') : t('organizer.follow')}
               </Text>
             </Pressable>
-            <Pressable className="h-12 w-12 rounded-full border border-gray200 items-center justify-center bg-white">
+            <Pressable
+              onPress={() => void handleShare()}
+              accessibilityRole="button"
+              accessibilityLabel={t('organizer.menu.share')}
+              className="h-12 w-12 rounded-full border border-gray200 items-center justify-center bg-white active:bg-gray50"
+            >
               <Feather name="share-2" size={18} color="#111827" />
             </Pressable>
-            <Pressable className="h-12 w-12 rounded-full border border-gray200 items-center justify-center bg-white">
+            <Pressable
+              onPress={handleContact}
+              accessibilityRole="button"
+              accessibilityLabel={t('organizer.menu.contact')}
+              className="h-12 w-12 rounded-full border border-gray200 items-center justify-center bg-white active:bg-gray50"
+            >
               <Feather name="message-circle" size={18} color="#111827" />
             </Pressable>
           </View>
@@ -747,7 +964,11 @@ export default function OrganizerProfilePage({
               </View>
               <Text className="text-sm text-gray700">{locationLabel}</Text>
             </View>
-            <Pressable className="flex-row items-center gap-x-1">
+            <Pressable
+              onPress={handleViewOnMap}
+              accessibilityRole="button"
+              className={cx('flex-row items-center gap-x-1', hasLocation ? 'active:opacity-70' : 'opacity-50')}
+            >
               <Text className="text-sm text-gray900 font-medium">{t('organizer.viewOnMap')}</Text>
               <Feather name="chevron-right" size={14} color="#374151" />
             </Pressable>
@@ -863,10 +1084,32 @@ export default function OrganizerProfilePage({
               {/* Events Tab */}
               {activeTab === 'events' && (
                 <View className="px-5 mt-4">
-                  <Pressable className="rounded-xl border border-gray200 py-3 items-center flex-row justify-center gap-x-2 bg-white active:bg-gray50">
-                    <Feather name="calendar" size={18} color="#374151" />
-                    <Text className="text-base text-gray800 font-medium">{t('organizer.events.viewCalendar')}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setShowCalendar((v) => !v);
+                      setCalendarDate(null);
+                    }}
+                    className={cx(
+                      'rounded-xl border py-3 items-center flex-row justify-center gap-x-2 active:opacity-80',
+                      showCalendar ? 'bg-black border-black' : 'bg-white border-gray200',
+                    )}
+                  >
+                    <Feather name="calendar" size={18} color={showCalendar ? '#FFFFFF' : '#374151'} />
+                    <Text className={cx('text-base font-medium', showCalendar ? 'text-white' : 'text-gray800')}>
+                      {showCalendar ? t('organizer.events.hideCalendar') : t('organizer.events.viewCalendar')}
+                    </Text>
                   </Pressable>
+
+                  {showCalendar ? (
+                    <View className="mt-3">
+                      <EventCalendar
+                        eventDates={events.upcoming.map((ev) => ev.startsAt)}
+                        selectedDate={calendarDate}
+                        onSelectDate={setCalendarDate}
+                      />
+                    </View>
+                  ) : null}
 
                   {events.loading ? (
                     <>
@@ -879,10 +1122,14 @@ export default function OrganizerProfilePage({
                       <Text className="text-lg font-semibold text-black mt-6">
                         {t('organizer.events.upcomingCount', { count: events.upcoming.length })}
                       </Text>
-                      {events.upcoming.length === 0 ? (
-                        <Text className="text-sm text-gray500 mt-3">{t('organizer.events.upcomingEmpty')}</Text>
+                      {upcomingForList.length === 0 ? (
+                        <Text className="text-sm text-gray500 mt-3">
+                          {calendarDate ? t('organizer.events.noEventsOnDate') : t('organizer.events.upcomingEmpty')}
+                        </Text>
                       ) : (
-                        events.upcoming.map((ev) => <OrganizerEventCard key={ev.id} item={ev} />)
+                        upcomingForList.map((ev) => (
+                          <OrganizerEventCard key={ev.id} item={ev} onPress={onOpenEvent} />
+                        ))
                       )}
 
                       <View className="h-px bg-gray200 my-6" />
@@ -893,12 +1140,20 @@ export default function OrganizerProfilePage({
                       {events.past.length === 0 ? (
                         <Text className="text-sm text-gray500 mt-3">{t('organizer.events.pastEmpty')}</Text>
                       ) : (
-                        events.past.slice(0, 5).map((ev) => <OrganizerEventCard key={ev.id} item={ev} />)
+                        (showAllPast ? events.past : events.past.slice(0, 5)).map((ev) => (
+                          <OrganizerEventCard key={ev.id} item={ev} onPress={onOpenEvent} />
+                        ))
                       )}
                       {events.past.length > 5 && (
-                        <Pressable className="mt-4 py-3 items-center">
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setShowAllPast((v) => !v)}
+                          className="mt-4 py-3 items-center active:opacity-70"
+                        >
                           <Text className="text-sm text-gray800 font-medium">
-                            {t('organizer.events.viewAllPast', { count: events.past.length })}
+                            {showAllPast
+                              ? t('organizer.events.showLessPast')
+                              : t('organizer.events.viewAllPast', { count: events.past.length })}
                           </Text>
                         </Pressable>
                       )}
@@ -992,7 +1247,17 @@ export default function OrganizerProfilePage({
                       <Text className="text-sm text-gray500 mt-3">{t('organizer.similar.empty')}</Text>
                     </View>
                   ) : (
-                    similar.items.map((org) => <SimilarOrganizerCard key={org.id} organizer={org} />)
+                    similar.items.map((org) => (
+                      <SimilarOrganizerCard
+                        key={org.id}
+                        organizer={org}
+                        onPress={
+                          onOpenOrganizer
+                            ? (o) => onOpenOrganizer({ organizerId: o.id, organizerName: o.name })
+                            : undefined
+                        }
+                      />
+                    ))
                   )}
                 </View>
               )}

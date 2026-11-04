@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -17,7 +18,7 @@ import { useClerk } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
 
 import { useProfile, useSettings } from '@/hooks/profile';
-import { useLanguage } from '@/lib/i18n/useLanguage';
+import { useLanguage, type Lang } from '@/lib/i18n/useLanguage';
 
 import AccountSettingsPage from '@/pages/AccountSettingsPage';
 import PaymentMethodsPage from '@/pages/PaymentMethodsPage';
@@ -99,6 +100,11 @@ export default function ProfilePage({
 }: ProfilePageProps): ReactElement {
   const { t } = useTranslation();
   const { lang, setLanguage } = useLanguage();
+  const [languagePickerOpen, setLanguagePickerOpen] = useState(false);
+  const languageOptions: ReadonlyArray<{ key: Lang; label: string }> = [
+    { key: 'fr', label: 'Français' },
+    { key: 'en', label: 'English' },
+  ];
   const insets = useSafeAreaInsets();
   const { signOut } = useClerk();
 
@@ -322,7 +328,7 @@ export default function ProfilePage({
             icon="globe"
             title={t('profile.language')}
             subtitle={lang === 'en' ? t('language.en') : t('language.fr')}
-            onPress={() => setLanguage(lang === 'en' ? 'fr' : 'en')}
+            onPress={() => setLanguagePickerOpen(true)}
           />
         </View>
 
@@ -397,6 +403,46 @@ export default function ProfilePage({
           <Text className="text-xs text-gray500">GoSwing v1.0.0</Text>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={languagePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLanguagePickerOpen(false)}
+      >
+        <Pressable
+          className="flex-1 bg-black/40 justify-end"
+          onPress={() => setLanguagePickerOpen(false)}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            className="bg-white rounded-t-3xl px-5 pt-5"
+            style={{ paddingBottom: (insets.bottom || 0) + 16 }}
+          >
+            <Text className="text-lg font-semibold text-gray900 mb-2">{t('language.choose')}</Text>
+            {languageOptions.map((opt) => {
+              const selected = opt.key === lang;
+              return (
+                <Pressable
+                  key={opt.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => {
+                    setLanguagePickerOpen(false);
+                    if (!selected) void setLanguage(opt.key);
+                  }}
+                  className="flex-row items-center justify-between py-4 border-b border-gray100 active:opacity-70"
+                >
+                  <Text className={selected ? 'text-base text-gray900 font-semibold' : 'text-base text-gray700'}>
+                    {opt.label}
+                  </Text>
+                  {selected ? <Feather name="check" size={18} color="#0EA5E9" /> : null}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

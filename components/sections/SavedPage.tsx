@@ -34,6 +34,9 @@ export type SavedPageProps = Readonly<
      * Parent should open EventDetailsPage (your HomePage route state).
      */
     onOpenEvent?: (eventId: string) => void;
+
+    /** Called when user taps a followed organizer. */
+    onOpenOrganizer?: (payload: { organizerId: string; organizerName?: string }) => void;
   } & Omit<ViewProps, 'children'>
 >;
 
@@ -68,6 +71,7 @@ function mapToResult(e: {
 export default function SavedPage({
   className,
   onOpenEvent,
+  onOpenOrganizer,
   ...rest
 }: SavedPageProps): ReactElement {
   const { t } = useTranslation();
@@ -307,7 +311,12 @@ export default function SavedPage({
                     key={o.id}
                     className="flex-row items-center justify-between px-2 py-3 border-b border-gray100"
                   >
-                    <View className="flex-row items-center gap-x-3 flex-1">
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={!onOpenOrganizer}
+                      onPress={() => onOpenOrganizer?.({ organizerId: o.id, organizerName: o.name })}
+                      className="flex-row items-center gap-x-3 flex-1 active:opacity-70"
+                    >
                       {o.logoUrl ? (
                         <Image
                           source={{ uri: o.logoUrl }}
@@ -320,7 +329,8 @@ export default function SavedPage({
                         </View>
                       )}
                       <Text className="text-gray800 flex-1" numberOfLines={1}>{o.name}</Text>
-                    </View>
+                      <Feather name="chevron-right" size={16} color="#9CA3AF" />
+                    </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => handleUnfollow(o.id, o.name)}
