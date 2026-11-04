@@ -33,6 +33,7 @@ import { createEventStory, getMyStoryForEvent, getStoriesWithUserInfo, type Even
 import * as ImagePicker from 'expo-image-picker';
 import StoriesHeroSlider from '@/components/event/StoriesHeroSlider';
 import StoryViewerModal from '@/components/event/StoryViewerModal';
+import EventCalendar, { dateKeyOf } from '@/components/event/EventCalendar';
 
 
 
@@ -240,10 +241,6 @@ export default function EventDetailsPage({
   // Upcoming events (for Upcoming tab)
   const [upcomingEvents, setUpcomingEvents] = useState<ReadonlyArray<MiniEventRow & { venue?: string | null }>>([]);
   const [upcomingViewMode, setUpcomingViewMode] = useState<'list' | 'calendar'>('list');
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
-  });
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
   // Fetch ticket types eagerly (for Offers tab)
@@ -670,23 +667,11 @@ export default function EventDetailsPage({
   };
 
   // Calendar helpers
-  const upcomingDatesSet = useMemo(() => {
-    const set = new Set<string>();
-    for (const ev of upcomingEvents) {
-      if (ev.startsAtIso) {
-        const d = new Date(ev.startsAtIso);
-        set.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
-      }
-    }
-    return set;
-  }, [upcomingEvents]);
 
   const filteredUpcomingEvents = useMemo(() => {
     if (!selectedCalendarDate) return upcomingEvents;
     return upcomingEvents.filter((ev) => {
-      if (!ev.startsAtIso) return false;
-      const d = new Date(ev.startsAtIso);
-      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` === selectedCalendarDate;
+      return dateKeyOf(ev.startsAtIso) === selectedCalendarDate;
     });
   }, [upcomingEvents, selectedCalendarDate]);
 
@@ -1226,50 +1211,11 @@ export default function EventDetailsPage({
               {/* Calendar view */}
               {upcomingViewMode === 'calendar' && (
                 <View className="mt-3">
-                  <Card variant="outlined" padding="md">
-                    <View className="flex-row items-center justify-between mb-3">
-                      <Pressable
-                        onPress={() =>
-                          setCalendarMonth((prev) => {
-                            const m = prev.month - 1;
-                            return m < 0
-                              ? { year: prev.year - 1, month: 11 }
-                              : { year: prev.year, month: m };
-                          })
-                        }
-                        className="rounded-xl bg-white border border-gray300 h-9 w-9 items-center justify-center"
-                      >
-                        <Feather name="chevron-left" size={18} color="#6B7280" />
-                      </Pressable>
-                      <Text className="text-base font-medium text-gray900">
-                        {new Date(calendarMonth.year, calendarMonth.month).toLocaleDateString(undefined, {
-                          month: 'long',
-                          year: 'numeric',
-                        })}
-                      </Text>
-                      <Pressable
-                        onPress={() =>
-                          setCalendarMonth((prev) => {
-                            const m = prev.month + 1;
-                            return m > 11
-                              ? { year: prev.year + 1, month: 0 }
-                              : { year: prev.year, month: m };
-                          })
-                        }
-                        className="rounded-xl bg-white border border-gray300 h-9 w-9 items-center justify-center"
-                      >
-                        <Feather name="chevron-right" size={18} color="#6B7280" />
-                      </Pressable>
-                    </View>
-
-                    <CalendarGrid
-                      year={calendarMonth.year}
-                      month={calendarMonth.month}
-                      eventDates={upcomingDatesSet}
-                      selectedDate={selectedCalendarDate}
-                      onSelectDate={setSelectedCalendarDate}
-                    />
-                  </Card>
+                  <EventCalendar
+                    eventDates={upcomingEvents.map((ev) => ev.startsAtIso)}
+                    selectedDate={selectedCalendarDate}
+                    onSelectDate={setSelectedCalendarDate}
+                  />
                 </View>
               )}
 
@@ -1281,7 +1227,14 @@ export default function EventDetailsPage({
                   </Text>
                 ) : (
                   (upcomingViewMode === 'calendar' ? filteredUpcomingEvents : upcomingEvents).map((u) => (
-                    <Card key={u.id} variant="outlined" padding="md" className="flex-row items-center justify-between">
+                    <Pressable
+                      key={u.id}
+                      accessibilityRole="button"
+                      disabled={!onPressEvent}
+                      onPress={() => onPressEvent?.(String(u.id))}
+                      className="active:opacity-80"
+                    >
+                    <Card variant="outlined" padding="md" className="flex-row items-center justify-between">
                       <View className="flex-1 pr-3">
                         <Text className="text-gray900 font-medium" numberOfLines={1}>{u.title}</Text>
                         <View className="mt-1 flex-row items-center gap-x-1">
@@ -1301,6 +1254,7 @@ export default function EventDetailsPage({
                         <Badge label={t('eventDetails.remindMe')} variant="soft" tone="gray" size="sm" className="rounded-full" />
                       )}
                     </Card>
+                    </Pressable>
                   ))
                 )}
               </View>
@@ -1548,108 +1502,3 @@ function TabPill({
   );
 }
 
-
-/* ===== CALENDAR GRID COMPONENT ===== */
-
-function CalendarGrid({
-  year,
-  month,
-  eventDates,
-  selectedDate,
-  onSelectDate,
-}: {
-  year: number;
-  month: number;
-  eventDates: Set<string>;
-  selectedDate: string | null;
-  onSelectDate: (date: string | null) => void;
-}): ReactElement {
-  const daysRow = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
-  const grid = useMemo(() => {
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-    const cells: Array<{ day: number; inMonth: boolean; dateKey: string }> = [];
-
-    // Previous month padding
-    for (let i = firstDay - 1; i >= 0; i--) {
-      const d = daysInPrevMonth - i;
-      const pm = month === 0 ? 11 : month - 1;
-      const py = month === 0 ? year - 1 : year;
-      cells.push({ day: d, inMonth: false, dateKey: `${py}-${pm}-${d}` });
-    }
-
-    // Current month
-    for (let d = 1; d <= daysInMonth; d++) {
-      cells.push({ day: d, inMonth: true, dateKey: `${year}-${month}-${d}` });
-    }
-
-    // Next month padding
-    const remaining = 7 - (cells.length % 7);
-    if (remaining < 7) {
-      const nm = month === 11 ? 0 : month + 1;
-      const ny = month === 11 ? year + 1 : year;
-      for (let d = 1; d <= remaining; d++) {
-        cells.push({ day: d, inMonth: false, dateKey: `${ny}-${nm}-${d}` });
-      }
-    }
-
-    // Split into weeks
-    const weeks: Array<typeof cells> = [];
-    for (let i = 0; i < cells.length; i += 7) {
-      weeks.push(cells.slice(i, i + 7));
-    }
-    return weeks;
-  }, [year, month]);
-
-  return (
-    <View>
-      <View className="flex-row justify-between mb-2">
-        {daysRow.map((d) => (
-          <Text key={d} className="w-10 text-center text-gray500 text-sm">
-            {d}
-          </Text>
-        ))}
-      </View>
-      {grid.map((row, i) => (
-        <View key={String(i)} className="flex-row justify-between mb-1">
-          {row.map((cell) => {
-            const hasEvent = eventDates.has(cell.dateKey);
-            const isSelected = selectedDate === cell.dateKey;
-
-            return (
-              <Pressable
-                key={cell.dateKey}
-                onPress={() => {
-                  if (!cell.inMonth) return;
-                  onSelectDate(isSelected ? null : cell.dateKey);
-                }}
-                className={cx(
-                  'h-10 w-10 rounded-xl items-center justify-center',
-                  isSelected ? 'bg-black' : '',
-                )}
-              >
-                <Text
-                  className={cx(
-                    cell.inMonth ? 'text-gray800' : 'text-gray300',
-                    isSelected ? 'text-white font-semibold' : '',
-                  )}
-                >
-                  {cell.day}
-                </Text>
-                {hasEvent && !isSelected && (
-                  <View className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-black" />
-                )}
-                {hasEvent && isSelected && (
-                  <View className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-white" />
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}

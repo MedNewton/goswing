@@ -177,7 +177,18 @@ export default function HomePage(): ReactElement {
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
   const [bottomTab, setBottomTab] = useState<BottomTabKey>('home');
-  const [route, setRoute] = useState<Route>({ name: 'root' });
+  // Navigation history for screens opened on top of the tabs. "Back" pops one
+  // level (e.g. venue -> event -> search) instead of jumping straight home.
+  const [routeStack, setRouteStack] = useState<ReadonlyArray<Route>>([]);
+  const route: Route = routeStack[routeStack.length - 1] ?? { name: 'root' };
+  const pushRoute = (r: Route): void => {
+    if (r.name === 'root') {
+      setRouteStack([]);
+      return;
+    }
+    setRouteStack((prev) => [...prev, r]);
+  };
+  const resetRoutes = (): void => setRouteStack([]);
 
   const [query, setQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<HomeTabKey>('map');
@@ -230,12 +241,28 @@ export default function HomePage(): ReactElement {
     };
   }, []);
 
-  const closeOverlay = (): void => setRoute({ name: 'root' });
+  const closeOverlay = (): void => setRouteStack((prev) => prev.slice(0, -1));
 
-  const openEventDetails = (eventId: string, initialTab?: 'about' | 'offers' | 'upcoming'): void => {
-    const ev = allEvents.find((e) => String(e.id) === String(eventId));
-    if (!ev) return;
-    setRoute({ name: 'eventDetails', event: ev, initialTab });
+  /** Open an event by id; loads it from the API when it isn't in the home list. */
+  const openEventDetails = async (
+    eventId: string,
+    initialTab?: 'about' | 'offers' | 'upcoming',
+  ): Promise<void> => {
+    const local = allEvents.find((e) => String(e.id) === String(eventId));
+    if (local) {
+      pushRoute({ name: 'eventDetails', event: local, initialTab });
+      return;
+    }
+    try {
+      const ev = await getEventDetailsById(String(eventId));
+      pushRoute({ name: 'eventDetails', event: ev, initialTab });
+    } catch {
+      Alert.alert(t('home.eventAlertTitle'), t('home.eventNotLoaded'));
+    }
+  };
+
+  const openOrganizer = (payload: { organizerId: string; organizerName?: string }): void => {
+    pushRoute({ name: 'organizerProfile', organizerId: payload.organizerId, organizerName: payload.organizerName });
   };
 
   const toggleCategory = (key: string, next: boolean): void => {
@@ -295,19 +322,18 @@ export default function HomePage(): ReactElement {
   };
 
   const renderRoot = (): ReactElement => {
-    if (bottomTab === 'search') return <SearchPage />;
+    if (bottomTab === 'search')
+      return (
+        <SearchPage
+          onOpenEvent={(event, initialTab) => pushRoute({ name: 'eventDetails', event, initialTab })}
+        />
+      );
 
     if (bottomTab === 'saved')
       return (
         <SavedPage
-          onOpenEvent={(eventId) => {
-            const ev = allEvents.find((e) => String(e.id) === String(eventId));
-            if (!ev) {
-              Alert.alert(t('home.eventAlertTitle'), t('home.eventNotLoaded'));
-              return;
-            }
-            setRoute({ name: 'eventDetails', event: ev, initialTab: 'about' });
-          }}
+          onOpenEvent={(eventId) => void openEventDetails(eventId, 'about')}
+          onOpenOrganizer={openOrganizer}
         />
       );
 
@@ -316,7 +342,7 @@ export default function HomePage(): ReactElement {
         <ReservationsPage
           initialTab={reservationsInitialTab}
           route={(r) => {
-            setRoute(r);
+            pushRoute(r);
           }}
         />
       );
@@ -371,7 +397,7 @@ export default function HomePage(): ReactElement {
           userName={displayName}
           greeting={t(greetingKey)}
           locationLabel={locationLabel}
-          onPressNotifications={() => setRoute({ name: 'notifications' })}
+          onPressNotifications={() => pushRoute({ name: 'notifications' })}
           onPressLocation={() => setLocationPickerOpen((v) => !v)}
         />
 
@@ -448,7 +474,7 @@ export default function HomePage(): ReactElement {
                       })()
                       : eventsForUIWithFav
                   }
-                  onPressEvent={(id: string) => openEventDetails(id)}
+                  onPressEvent={(id: string) => void openEventDetails(id)}
                   onToggleFavorite={handleToggleFavorite}
                   highlightId={pickedEventId ?? undefined}
                 />
@@ -460,7 +486,7 @@ export default function HomePage(): ReactElement {
                   onChangeSearch={setQuery}
                   focusEventId={pickedEventId}
                   onPressEvent={(id: string, tab?: 'about' | 'offers' | 'upcoming') =>
-                    openEventDetails(id, tab)
+                    void openEventDetails(id, tab)
                   }
                 />
               )
@@ -473,31 +499,24 @@ export default function HomePage(): ReactElement {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white">
-      {route.name === 'root' ? (
-        renderRoot()
-      ) : route.name === 'eventDetails' ? (
+      {/* Tabs stay mounted underneath pushed screens so going back keeps
+          their state (search query, filters, scroll position). */}
+      <View className="flex-1" style={route.name === 'root' ? undefined : { display: 'none' }}>
+        {renderRoot()}
+      </View>
+
+      {route.name === 'eventDetails' ? (
         <EventDetailsPage
+          key={`event-${routeStack.length}-${String(route.event.id)}`}
           event={route.event}
           initialTab={route.initialTab}
           onBack={closeOverlay}
           isFavorite={fav.isFavorite(String(route.event.id))}
           onToggleFavorite={handleToggleFavorite}
-          onOpenOrganizer={({ organizerId, organizerName }) => {
-            setRoute({ name: 'organizerProfile', organizerId, organizerName });
-          }}
-          onPressEvent={async (eventId) => {
-            const local = allEvents.find((e) => String(e.id) === String(eventId));
-            if (local) {
-              setRoute({ name: 'eventDetails', event: local });
-              return;
-            }
-            try {
-              const ev = await getEventDetailsById(eventId);
-              setRoute({ name: 'eventDetails', event: ev });
-            } catch { /* ignore */ }
-          }}
+          onOpenOrganizer={openOrganizer}
+          onPressEvent={(eventId) => void openEventDetails(eventId)}
           onBook={(payload) => {
-            setRoute({
+            pushRoute({
               name: 'checkout',
               event: route.event,
               eventId: payload.eventId,
@@ -509,9 +528,12 @@ export default function HomePage(): ReactElement {
         />
       ) : route.name === 'organizerProfile' ? (
         <OrganizerProfilePage
+          key={`organizer-${routeStack.length}-${route.organizerId}`}
           organizerId={route.organizerId}
           organizerName={route.organizerName}
           onBack={closeOverlay}
+          onOpenEvent={(eventId) => void openEventDetails(eventId)}
+          onOpenOrganizer={openOrganizer}
         />
       ) : route.name === 'notifications' ? (
         <NotificationsPage onBack={closeOverlay} />
@@ -520,25 +542,25 @@ export default function HomePage(): ReactElement {
           reservationId={route.reservationId}
           onBack={closeOverlay}
         />
-      ) : (
+      ) : route.name === 'checkout' ? (
         <CheckoutPage
           event={route.event}
           userId={userId}
           ticketTypes={route.ticketTypes}
           quantities={route.quantities}
-          onBack={() => setRoute({ name: 'eventDetails', event: route.event })}
+          onBack={closeOverlay}
           onSeeReservations={() => {
-            setRoute({ name: 'root' });
+            resetRoutes();
             setBottomTab('reservations');
           }}
         />
-      )}
+      ) : null}
 
       <BottomTabBar
         activeKey={bottomTab}
         onChange={(key) => {
           setBottomTab(key);
-          if (route.name !== 'root') closeOverlay();
+          resetRoutes();
         }}
       />
     </SafeAreaView>

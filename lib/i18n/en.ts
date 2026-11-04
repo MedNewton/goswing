@@ -74,6 +74,31 @@ const en = {
 
   'organizer.similar.empty': 'No similar organizers found.',
 
+  'organizer.menu.title': 'More options',
+  'organizer.menu.share': 'Share',
+  'organizer.menu.contact': 'Contact',
+  'organizer.menu.unfollow': 'Unfollow',
+  'organizer.share.message': 'Discover {{name}} on GoSwing',
+  'organizer.contact.choose': 'Contact {{name}}',
+  'organizer.contact.call': 'Call {{phone}}',
+  'organizer.contact.whatsapp': 'WhatsApp',
+  'organizer.contact.email': 'Email {{email}}',
+  'organizer.contact.instagram': 'Instagram',
+  'organizer.contact.website': 'Website',
+  'organizer.contact.none': 'This organizer has not added contact details yet.',
+  'organizer.contact.couldNotOpen': 'Could not open this link.',
+  'organizer.map.noLocation': 'This organizer has not set a location yet.',
+  'organizer.map.couldNotOpen': 'Could not open maps.',
+  'organizer.events.hideCalendar': 'Hide Calendar',
+  'organizer.events.noEventsOnDate': 'No events on this date.',
+  'organizer.events.showLessPast': 'Show less',
+
+  'search.dateTitle': 'When?',
+  'search.anyDate': 'Any date',
+  'search.today': 'Today',
+
+  'language.choose': 'Choose a language',
+
   'auth.welcome': "Welcome! Let's get fun.",
   'auth.continueEmail': 'Continue with Email',
   'auth.continuePhone': 'Continue with Phone',

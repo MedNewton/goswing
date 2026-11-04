@@ -74,6 +74,31 @@ const fr = {
 
   'organizer.similar.empty': 'Aucun organisateur similaire trouvé.',
 
+  'organizer.menu.title': "Plus d'options",
+  'organizer.menu.share': 'Partager',
+  'organizer.menu.contact': 'Contacter',
+  'organizer.menu.unfollow': 'Ne plus suivre',
+  'organizer.share.message': 'Découvrez {{name}} sur GoSwing',
+  'organizer.contact.choose': 'Contacter {{name}}',
+  'organizer.contact.call': 'Appeler le {{phone}}',
+  'organizer.contact.whatsapp': 'WhatsApp',
+  'organizer.contact.email': 'Écrire à {{email}}',
+  'organizer.contact.instagram': 'Instagram',
+  'organizer.contact.website': 'Site web',
+  'organizer.contact.none': "Cet organisateur n'a pas encore ajouté de coordonnées.",
+  'organizer.contact.couldNotOpen': "Impossible d'ouvrir ce lien.",
+  'organizer.map.noLocation': "Cet organisateur n'a pas encore indiqué de lieu.",
+  'organizer.map.couldNotOpen': "Impossible d'ouvrir la carte.",
+  'organizer.events.hideCalendar': 'Masquer le calendrier',
+  'organizer.events.noEventsOnDate': 'Aucun événement à cette date.',
+  'organizer.events.showLessPast': 'Afficher moins',
+
+  'search.dateTitle': 'Quand ?',
+  'search.anyDate': "N'importe quand",
+  'search.today': "Aujourd'hui",
+
+  'language.choose': 'Choisir une langue',
+
   'auth.welcome': 'Bienvenue ! On va s\'amuser.',
   'auth.continueEmail': 'Continuer avec Email',
   'auth.continuePhone': 'Continuer avec Telephone',

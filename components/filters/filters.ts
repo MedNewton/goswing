@@ -49,6 +49,9 @@ export function applyFiltersToEvents(
           case 'today':
             return sameDay(d, now);
 
+          case 'tonight':
+            return sameDay(d, now) && d >= now;
+
           case 'tomorrow': {
             const t = new Date(now);
             t.setDate(now.getDate() + 1);
@@ -63,6 +66,19 @@ export function applyFiltersToEvents(
 
           case 'this_weekend': {
             const { sat, sunEnd } = weekendRange(now);
+            return d >= sat && d <= sunEnd;
+          }
+
+          case 'next_week': {
+            const nextWeekDay = new Date(now);
+            nextWeekDay.setDate(now.getDate() + 7);
+            return d >= startOfWeek(nextWeekDay) && d <= endOfWeek(nextWeekDay);
+          }
+
+          case 'next_weekend': {
+            const nextWeekDay = new Date(now);
+            nextWeekDay.setDate(now.getDate() + 7);
+            const { sat, sunEnd } = weekendRange(nextWeekDay);
             return d >= sat && d <= sunEnd;
           }
 
