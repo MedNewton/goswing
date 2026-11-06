@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import EventPinMarker from '@/components/map/EventPinMarker';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
@@ -457,9 +458,11 @@ export default function EventsMap({
             const imgUrl = (e as any)?.imageUrl ?? e.imageUrl;
 
             return (
-              <Marker
+              <EventPinMarker
                 key={String(e.id)}
-                coordinate={{ latitude: loc.lat, longitude: loc.lng }}
+                lat={loc.lat}
+                lng={loc.lng}
+                imageUrl={imgUrl}
                 onPress={() => {
                   const item: FullItem = {
                     id: e.id as ID,
@@ -475,59 +478,7 @@ export default function EventsMap({
                   };
                   openSheet(item);
                 }}
-                tracksViewChanges={false}
-              >
-                <View style={{ alignItems: 'center' }}>
-                  <View
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 10,
-                      borderWidth: 2,
-                      borderColor: '#FFFFFF',
-                      backgroundColor: '#0B0B15',
-                      overflow: 'hidden',
-                      shadowColor: '#000',
-                      shadowOpacity: 0.25,
-                      shadowRadius: 4,
-                      shadowOffset: { width: 0, height: 2 },
-                      elevation: 5,
-                    }}
-                  >
-                    {imgUrl ? (
-                      <Image
-                        source={{ uri: imgUrl }}
-                        style={{ width: '100%', height: '100%' }}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View
-                        style={{
-                          flex: 1,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Feather name="music" size={20} color="#FFFFFF" />
-                      </View>
-                    )}
-                  </View>
-                  {/* Pointer triangle */}
-                  <View
-                    style={{
-                      width: 0,
-                      height: 0,
-                      borderLeftWidth: 6,
-                      borderRightWidth: 6,
-                      borderTopWidth: 6,
-                      borderLeftColor: 'transparent',
-                      borderRightColor: 'transparent',
-                      borderTopColor: '#FFFFFF',
-                      marginTop: -1,
-                    }}
-                  />
-                </View>
-              </Marker>
+              />
             );
           })}
 
