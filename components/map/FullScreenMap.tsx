@@ -18,6 +18,7 @@ import {
   Easing,
   Image,
 } from 'react-native';
+import EventPinMarker from '@/components/map/EventPinMarker';
 import MapView, {
   Circle,
   Marker,
@@ -529,62 +530,13 @@ export default function FullscreenMap({
           ) : null}
 
           {filteredItems.map((c) => (
-            <Marker
+            <EventPinMarker
               key={String(c.id)}
-              coordinate={{ latitude: c.lat, longitude: c.lng }}
+              lat={c.lat}
+              lng={c.lng}
+              imageUrl={c.imageUrl}
               onPress={() => openSheet(c)}
-              tracksViewChanges={false}
-            >
-              <View style={{ alignItems: 'center' }}>
-                <View
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 10,
-                    borderWidth: 2,
-                    borderColor: '#FFFFFF',
-                    backgroundColor: '#0B0B15',
-                    overflow: 'hidden',
-                    shadowColor: '#000',
-                    shadowOpacity: 0.25,
-                    shadowRadius: 4,
-                    shadowOffset: { width: 0, height: 2 },
-                    elevation: 5,
-                  }}
-                >
-                  {c.imageUrl ? (
-                    <Image
-                      source={{ uri: c.imageUrl }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Feather name="music" size={20} color="#FFFFFF" />
-                    </View>
-                  )}
-                </View>
-                <View
-                  style={{
-                    width: 0,
-                    height: 0,
-                    borderLeftWidth: 6,
-                    borderRightWidth: 6,
-                    borderTopWidth: 6,
-                    borderLeftColor: 'transparent',
-                    borderRightColor: 'transparent',
-                    borderTopColor: '#FFFFFF',
-                    marginTop: -1,
-                  }}
-                />
-              </View>
-            </Marker>
+            />
           ))}
 
           {/* Nearby places from OpenStreetMap */}
