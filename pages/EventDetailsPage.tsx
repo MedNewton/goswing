@@ -208,6 +208,16 @@ export default function EventDetailsPage({
 
   const [access, setAccess] = useState<EventAccess | null>(null);
   const [accessLoading, setAccessLoading] = useState<boolean>(false);
+  // Song suggestions and stories need a confirmed reservation (the API's own
+  // eligibility rule: confirmed or completed), not a check-in at the door.
+  const canSuggestAndShare = Boolean(
+    access &&
+      (access.canUseCheckedInActions ||
+        access.steps.reservationConfirmed ||
+        access.steps.checkedIn ||
+        access.status === 'confirmed' ||
+        access.status === 'checkedIn'),
+  );
   const [accessError, setAccessError] = useState<string | null>(null);
 
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -786,7 +796,7 @@ export default function EventDetailsPage({
             </View>
           </View>
 
-          {access?.canUseCheckedInActions ? (
+          {canSuggestAndShare ? (
             <View className="px-5 mt-4 flex-row items-center gap-x-1">
               <View className="flex-1">
                 <Pressable
@@ -805,6 +815,8 @@ export default function EventDetailsPage({
                   <ActionChip bg="bg-indigo-600" icon="camera" label={t('eventDetails.shareStory')} />
                 </Pressable>
               </View>
+              {/* Reviews make sense once the user has actually attended. */}
+              {access?.canUseCheckedInActions ? (
               <View className="flex-1">
                 <Pressable
                   onPress={() => {
@@ -820,6 +832,7 @@ export default function EventDetailsPage({
                   <ActionChip bg="bg-amber-400" icon="star" label={hasReviewed ? t('eventDetails.reviewed') : t('eventDetails.giveReview')} darkText />
                 </Pressable>
               </View>
+              ) : null}
             </View>
           ) : null}
 
