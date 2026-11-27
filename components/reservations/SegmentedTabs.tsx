@@ -1,50 +1,43 @@
+// components/reservations/SegmentedTabs.tsx — "Active (3) | Past (2)" segmented control.
 import React, { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { gs } from '@/theme/colors';
+import { softShadow } from '@/components/gs';
 
 export type SegKey = 'active' | 'past';
 
-export type SegmentedTabsCounts = Readonly<{
-  active: number;
-  past: number;
-}>;
+export type SegmentedTabsCounts = Readonly<{ active: number; past: number }>;
 
 export default function SegmentedTabs({
   active,
   onChange,
   counts,
-}: {
-  active: SegKey;
-  onChange: (key: SegKey) => void;
-  counts: SegmentedTabsCounts;
-}): ReactElement {
+}: Readonly<{ active: SegKey; onChange: (key: SegKey) => void; counts: SegmentedTabsCounts }>): ReactElement {
   const { t } = useTranslation();
-  const activeCount = Number.isFinite(counts?.active) ? Math.max(0, Math.trunc(counts.active)) : 0;
-  const pastCount = Number.isFinite(counts?.past) ? Math.max(0, Math.trunc(counts.past)) : 0;
-
-  const Pill = ({ label, keyv }: { label: string; keyv: SegKey }) => {
-    const selected = active === keyv;
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        onPress={() => onChange(keyv)}
-        className={[
-          'flex-1 items-center py-2 rounded-full',
-          selected ? 'bg-white border border-gray300' : 'bg-transparent',
-        ].join(' ')}
-      >
-        <Text className={selected ? 'text-gray900 font-medium' : 'text-gray600 font-medium'}>
-          {label}
-        </Text>
-      </Pressable>
-    );
-  };
-
+  const items: ReadonlyArray<{ key: SegKey; label: string }> = [
+    { key: 'active', label: t('bookings.active', { count: counts.active }) },
+    { key: 'past', label: t('bookings.past', { count: counts.past }) },
+  ];
   return (
-    <View className="flex-row items-center rounded-full bg-gray100 p-1 border border-gray200">
-      <Pill label={t('reservations.activeTab', { count: activeCount })} keyv="active" />
-      <Pill label={t('reservations.pastTab', { count: pastCount })} keyv="past" />
+    <View accessibilityRole="tablist" className="flex-row rounded-full p-1" style={{ backgroundColor: '#E9E6F3' }}>
+      {items.map((it) => {
+        const on = it.key === active;
+        return (
+          <Pressable
+            key={it.key}
+            onPress={() => onChange(it.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            className="flex-1 h-[46px] rounded-full items-center justify-center"
+            style={on ? [{ backgroundColor: gs.white }, softShadow] : undefined}
+          >
+            <Text className="text-[15px] font-extrabold" style={{ color: on ? gs.ink : gs.muted }}>
+              {it.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
