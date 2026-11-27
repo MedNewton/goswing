@@ -1,18 +1,28 @@
-// src/components/blocks/TicketQuantitySheet.tsx
-import React, { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Animated, Easing, Modal, Pressable, ScrollView, Text, View, Dimensions } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// components/blocks/TicketQuantitySheet.tsx — ticket offer picker opened from the
+// event page ("Book"). Pick a quantity per offer, then continue to checkout.
+// Exported types are shared with the shell routes and the event page.
+import React, { useMemo, type ReactElement } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { Minus, Plus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { GsButton, GsSheet } from '@/components/gs';
+import { gs } from '@/theme/colors';
+import { formatCents } from '@/lib/format';
 
 export type TicketType = Readonly<{
   id: string;
   name: string;
   priceCents: number;
-  currency: string; // "USD", "EUR", ...
+  currency: string; // "EUR", "USD", ...
   description?: string | null;
   benefits?: ReadonlyArray<string> | null;
   inventory?: number | null;
+  /** Phase 4 (spec § C.3): discounted price actually charged. */
+  salePriceCents?: number | null;
+  /** Phase 4: price of the same entry at the door without GoSwing. */
+  doorPriceCents?: number | null;
+  /** Seats left, accounting for holds. */
+  seatsAvailable?: number | null;
 }>;
 
 export type TicketQuantities = Record<string, number>;
@@ -20,39 +30,26 @@ export type TicketQuantities = Record<string, number>;
 export type TicketQuantitySheetProps = Readonly<{
   visible: boolean;
   onClose: () => void;
-
   ticketTypes: ReadonlyArray<TicketType>;
-
   quantities: TicketQuantities;
   onChangeQuantities: (next: TicketQuantities) => void;
-
   onProceed: () => void;
-
   title?: string;
 }>;
 
-const cx = (...c: ReadonlyArray<string | null | undefined | false>) => c.filter(Boolean).join(' ');
+/** Max tickets in one booking (spec default `maxTicketsPerOrder`). */
+export const MAX_TICKETS_PER_ORDER = 10;
 
-function clampInt(n: number, min: number, max: number): number {
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, Math.trunc(n)));
+const clamp = (n: number, min: number, max: number): number => (Number.isFinite(n) ? Math.max(min, Math.min(max, Math.trunc(n))) : min);
+
+/** Price charged for one ticket: the sale price when there is one. */
+export function effectivePriceCents(tt: Pick<TicketType, 'priceCents' | 'salePriceCents'>): number {
+  return typeof tt.salePriceCents === 'number' && tt.salePriceCents < tt.priceCents ? tt.salePriceCents : tt.priceCents;
 }
 
-function formatMoney(priceCents: number, currency: string): string {
-  const amount = priceCents / 100;
-
-  // Prefer Intl when available (Hermes supports it on modern RN).
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    if (currency === 'USD') return `$${amount.toFixed(0)}`;
-    if (currency === 'EUR') return `€${amount.toFixed(0)}`;
-    return `${amount.toFixed(0)} ${currency}`;
-  }
+function seatsLeft(tt: TicketType): number | null {
+  const n = typeof tt.seatsAvailable === 'number' ? tt.seatsAvailable : typeof tt.inventory === 'number' ? tt.inventory : null;
+  return n == null || !Number.isFinite(n) ? null : Math.max(0, Math.trunc(n));
 }
 
 export default function TicketQuantitySheet({
@@ -63,256 +60,151 @@ export default function TicketQuantitySheet({
   onChangeQuantities,
   onProceed,
   title,
-}: TicketQuantitySheetProps): ReactElement | null {
-  const { t: translate } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const resolvedTitle = title ?? translate('tickets.bookYourTickets');
-  const bottomPad = Math.max(insets.bottom, 12);
+}: TicketQuantitySheetProps): ReactElement {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
+  const currency = ticketTypes[0]?.currency ?? 'EUR';
 
-  const anim = useRef(new Animated.Value(0)).current;
-  const closingRef = useRef(false);
+  const totalQty = useMemo(() => ticketTypes.reduce((a, tt) => a + clamp(quantities[tt.id] ?? 0, 0, 999), 0), [ticketTypes, quantities]);
+  const totalCents = useMemo(
+    () => ticketTypes.reduce((a, tt) => a + clamp(quantities[tt.id] ?? 0, 0, 999) * effectivePriceCents(tt), 0),
+    [ticketTypes, quantities],
+  );
 
-  const [mounted, setMounted] = useState(false);
-
-  const currency = ticketTypes[0]?.currency ?? 'USD';
-
-  const totalQty = useMemo(() => {
-    let sum = 0;
-    for (const t of ticketTypes) sum += clampInt(quantities[t.id] ?? 0, 0, 999);
-    return sum;
-  }, [ticketTypes, quantities]);
-
-  const totalPriceCents = useMemo(() => {
-    let sum = 0;
-    for (const t of ticketTypes) {
-      const q = clampInt(quantities[t.id] ?? 0, 0, 999);
-      sum += q * (Number.isFinite(t.priceCents) ? t.priceCents : 0);
-    }
-    return sum;
-  }, [ticketTypes, quantities]);
-
-  const hasSelection = totalQty > 0;
-
-  const runTo = (toValue: 0 | 1, cb?: () => void) => {
-    Animated.timing(anim, {
-      toValue,
-      duration: toValue ? 260 : 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) cb?.();
-    });
+  const bump = (tt: TicketType, delta: number): void => {
+    const cur = clamp(quantities[tt.id] ?? 0, 0, 999);
+    const left = seatsLeft(tt);
+    const roomInOrder = MAX_TICKETS_PER_ORDER - (totalQty - cur);
+    const max = Math.min(left ?? 999, roomInOrder);
+    const next = clamp(cur + delta, 0, Math.max(0, max));
+    if (next !== cur) onChangeQuantities({ ...quantities, [tt.id]: next });
   };
 
-  // Mount/unmount with animation
-  useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      requestAnimationFrame(() => runTo(1));
-      return;
-    }
-
-    if (mounted) {
-      runTo(0, () => setMounted(false));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
-
-  const close = () => {
-    if (closingRef.current) return;
-    closingRef.current = true;
-
-    runTo(0, () => {
-      closingRef.current = false;
-      setMounted(false);
-      onClose();
-    });
-  };
-
-  const translateY = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [60, 0],
-  });
-
-  const backdropOpacity = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 0.45],
-  });
-
-  const bump = (id: string, delta: number, maxAllowed?: number) => {
-    const cur = clampInt(quantities[id] ?? 0, 0, 999);
-    const max = typeof maxAllowed === 'number' && Number.isFinite(maxAllowed) ? clampInt(maxAllowed, 0, 999) : 999;
-
-    const nextVal = clampInt(cur + delta, 0, max);
-    if (nextVal === cur) return;
-
-    onChangeQuantities({ ...quantities, [id]: nextVal });
-  };
-
-  if (!mounted) return null;
-
-  const { height: H } = Dimensions.get('window');
-  const maxBodyHeight = Math.round(H * 0.55);
+  const footer =
+    totalQty > 0 ? (
+      <View>
+        <View className="flex-row items-center justify-between mb-3">
+          <Text className="text-[16px] font-bold text-subtle">{t('bookings.pick.total', { count: totalQty })}</Text>
+          <Text className="text-[20px] font-extrabold text-ink">{formatCents(totalCents, currency, locale)}</Text>
+        </View>
+        <GsButton label={t('bookings.pick.continue', { price: formatCents(totalCents, currency, locale) })} onPress={onProceed} size="lg" fullWidth />
+      </View>
+    ) : undefined;
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={close}>
-      {/* Backdrop */}
-      <Animated.View style={{ flex: 1, opacity: backdropOpacity, backgroundColor: '#000' }}>
-        <Pressable style={{ flex: 1 }} onPress={close} accessibilityRole="button" />
-      </Animated.View>
-
-      {/* Sheet */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          transform: [{ translateY }],
-          backgroundColor: '#fff',
-          borderTopLeftRadius: 22,
-          borderTopRightRadius: 22,
-          paddingBottom: bottomPad,
-          shadowColor: '#000',
-          shadowOpacity: 0.15,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: -6 },
-          elevation: 12,
-          overflow: 'hidden',
-        }}
-      >
-        {/* Handle */}
-        <View style={{ alignItems: 'center', paddingTop: 10 }}>
-          <View style={{ width: 44, height: 5, borderRadius: 999, backgroundColor: '#E5E7EB' }} />
-        </View>
-
-        {/* Header */}
-        <View className="px-5 pt-4 pb-3">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-xl font-semibold text-black">{resolvedTitle}</Text>
-            <Pressable
-              onPress={close}
-              accessibilityRole="button"
-              accessibilityLabel={translate('tickets.closeSelector')}
-              hitSlop={10}
-              className="h-9 w-9 items-center justify-center"
-            >
-              <Feather name="x" size={18} color="#111827" />
-            </Pressable>
+    <GsSheet visible={visible} onClose={onClose} title={title ?? t('bookings.pick.title')} footer={footer} maxHeight={0.85}>
+      <View className="px-5" style={{ gap: 12 }}>
+        {ticketTypes.length === 0 ? (
+          <View className="rounded-[20px] p-4" style={{ backgroundColor: gs.surface }}>
+            <Text className="text-[16px] font-extrabold text-ink">{t('bookings.pick.none')}</Text>
+            <Text className="text-[14px] text-muted mt-1">{t('bookings.pick.checkBack')}</Text>
           </View>
-        </View>
-
-        {/* Ticket rows */}
-        <View className="px-5 pb-4">
-          {ticketTypes.length === 0 ? (
-            <View className="rounded-2xl border border-gray200 bg-white px-4 py-4">
-              <Text className="text-base font-medium text-black">{translate('tickets.noneAvailable')}</Text>
-              <Text className="text-sm text-gray500 mt-1">{translate('tickets.checkBackLater')}</Text>
-            </View>
-          ) : (
-            <ScrollView
-              style={{ maxHeight: maxBodyHeight }}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 2 }}
-            >
-              <View className="gap-y-4">
-                {ticketTypes.map((ticket) => {
-                  const qty = clampInt(quantities[ticket.id] ?? 0, 0, 999);
-                  const minusDisabled = qty <= 0;
-
-                  const maxAllowed =
-                    typeof ticket.inventory === 'number' && Number.isFinite(ticket.inventory)
-                      ? clampInt(ticket.inventory, 0, 999)
-                      : undefined;
-
-                  const plusDisabled = typeof maxAllowed === 'number' ? qty >= maxAllowed : false;
-
-                  return (
-                    <View
-                      key={ticket.id}
-                      className="rounded-2xl border border-gray200 bg-white px-4 py-4 flex-row items-center justify-between"
-                    >
-                      <View className="flex-1 pr-4">
-                        <Text className="text-base font-medium text-black">{ticket.name}</Text>
-                        <Text className="text-sm text-gray500 mt-1">{formatMoney(ticket.priceCents, ticket.currency)}</Text>
-
-                        {typeof maxAllowed === 'number' ? (
-                          <Text className="text-xs text-gray400 mt-1">
-                            {translate('tickets.availableCount', { count: maxAllowed })}
-                          </Text>
-                        ) : null}
-                      </View>
-
-                      <View className="flex-row items-center gap-x-3">
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={translate('tickets.decrease', { name: ticket.name })}
-                          onPress={() => bump(ticket.id, -1, maxAllowed)}
-                          disabled={minusDisabled}
-                          className={cx(
-                            'h-12 w-12 rounded-xl border border-gray200 items-center justify-center',
-                            minusDisabled ? 'opacity-40' : 'opacity-100'
-                          )}
-                          hitSlop={6}
-                        >
-                          <Feather name="minus" size={18} color="#111827" />
-                        </Pressable>
-
-                        <Text className="text-base text-black w-6 text-center">{qty}</Text>
-
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={translate('tickets.increase', { name: ticket.name })}
-                          onPress={() => bump(ticket.id, +1, maxAllowed)}
-                          disabled={plusDisabled}
-                          className={cx(
-                            'h-12 w-12 rounded-xl border border-gray200 items-center justify-center',
-                            plusDisabled ? 'opacity-40' : 'opacity-100'
-                          )}
-                          hitSlop={6}
-                        >
-                          <Feather name="plus" size={18} color="#111827" />
-                        </Pressable>
-                      </View>
-                    </View>
-                  );
-                })}
+        ) : (
+          ticketTypes.map((tt) => {
+            const qty = clamp(quantities[tt.id] ?? 0, 0, 999);
+            const left = seatsLeft(tt);
+            const price = effectivePriceCents(tt);
+            const discounted = price < tt.priceCents;
+            const canAdd = (left == null || qty < left) && totalQty < MAX_TICKETS_PER_ORDER;
+            const sub = tt.description?.trim() || (tt.benefits ?? []).filter(Boolean).join(' · ');
+            return (
+              <View key={tt.id} className="flex-row items-center rounded-[22px] bg-white p-4" style={{ borderWidth: 1.5, borderColor: qty > 0 ? gs.violet : gs.line, gap: 10 }}>
+                <View className="flex-1">
+                  <Text className="text-[16px] font-extrabold text-ink">{tt.name}</Text>
+                  {sub ? (
+                    <Text className="text-[13px] text-muted mt-0.5" numberOfLines={2}>
+                      {sub}
+                    </Text>
+                  ) : null}
+                  <View className="flex-row items-baseline mt-1" style={{ gap: 6 }}>
+                    <Text className="text-[17px] font-extrabold" style={{ color: discounted ? gs.violetDark : gs.ink }}>
+                      {price === 0 ? t('gs.free') : formatCents(price, tt.currency, locale)}
+                    </Text>
+                    {discounted ? (
+                      <Text className="text-[14px] text-faint" style={{ textDecorationLine: 'line-through' }}>
+                        {formatCents(tt.priceCents, tt.currency, locale)}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {left != null && left <= 20 ? (
+                    <Text className="text-[12px] font-bold mt-1" style={{ color: gs.pinkDark }}>
+                      {t('bookings.pick.left', { count: left })}
+                    </Text>
+                  ) : null}
+                </View>
+                <Stepper
+                  value={qty}
+                  onMinus={() => bump(tt, -1)}
+                  onPlus={() => bump(tt, 1)}
+                  minusDisabled={qty <= 0}
+                  plusDisabled={!canAdd}
+                  minusLabel={t('bookings.co.remove', { name: tt.name })}
+                  plusLabel={t('bookings.co.add', { name: tt.name })}
+                  size={40}
+                />
               </View>
-            </ScrollView>
-          )}
+            );
+          })
+        )}
+      </View>
+    </GsSheet>
+  );
+}
 
-          {/* State B: only show when user selected at least 1 */}
-          {hasSelection ? (
-            <>
-              <View className="mt-5 h-px bg-gray200" />
-
-              <View className="mt-4 flex-row items-center justify-between">
-                <Text className="text-lg text-black">
-                  {translate('tickets.total')}{' '}
-                  <Text className="font-medium">{translate('tickets.ticketCount', { count: totalQty })}</Text>
-                </Text>
-                <Text className="text-lg font-semibold text-black">{formatMoney(totalPriceCents, currency)}</Text>
-              </View>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={translate('tickets.proceedToCheckout')}
-                onPress={onProceed}
-                className="mt-4 rounded-2xl bg-black py-4 items-center justify-center"
-                style={{
-                  shadowColor: '#000',
-                  shadowOpacity: 0.22,
-                  shadowRadius: 14,
-                  shadowOffset: { width: 0, height: 6 },
-                  elevation: 10,
-                }}
-              >
-                <Text className="text-white text-base font-semibold">{translate('tickets.proceedToCheckout')}</Text>
-              </Pressable>
-            </>
-          ) : null}
-        </View>
-      </Animated.View>
-    </Modal>
+/** Round −/+ stepper (also used by checkout). */
+export function Stepper({
+  value,
+  onMinus,
+  onPlus,
+  minusDisabled,
+  plusDisabled,
+  minusLabel,
+  plusLabel,
+  size = 48,
+}: Readonly<{
+  value: number;
+  onMinus: () => void;
+  onPlus: () => void;
+  minusDisabled: boolean;
+  plusDisabled: boolean;
+  minusLabel: string;
+  plusLabel: string;
+  size?: number;
+}>): ReactElement {
+  const box = { width: size, height: size, borderRadius: size / 2 };
+  return (
+    <View className="flex-row items-center" style={{ gap: 8 }}>
+      <Pressable
+        onPress={onMinus}
+        disabled={minusDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={minusLabel}
+        accessibilityState={{ disabled: minusDisabled }}
+        hitSlop={4}
+        className="items-center justify-center"
+        style={[box, { backgroundColor: gs.surface2, opacity: minusDisabled ? 0.55 : 1 }]}
+      >
+        <Minus size={18} color={minusDisabled ? gs.faint : gs.ink} strokeWidth={2.8} />
+      </Pressable>
+      <Text accessibilityLiveRegion="polite" className="text-center font-extrabold text-ink" style={{ minWidth: 28, fontSize: size >= 48 ? 26 : 20 }}>
+        {value}
+      </Text>
+      <Pressable
+        onPress={onPlus}
+        disabled={plusDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={plusLabel}
+        accessibilityState={{ disabled: plusDisabled }}
+        hitSlop={4}
+        className="items-center justify-center"
+        style={[
+          box,
+          { backgroundColor: plusDisabled ? gs.surface2 : gs.violet },
+          plusDisabled ? null : { shadowColor: gs.violet, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+        ]}
+      >
+        <Plus size={18} color={plusDisabled ? gs.faint : gs.white} strokeWidth={2.8} />
+      </Pressable>
+    </View>
   );
 }
