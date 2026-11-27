@@ -4,7 +4,7 @@
 import { API_BASE_URL } from '@/lib/api/client';
 import { isResult, type MockHandler } from './router';
 import { coreHandlers } from '../fixtures/core';
-import { mapHandlers } from '../fixtures/map';
+import { mapHandlers, OVERPASS_ELEMENTS } from '../fixtures/map';
 import { discoverHandlers } from '../fixtures/discover';
 import { bookingsHandlers } from '../fixtures/bookings';
 import { profileHandlers } from '../fixtures/profile';
@@ -36,6 +36,9 @@ export function installMockFetch(): void {
       console.warn(`[preview] no mock for ${method} ${url.pathname}`);
       return json(404, { error: { code: 'not_found', message: `No preview mock for ${method} ${url.pathname}` } });
     }
+
+    // Map area: fake OpenStreetMap places so place pins show in the preview.
+    if (/overpass/.test(url.host)) return json(200, { elements: OVERPASS_ELEMENTS });
 
     // Third-party APIs (Google, Overpass, Deezer…) return empty results offline.
     if (/googleapis\.com|overpass|deezer\.com/.test(url.host)) {
