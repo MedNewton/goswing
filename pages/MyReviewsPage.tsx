@@ -9,6 +9,7 @@ import { gs } from '@/theme/colors';
 import { Cover, EmptyState, GsButton, GsSheet, Pill, StatusChip } from '@/components/gs';
 import type { ChipTone } from '@/components/gs/StatusChip';
 import { useAppNav } from '@/navigation/AppNav';
+import { useProfile } from '@/hooks/profile';
 import {
   createReview,
   deleteReview,
@@ -56,6 +57,7 @@ type Draft = Readonly<{
 export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElement {
   const { t, i18n } = useTranslation();
   const nav = useAppNav();
+  const { refetch: refetchProfile } = useProfile();
 
   const [items, setItems] = useState<ReadonlyArray<ReviewItem>>([]);
   const [stats, setStats] = useState<Stats>({ count: 0, average: null, helpful: null });
@@ -142,6 +144,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
       }
       setDraft(null);
       await load();
+      if (draft.mode === 'new') void refetchProfile();
     } catch (e: unknown) {
       Alert.alert(t('common.error'), e instanceof Error ? e.message : t('profile.tryAgain'));
     } finally {
@@ -157,6 +160,7 @@ export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElem
       setItems((xs) => xs.filter((x) => x.id !== toDelete.id));
       setToDelete(null);
       void load();
+      void refetchProfile();
     } catch (e: unknown) {
       Alert.alert(t('common.error'), e instanceof Error ? e.message : t('myReviews.errCouldNotDelete'));
     } finally {

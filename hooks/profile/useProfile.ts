@@ -70,7 +70,8 @@ export function useProfile(): UseProfileReturn {
     (raw: ApiProfileV4): UserProfile => ({
       id: (raw.id || clerkUser?.id || '') as ID,
       name: raw.displayName ?? clerkUser?.fullName ?? '',
-      avatarUri: raw.avatarUrl ?? clerkUser?.imageUrl ?? null,
+      // Clerk's imageUrl is a generated placeholder unless the user uploaded one.
+      avatarUri: raw.avatarUrl ?? (clerkUser?.hasImage ? clerkUser.imageUrl : null) ?? null,
       email: raw.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? null,
       phone: raw.phone ?? clerkUser?.primaryPhoneNumber?.phoneNumber ?? null,
       phoneVerified:
