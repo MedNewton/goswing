@@ -48,6 +48,18 @@ export type Route =
   | { name: 'reservationDetails'; reservationId: string }
   // Profile area owns these screens.
   | { name: 'saved' }
-  | { name: 'notifications' };
+  | { name: 'notifications' }
+  | { name: 'profileScreen'; screen: ProfileScreenKey };
+
+/** Profile sub-screens (rendered by screens/profile/ProfileScreen.tsx). */
+export type ProfileScreenKey =
+  | 'editProfile'
+  | 'account'
+  | 'payments'
+  | 'notificationPrefs'
+  | 'reviews'
+  | 'help'
+  | 'privacy'
+  | 'terms';
 
 export type RouteName = Route['name'];

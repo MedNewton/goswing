@@ -1,352 +1,185 @@
-// pages/NotificationPreferencesPage.tsx
-import React, { useState, type ReactElement } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  ScrollView,
-  Switch,
-  Alert,
-  ActivityIndicator,
-  TextInput,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+// pages/NotificationPreferencesPage.tsx — what we notify about and how:
+// push (reminders, updates, recommendations), email (digest; receipts always
+// on) and quiet hours. Social notifications are deferred with Social.
+import React, { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { Alert, AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
+import { Bell, BellOff, Mail, Moon } from 'lucide-react-native';
 
+import { gs } from '@/theme/colors';
+import { GsSheet, StatusChip } from '@/components/gs';
 import { useNotificationPreferences } from '@/hooks/profile';
 import type { NotificationPreferences } from '@/types/domain';
+import { Card, Divider, Loading, Notice, PageScaffold, Row, SectionTitle, ToggleRow } from '@/screens/profile/components/ui';
 
-const cx = (...c: ReadonlyArray<string | null | undefined | false>) =>
-  c.filter(Boolean).join(' ');
+type NotificationPreferencesPageProps = Readonly<{ onBack: () => void }>;
 
-type NotificationPreferencesPageProps = Readonly<{
-  onBack: () => void;
-}>;
+type Key = keyof Omit<NotificationPreferences, 'userId' | 'createdAt' | 'updatedAt'>;
 
-type ToggleRowProps = {
-  icon?: keyof typeof Feather.glyphMap;
-  title: string;
-  subtitle?: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-  disabled?: boolean;
-  indented?: boolean;
-};
+const HOURS: ReadonlyArray<string> = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
 
-function ToggleRow({
-  icon,
-  title,
-  subtitle,
-  value,
-  onValueChange,
-  disabled = false,
-  indented = false,
-}: ToggleRowProps): ReactElement {
+/** "23:00:00" → "23:00". */
+const hm = (v: string | null | undefined, fallback: string): string => (v ? v.slice(0, 5) : fallback);
+
+/** OS-level permission: blocked means the system will drop our pushes. */
+function useOsBlocked(): boolean {
+  const [blocked, setBlocked] = useState(false);
+  const check = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    try {
+      const p = await Notifications.getPermissionsAsync();
+      setBlocked(p.status === 'denied');
+    } catch {
+      setBlocked(false);
+    }
+  }, []);
+  useEffect(() => {
+    void check();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && void check());
+    return () => sub.remove();
+  }, [check]);
+  return blocked;
+}
+
+export default function NotificationPreferencesPage({ onBack }: NotificationPreferencesPageProps): ReactElement {
+  const { t } = useTranslation();
+  const { preferences: p, isLoading, error, refetch, updatePreferences } = useNotificationPreferences();
+  const osBlocked = useOsBlocked();
+  const [optimistic, setOptimistic] = useState<Partial<NotificationPreferences>>({});
+  const [picker, setPicker] = useState<'start' | 'end' | null>(null);
+
+  const value = <K extends Key>(k: K): NotificationPreferences[K] | undefined =>
+    (k in optimistic ? (optimistic as NotificationPreferences)[k] : p?.[k]) as NotificationPreferences[K] | undefined;
+
+  const set = async (patch: Partial<NotificationPreferences>): Promise<void> => {
+    setOptimistic((o) => ({ ...o, ...patch }));
+    try {
+      await updatePreferences(patch);
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('profile.couldNotUpdateSetting'));
+    } finally {
+      setOptimistic((o) => {
+        const copy = { ...o } as Record<string, unknown>;
+        Object.keys(patch).forEach((k) => delete copy[k]);
+        return copy as Partial<NotificationPreferences>;
+      });
+    }
+  };
+
+  const toggle = (k: Key, v: boolean): void => {
+    const patch: Partial<NotificationPreferences> = { [k]: v };
+    // Turning on a push / email item also turns its channel back on.
+    if (v && k.startsWith('push') && k !== 'pushEnabled' && value('pushEnabled') === false) Object.assign(patch, { pushEnabled: true });
+    if (v && k.startsWith('email') && k !== 'emailEnabled' && value('emailEnabled') === false) Object.assign(patch, { emailEnabled: true });
+    void set(patch);
+  };
+
+  const pushOn = value('pushEnabled') !== false;
+  const emailOn = value('emailEnabled') !== false;
+  const start = hm(value('quietHoursStart'), '23:00');
+  const end = hm(value('quietHoursEnd'), '08:00');
+
   return (
-    <View
-      className={cx(
-        'flex-row items-center justify-between py-3',
-        indented && 'pl-6'
-      )}
-    >
-      <View className="flex-1 mr-4">
-        <View className="flex-row items-center gap-x-2">
-          {icon && <Feather name={icon} size={16} color={disabled ? '#9CA3AF' : '#111827'} />}
-          <Text className={cx('font-medium', disabled ? 'text-gray400' : 'text-gray900')}>
-            {title}
-          </Text>
+    <PageScaffold title={t('profile.notif.title')} subtitle={t('profile.notif.subtitle')} onBack={onBack}>
+      {osBlocked ? (
+        <View className="mt-1">
+          <Notice
+            icon={BellOff}
+            title={t('profile.notif.blockedTitle')}
+            message={t('profile.notif.blockedMessage')}
+            actionLabel={t('profile.notif.openSettings')}
+            onAction={() => void Linking.openSettings()}
+          />
         </View>
-        {subtitle && (
-          <Text className={cx('text-xs mt-1', disabled ? 'text-gray400' : 'text-gray500')}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-        thumbColor={value ? '#FFFFFF' : '#808080'}
-        trackColor={{ false: '#E5E7EB', true: '#59B259' }}
-      />
-    </View>
+      ) : null}
+
+      {isLoading && !p ? (
+        <Loading />
+      ) : error && !p ? (
+        <Notice icon={BellOff} tone="red" title={t('gs.errorTitle')} message={error.message} actionLabel={t('gs.retry')} onAction={() => void refetch()} />
+      ) : (
+        <>
+          <SectionTitle title={t('profile.notif.push')} icon={Bell} className={osBlocked ? undefined : 'mt-2'} />
+          <Card>
+            <ToggleRow title={t('profile.notif.reminders')} subtitle={t('profile.notif.remindersSub')} value={pushOn && !!value('pushEventReminders')} onChange={(v) => toggle('pushEventReminders', v)} />
+            <Divider />
+            <ToggleRow title={t('profile.notif.updates')} subtitle={t('profile.notif.updatesSub')} value={pushOn && !!value('pushEventUpdates')} onChange={(v) => toggle('pushEventUpdates', v)} />
+            <Divider />
+            <ToggleRow
+              title={t('profile.notif.recommendations')}
+              subtitle={t('profile.notif.recommendationsSub')}
+              value={pushOn && !!value('pushEventRecommendations')}
+              onChange={(v) => toggle('pushEventRecommendations', v)}
+            />
+          </Card>
+
+          <SectionTitle title={t('profile.notif.email')} icon={Mail} />
+          <Card>
+            <ToggleRow title={t('profile.notif.digest')} subtitle={t('profile.notif.digestSub')} value={emailOn && !!value('emailWeeklyDigest')} onChange={(v) => toggle('emailWeeklyDigest', v)} />
+            <Divider />
+            <Row title={t('profile.notif.receipts')} subtitle={t('profile.notif.receiptsSub')} chevron={false} right={<StatusChip label={t('profile.notif.alwaysOn')} tone="violet" />} />
+          </Card>
+
+          <Card className="mt-6">
+            <ToggleRow
+              icon={Moon}
+              title={t('profile.notif.quiet')}
+              subtitle={t('profile.notif.quietSub', { start, end })}
+              value={!!value('quietHoursEnabled')}
+              onChange={(v) =>
+                void set(v ? { quietHoursEnabled: true, quietHoursStart: start, quietHoursEnd: end } : { quietHoursEnabled: false })
+              }
+            />
+            {value('quietHoursEnabled') ? (
+              <View className="flex-row px-4 pb-4 gap-x-3">
+                <TimeButton label={t('profile.notif.from')} value={start} onPress={() => setPicker('start')} />
+                <TimeButton label={t('profile.notif.to')} value={end} onPress={() => setPicker('end')} />
+              </View>
+            ) : null}
+          </Card>
+        </>
+      )}
+
+      <GsSheet visible={!!picker} onClose={() => setPicker(null)} title={picker === 'start' ? t('profile.notif.pickStart') : t('profile.notif.pickEnd')} maxHeight={0.7}>
+        <View className="px-5 flex-row flex-wrap gap-2">
+          {HOURS.map((h) => {
+            const active = (picker === 'start' ? start : end) === h;
+            return (
+              <Pressable
+                key={h}
+                onPress={() => {
+                  void set(picker === 'start' ? { quietHoursStart: h } : { quietHoursEnd: h });
+                  setPicker(null);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                className="h-11 w-[74px] rounded-full items-center justify-center"
+                style={{ backgroundColor: active ? gs.violet : gs.surface2 }}
+              >
+                <Text className="text-[15px] font-bold" style={{ color: active ? gs.white : gs.ink }}>
+                  {h}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </GsSheet>
+    </PageScaffold>
   );
 }
 
-export default function NotificationPreferencesPage({
-  onBack,
-}: NotificationPreferencesPageProps): ReactElement {
-  const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-
-  const { preferences, updatePreferences, isLoading } = useNotificationPreferences();
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleToggle = async (
-    key: keyof NotificationPreferences,
-    value: boolean
-  ): Promise<void> => {
-    try {
-      await updatePreferences({ [key]: value });
-    } catch (err: any) {
-      Alert.alert(t('common.error'), err?.message ?? t('notifications.couldNotUpdatePreference'));
-    }
-  };
-
-  const handleSaveQuietHours = async (): Promise<void> => {
-    try {
-      setIsSaving(true);
-      // Quiet hours are already saved via individual toggles
-      Alert.alert(t('notifications.savedTitle'), t('notifications.savedMessage'));
-    } catch (err: any) {
-      Alert.alert(t('common.error'), err?.message ?? t('notifications.couldNotSavePreferences'));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">{t('notifications.loadingPreferences')}</Text>
-      </SafeAreaView>
-    );
-  }
-
+function TimeButton({ label, value, onPress }: Readonly<{ label: string; value: string; onPress: () => void }>): ReactElement {
   return (
-    <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-5 py-4 border-b border-gray200">
-        <Pressable onPress={onBack} className="mr-4 active:opacity-70">
-          <Feather name="arrow-left" size={24} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-semibold text-black">{t('notifications.title')}</Text>
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 80 }}
-      >
-        {/* Push Notifications */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <View className="flex-row items-center gap-x-2 mb-2">
-            <Feather name="bell" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">{t('notifications.pushTitle')}</Text>
-          </View>
-
-          <ToggleRow
-            title={t('notifications.pushEnableTitle')}
-            subtitle={t('notifications.pushEnableSubtitle')}
-            value={preferences?.pushEnabled ?? true}
-            onValueChange={(v) => handleToggle('pushEnabled', v)}
-          />
-
-          <View className="border-t border-gray200 mt-2 pt-2">
-            <ToggleRow
-              icon="calendar"
-              title={t('notifications.eventRemindersTitle')}
-              subtitle={t('notifications.eventRemindersSubtitle')}
-              value={preferences?.pushEventReminders ?? true}
-              onValueChange={(v) => handleToggle('pushEventReminders', v)}
-              disabled={!preferences?.pushEnabled}
-              indented
-            />
-            <ToggleRow
-              icon="zap"
-              title={t('notifications.eventUpdatesTitle')}
-              subtitle={t('notifications.eventUpdatesSubtitle')}
-              value={preferences?.pushEventUpdates ?? true}
-              onValueChange={(v) => handleToggle('pushEventUpdates', v)}
-              disabled={!preferences?.pushEnabled}
-              indented
-            />
-            <ToggleRow
-              icon="users"
-              title={t('notifications.newFollowersTitle')}
-              subtitle={t('notifications.newFollowersSubtitle')}
-              value={preferences?.pushNewFollowers ?? true}
-              onValueChange={(v) => handleToggle('pushNewFollowers', v)}
-              disabled={!preferences?.pushEnabled}
-              indented
-            />
-            <ToggleRow
-              icon="heart"
-              title={t('notifications.eventRecommendationsTitle')}
-              subtitle={t('notifications.eventRecommendationsSubtitle')}
-              value={preferences?.pushEventRecommendations ?? true}
-              onValueChange={(v) => handleToggle('pushEventRecommendations', v)}
-              disabled={!preferences?.pushEnabled}
-              indented
-            />
-          </View>
-        </View>
-
-        {/* Email Notifications */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <View className="flex-row items-center gap-x-2 mb-2">
-            <Feather name="mail" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">{t('notifications.emailTitle')}</Text>
-          </View>
-
-          <ToggleRow
-            title={t('notifications.emailEnableTitle')}
-            subtitle={t('notifications.emailEnableSubtitle')}
-            value={preferences?.emailEnabled ?? true}
-            onValueChange={(v) => handleToggle('emailEnabled', v)}
-          />
-
-          <View className="border-t border-gray200 mt-2 pt-2">
-            <ToggleRow
-              title={t('notifications.weeklyDigestTitle')}
-              subtitle={t('notifications.weeklyDigestSubtitle')}
-              value={preferences?.emailWeeklyDigest ?? true}
-              onValueChange={(v) => handleToggle('emailWeeklyDigest', v)}
-              disabled={!preferences?.emailEnabled}
-              indented
-            />
-            <ToggleRow
-              title={t('notifications.eventInvitesTitle')}
-              subtitle={t('notifications.eventInvitesSubtitle')}
-              value={preferences?.emailEventInvites ?? true}
-              onValueChange={(v) => handleToggle('emailEventInvites', v)}
-              disabled={!preferences?.emailEnabled}
-              indented
-            />
-            <ToggleRow
-              title={t('notifications.promotionsTitle')}
-              subtitle={t('notifications.promotionsSubtitle')}
-              value={preferences?.emailPromotions ?? false}
-              onValueChange={(v) => handleToggle('emailPromotions', v)}
-              disabled={!preferences?.emailEnabled}
-              indented
-            />
-            <ToggleRow
-              title={t('notifications.newsletterTitle')}
-              subtitle={t('notifications.newsletterSubtitle')}
-              value={preferences?.emailNewsletter ?? false}
-              onValueChange={(v) => handleToggle('emailNewsletter', v)}
-              disabled={!preferences?.emailEnabled}
-              indented
-            />
-          </View>
-        </View>
-
-        {/* SMS Notifications */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <View className="flex-row items-center gap-x-2 mb-2">
-            <Feather name="smartphone" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">{t('notifications.smsTitle')}</Text>
-          </View>
-
-          <ToggleRow
-            title={t('notifications.smsEnableTitle')}
-            subtitle={t('notifications.smsEnableSubtitle')}
-            value={preferences?.smsEnabled ?? false}
-            onValueChange={(v) => handleToggle('smsEnabled', v)}
-          />
-
-          <View className="border-t border-gray200 mt-2 pt-2">
-            <ToggleRow
-              title={t('notifications.urgentUpdatesTitle')}
-              subtitle={t('notifications.urgentUpdatesSubtitle')}
-              value={preferences?.smsUrgentUpdates ?? false}
-              onValueChange={(v) => handleToggle('smsUrgentUpdates', v)}
-              disabled={!preferences?.smsEnabled}
-              indented
-            />
-            <ToggleRow
-              title={t('notifications.eventCancellationsTitle')}
-              subtitle={t('notifications.eventCancellationsSubtitle')}
-              value={preferences?.smsEventCancellations ?? true}
-              onValueChange={(v) => handleToggle('smsEventCancellations', v)}
-              disabled={!preferences?.smsEnabled}
-              indented
-            />
-          </View>
-        </View>
-
-        {/* Marketing & Personalization */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-4">{t('notifications.marketingTitle')}</Text>
-
-          <ToggleRow
-            title={t('notifications.personalizedAdsTitle')}
-            subtitle={t('notifications.personalizedAdsSubtitle')}
-            value={preferences?.personalizedAds ?? true}
-            onValueChange={(v) => handleToggle('personalizedAds', v)}
-          />
-          <View className="border-t border-gray200" />
-          <ToggleRow
-            title={t('notifications.locationSuggestionsTitle')}
-            subtitle={t('notifications.locationSuggestionsSubtitle')}
-            value={preferences?.locationBasedSuggestions ?? true}
-            onValueChange={(v) => handleToggle('locationBasedSuggestions', v)}
-          />
-        </View>
-
-        {/* Quiet Hours */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-2">{t('notifications.quietHoursTitle')}</Text>
-          <Text className="text-sm text-gray500 mb-4">
-            {t('notifications.quietHoursSubtitle')}
-          </Text>
-
-          <ToggleRow
-            title={t('notifications.enableQuietHours')}
-            value={preferences?.quietHoursEnabled ?? false}
-            onValueChange={(v) => handleToggle('quietHoursEnabled', v)}
-          />
-
-          {preferences?.quietHoursEnabled && (
-            <View className="flex-row gap-x-4 mt-4">
-              <View className="flex-1">
-                <Text className="text-sm text-gray700 mb-2">{t('notifications.startTime')}</Text>
-                <View className="border border-gray300 rounded-xl px-4 py-3">
-                  <TextInput
-                    placeholder="22:00"
-                    value={preferences?.quietHoursStart ?? ''}
-                    onChangeText={(text) => updatePreferences({ quietHoursStart: text })}
-                    className="text-gray900"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm text-gray700 mb-2">{t('notifications.endTime')}</Text>
-                <View className="border border-gray300 rounded-xl px-4 py-3">
-                  <TextInput
-                    placeholder="08:00"
-                    value={preferences?.quietHoursEnd ?? ''}
-                    onChangeText={(text) => updatePreferences({ quietHoursEnd: text })}
-                    className="text-gray900"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Save Button */}
-        <View className="mx-5 mt-6">
-          <Pressable
-            className={cx(
-              'bg-gray900 rounded-2xl py-4 items-center active:opacity-90',
-              isSaving && 'opacity-70'
-            )}
-            onPress={handleSaveQuietHours}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text className="text-white font-semibold">{t('notifications.savePreferences')}</Text>
-            )}
-          </Pressable>
-        </View>
-      </ScrollView> 
-    </SafeAreaView>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} ${value}`}
+      className="flex-1 rounded-2xl px-4 py-2.5"
+      style={{ backgroundColor: gs.surface2 }}
+    >
+      <Text className="text-[12px] font-bold text-muted">{label}</Text>
+      <Text className="text-[18px] font-extrabold text-ink">{value}</Text>
+    </Pressable>
   );
 }

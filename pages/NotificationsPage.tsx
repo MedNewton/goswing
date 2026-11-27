@@ -1,9 +1,14 @@
-// pages/NotificationsPage.tsx
+// pages/NotificationsPage.tsx — notification inbox (bell). There is no inbox
+// API yet, so it shows the empty state and a shortcut to the preferences.
 import React, { type ReactElement } from 'react';
-import { View, Text, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { BellRing, SlidersHorizontal } from 'lucide-react-native';
+
+import { gs } from '@/theme/colors';
+import { EmptyState, RoundButton } from '@/components/gs';
+import { useAppNav } from '@/navigation/AppNav';
+import { PageHeader } from '@/screens/profile/components/ui';
 
 export type NotificationsPageProps = Readonly<{
   onBack?: () => void;
@@ -11,22 +16,31 @@ export type NotificationsPageProps = Readonly<{
 
 export default function NotificationsPage({ onBack }: NotificationsPageProps): ReactElement {
   const { t } = useTranslation();
+  const nav = useAppNav();
+  const openPrefs = (): void => nav.push({ name: 'profileScreen', screen: 'notificationPrefs' });
   return (
-    <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
-      <View className="px-5 py-3 flex-row items-center border-b border-gray200">
-        <Pressable accessibilityRole="button" onPress={onBack} hitSlop={10} className="h-10 w-10 items-center justify-center">
-          <Feather name="arrow-left" size={20} color="#111827" />
-        </Pressable>
-        <Text className="ml-2 text-lg font-semibold text-black">{t('notificationsPage.title')}</Text>
+    <View className="flex-1 bg-surface">
+      <PageHeader
+        title={t('notificationsPage.title')}
+        onBack={onBack}
+        right={
+          <RoundButton
+            icon={<SlidersHorizontal size={20} color={gs.ink} />}
+            onPress={openPrefs}
+            accessibilityLabel={t('profile.home.notificationsRow')}
+            size={44}
+          />
+        }
+      />
+      <View className="flex-1 justify-center pb-24">
+        <EmptyState
+          icon={<BellRing size={28} color={gs.violet} />}
+          title={t('notificationsPage.emptyTitle')}
+          message={t('notificationsPage.emptySubtitle')}
+          actionLabel={t('profile.notifPage.manage')}
+          onAction={openPrefs}
+        />
       </View>
-
-      <View className="flex-1 items-center justify-center px-6">
-        <Feather name="bell" size={48} color="#D1D5DB" />
-        <Text className="mt-4 text-lg font-semibold text-gray700">{t('notificationsPage.emptyTitle')}</Text>
-        <Text className="mt-2 text-sm text-gray500 text-center">
-          {t('notificationsPage.emptySubtitle')}
-        </Text>
-      </View>
-    </SafeAreaView>
+    </View>
   );
 }

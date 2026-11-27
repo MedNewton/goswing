@@ -1,368 +1,699 @@
-// pages/AccountSettingsPage.tsx
-import React, { useState, type ReactElement } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  ScrollView,
-  Switch,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { useUser } from '@clerk/clerk-expo';
+// pages/AccountSettingsPage.tsx — Account settings: password, two-step
+// verification, login alerts, email/phone verification, signed-in devices,
+// sign-in history, data export (Phase 4 route 171) and account deletion.
+//
+// Password, 2-step verification, verification and devices are Clerk features;
+// the rest uses the GoSwing API. Social privacy settings (private account,
+// who can message you, blocked accounts) are deferred with Social.
+import React, { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { ActivityIndicator, Linking, Platform, Pressable, Text, View } from 'react-native';
+import { useAuth as useClerkAuth, useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import {
+  BellRing,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Eye,
+  EyeOff,
+  History,
+  KeyRound,
+  Laptop,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Smartphone,
+  Tablet,
+  Trash2,
+} from 'lucide-react-native';
 
-import { useProfile, useSettings, useLoginHistory } from '@/hooks/profile';
+import QRCode from 'react-native-qrcode-svg';
+import { gs } from '@/theme/colors';
+import { GsButton, GsSheet, StatusChip } from '@/components/gs';
+import { useAuth } from '@/providers/AuthProvider';
+import { useLoginHistory, useProfile, useSettings } from '@/hooks/profile';
+import { requestDataExport } from '@/lib/api/profile';
+import {
+  Card,
+  ConfirmSheet,
+  Divider,
+  Field,
+  GsSwitch,
+  IconTile,
+  Input,
+  PageScaffold,
+  Row,
+  SectionTitle,
+  SmallButton,
+  ToggleRow,
+} from '@/screens/profile/components/ui';
 
-const cx = (...c: ReadonlyArray<string | null | undefined | false>) =>
-  c.filter(Boolean).join(' ');
+type AccountSettingsPageProps = Readonly<{ onBack: () => void }>;
 
-type AccountSettingsPageProps = Readonly<{
-  onBack: () => void;
+/** Clerk errors carry a list of { message, longMessage }. */
+function clerkMessage(e: unknown, fallback: string): string {
+  const errs = (e as { errors?: ReadonlyArray<{ longMessage?: string; message?: string }> })?.errors;
+  if (errs && errs.length) return errs[0].longMessage ?? errs[0].message ?? fallback;
+  return e instanceof Error ? e.message : fallback;
+}
+
+/** 0–4: length ≥ 8, uppercase, digit, symbol. */
+export function passwordScore(p: string): number {
+  if (!p) return 0;
+  return [p.length >= 8, /[A-Z]/.test(p), /\d/.test(p), /[^A-Za-z0-9]/.test(p)].filter(Boolean).length;
+}
+
+export function timeAgo(d: Date, t: TFunction, locale: string): string {
+  const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (s < 60) return t('profile.time.justNow');
+  if (s < 3600) return t('profile.time.minutes', { count: Math.floor(s / 60) });
+  if (s < 86400) return t('profile.time.hours', { count: Math.floor(s / 3600) });
+  if (s < 86400 * 7) return t('profile.time.days', { count: Math.floor(s / 86400) });
+  if (s < 86400 * 35) return t('profile.time.weeks', { count: Math.floor(s / (86400 * 7)) });
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+type Device = Readonly<{
+  id: string;
+  title: string;
+  where: string;
+  lastActive: Date | null;
+  kind: 'phone' | 'tablet' | 'computer';
+  revoke: () => Promise<unknown>;
 }>;
 
 export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps): ReactElement {
   const { t, i18n } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const { user: clerkUser } = useUser();
+  const locale = i18n.language;
+  const { user } = useUser();
+  const { sessionId } = useClerkAuth();
+  const { signOutAsync } = useAuth();
+  const { deleteAccount } = useProfile();
+  const { settings, updateSettings } = useSettings();
+  const { history, isLoading: historyLoading } = useLoginHistory(10);
 
-  const { profile, updateProfile, deactivateAccount, deleteAccount, isLoading: profileLoading } = useProfile();
-  const { settings, updateSettings, isLoading: settingsLoading } = useSettings();
-  const { history, isLoading: historyLoading } = useLoginHistory(5);
+  // ── Password ──
+  const hasPassword = !!user?.passwordEnabled;
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNext, setShowNext] = useState(false);
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const score = passwordScore(next);
+  const canUpdatePw = score === 4 && (!hasPassword || current.length > 0) && !pwBusy;
 
-  const [showLoginHistory, setShowLoginHistory] = useState(false);
-  const [isDeactivating, setIsDeactivating] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const isLoading = profileLoading || settingsLoading;
-
-  // Clerk handles email/phone verification status
-  const emailVerified = clerkUser?.primaryEmailAddress?.verification?.status === 'verified';
-  const phoneVerified = clerkUser?.primaryPhoneNumber?.verification?.status === 'verified';
-
-  const handleToggleVisibility = async (isPublic: boolean): Promise<void> => {
+  const onUpdatePassword = async (): Promise<void> => {
+    if (!user || !canUpdatePw) return;
     try {
-      await updateProfile({ profileVisibility: isPublic ? 'public' : 'private' });
-    } catch (err: any) {
-      Alert.alert(t('common.error'), err?.message ?? t('account.couldNotUpdateVisibility'));
+      setPwBusy(true);
+      setPwMsg(null);
+      await user.updatePassword({ newPassword: next, ...(hasPassword ? { currentPassword: current } : {}) });
+      setCurrent('');
+      setNext('');
+      setPwMsg({ ok: true, text: t('profile.acct.passwordUpdated') });
+    } catch (e: unknown) {
+      setPwMsg({ ok: false, text: clerkMessage(e, t('profile.acct.passwordFailed')) });
+    } finally {
+      setPwBusy(false);
     }
   };
 
-  const handleToggleLoginNotifications = async (value: boolean): Promise<void> => {
+  // ── Two-step verification (TOTP) ──
+  const [totpOn, setTotpOn] = useState<boolean>(!!user?.totpEnabled);
+  useEffect(() => setTotpOn(!!user?.totpEnabled), [user?.totpEnabled]);
+  const [totpSheet, setTotpSheet] = useState<{ secret?: string; uri?: string } | null>(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [totpBusy, setTotpBusy] = useState(false);
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const [disableTotpOpen, setDisableTotpOpen] = useState(false);
+
+  const startTotp = async (): Promise<void> => {
+    if (!user) return;
     try {
-      await updateSettings({ loginNotificationsEnabled: value });
-    } catch (err: any) {
-      Alert.alert(t('common.error'), err?.message ?? t('account.couldNotUpdateSetting'));
+      setTotpBusy(true);
+      setTotpError(null);
+      const totp = await user.createTOTP();
+      setTotpCode('');
+      setTotpSheet({ secret: totp.secret, uri: totp.uri });
+    } catch (e: unknown) {
+      setTotpSheet({});
+      setTotpError(clerkMessage(e, t('profile.acct.twoStepUnavailable')));
+    } finally {
+      setTotpBusy(false);
     }
   };
 
-  const handleDeactivateAccount = (): void => {
-    Alert.alert(
-      t('account.deactivateTitle'),
-      t('account.deactivateMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('account.deactivateAction'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsDeactivating(true);
-              await deactivateAccount();
-              Alert.alert(t('account.deactivatedTitle'), t('account.deactivatedMessage'));
-            } catch (err: any) {
-              Alert.alert(t('common.error'), err?.message ?? t('account.couldNotDeactivate'));
-            } finally {
-              setIsDeactivating(false);
-            }
-          },
-        },
-      ]
-    );
+  const verifyTotp = async (): Promise<void> => {
+    if (!user || totpCode.length !== 6) return;
+    try {
+      setTotpBusy(true);
+      setTotpError(null);
+      await user.verifyTOTP({ code: totpCode });
+      setTotpOn(true);
+      setTotpSheet(null);
+      void user.reload?.();
+    } catch (e: unknown) {
+      setTotpError(clerkMessage(e, t('profile.acct.codeInvalid')));
+    } finally {
+      setTotpBusy(false);
+    }
   };
 
-  const handleDeleteAccount = (): void => {
-    Alert.alert(
-      t('account.deleteTitle'),
-      t('account.deleteMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('account.deleteAction'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsDeleting(true);
-              await deleteAccount();
-              Alert.alert(t('account.deletedTitle'), t('account.deletedMessage'));
-            } catch (err: any) {
-              Alert.alert(t('common.error'), err?.message ?? t('account.couldNotDelete'));
-            } finally {
-              setIsDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+  const disableTotp = async (): Promise<void> => {
+    if (!user) return;
+    try {
+      setTotpBusy(true);
+      await user.disableTOTP();
+      setTotpOn(false);
+      setDisableTotpOpen(false);
+      void user.reload?.();
+    } catch (e: unknown) {
+      setTotpError(clerkMessage(e, t('profile.tryAgain')));
+    } finally {
+      setTotpBusy(false);
+    }
   };
 
-  if (isLoading) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">{t('account.loadingSettings')}</Text>
-      </SafeAreaView>
-    );
-  }
+  // ── Phone verification ──
+  const email = user?.primaryEmailAddress?.emailAddress ?? null;
+  const emailVerified = user?.primaryEmailAddress?.verification?.status === 'verified';
+  const phone = user?.primaryPhoneNumber?.phoneNumber ?? null;
+  const phoneVerified = user?.primaryPhoneNumber?.verification?.status === 'verified';
+  const [phoneSheet, setPhoneSheet] = useState(false);
 
-  const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+  // ── Devices (Clerk sessions) ──
+  const [devices, setDevices] = useState<ReadonlyArray<Device> | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const loadDevices = useCallback(async () => {
+    if (!user?.getSessions) return;
+    try {
+      const sessions = await user.getSessions();
+      setDevices(
+        sessions
+          .filter((s) => s.status === 'active')
+          .map((s) => {
+            const a = s.latestActivity ?? ({} as typeof s.latestActivity);
+            const dt = (a?.deviceType ?? '').toLowerCase();
+            const kind: Device['kind'] = /ipad|tablet/.test(dt) ? 'tablet' : a?.isMobile || /iphone|android|mobile/.test(dt) ? 'phone' : 'computer';
+            const title = [a?.deviceType, a?.browserName].filter(Boolean).join(' · ') || t('profile.acct.unknownDevice');
+            const where = [a?.city, a?.country].filter(Boolean).join(', ');
+            return { id: s.id, title, where, lastActive: s.lastActiveAt ? new Date(s.lastActiveAt) : null, kind, revoke: () => s.revoke() };
+          })
+          .sort((a, b) => (a.id === sessionId ? -1 : b.id === sessionId ? 1 : (b.lastActive?.getTime() ?? 0) - (a.lastActive?.getTime() ?? 0))),
+      );
+    } catch {
+      setDevices([]);
+    }
+  }, [user, sessionId, t]);
+  useEffect(() => {
+    void loadDevices();
+  }, [loadDevices]);
+
+  const revoke = async (d: Device): Promise<void> => {
+    try {
+      setRevoking(d.id);
+      await d.revoke();
+      setDevices((xs) => (xs ?? []).filter((x) => x.id !== d.id));
+    } catch {
+      // keep the row; the next load shows the real state
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // ── Data export (route 171) ──
+  const [exportState, setExportState] = useState<'idle' | 'busy' | 'sent' | 'soon' | 'error'>('idle');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const onExport = async (): Promise<void> => {
+    try {
+      setExportState('busy');
+      const res = await requestDataExport();
+      setExportState(res ? 'sent' : 'soon');
+    } catch (e: unknown) {
+      setExportError(e instanceof Error ? e.message : t('profile.tryAgain'));
+      setExportState('error');
+    }
+  };
+
+  // ── Delete account ──
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteText, setDeleteText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [scheduledFor, setScheduledFor] = useState<string | null>(null);
+
+  const onDelete = async (): Promise<void> => {
+    try {
+      setDeleting(true);
+      setDeleteError(null);
+      const res = await deleteAccount();
+      if (res.accountStatus === 'pendingDeletion') {
+        const when = res.scheduledDeletionAt ? new Date(res.scheduledDeletionAt) : new Date(Date.now() + 30 * 86400_000);
+        setScheduledFor(when.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }));
+      } else {
+        setDeleteOpen(false);
+        await signOutAsync();
+      }
+    } catch (e: unknown) {
+      setDeleteError(e instanceof Error ? e.message : t('account.couldNotDelete'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const strength = useMemo(() => {
+    const labels = ['', t('profile.acct.strength.weak'), t('profile.acct.strength.fair'), t('profile.acct.strength.good'), t('profile.acct.strength.strong')];
+    const colors = [gs.lineStrong, gs.danger, gs.orange, '#C9A100', gs.green];
+    return { label: labels[score], color: colors[score] };
+  }, [score, t]);
+
+  const eye = (shown: boolean, toggle: () => void): ReactElement => (
+    <Pressable onPress={toggle} accessibilityRole="button" accessibilityLabel={shown ? t('profile.acct.hidePassword') : t('profile.acct.showPassword')} hitSlop={10}>
+      {shown ? <EyeOff size={20} color={gs.subtle} /> : <Eye size={20} color={gs.subtle} />}
+    </Pressable>
+  );
 
   return (
-    <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-5 py-4 border-b border-gray200">
-        <Pressable onPress={onBack} className="mr-4 active:opacity-70">
-          <Feather name="arrow-left" size={24} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-semibold text-black">{t('account.title')}</Text>
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 40 }}
-      >
-        {/* Password & Security */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <View className="flex-row items-center gap-x-2 mb-4">
-            <Feather name="shield" size={18} color="#111827" />
-            <Text className="text-base font-semibold text-black">{t('account.passwordSecurity')}</Text>
-          </View>
-
-          <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">{t('account.currentPassword')}</Text>
-            <View className="flex-row items-center border border-gray300 rounded-xl px-4 py-3">
-              <TextInput
-                placeholder={t('account.currentPasswordPlaceholder')}
-                secureTextEntry
-                className="flex-1 text-gray900"
-                placeholderTextColor="#9CA3AF"
-              />
-              <Feather name="eye" size={18} color="#9CA3AF" />
-            </View>
-          </View>
-
-          <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">{t('account.newPassword')}</Text>
-            <View className="flex-row items-center border border-gray300 rounded-xl px-4 py-3">
-              <TextInput
-                placeholder={t('account.newPasswordPlaceholder')}
-                secureTextEntry
-                className="flex-1 text-gray900"
-                placeholderTextColor="#9CA3AF"
-              />
-              <Feather name="eye" size={18} color="#9CA3AF" />
-            </View>
-          </View>
-
-          <Pressable className="bg-gray900 rounded-xl py-3 items-center active:opacity-90">
-            <Text className="text-white font-medium">{t('account.updatePassword')}</Text>
-          </Pressable>
-
-          <View className="flex-row items-center justify-between mt-5 pt-4 border-t border-gray200">
-            <View>
-              <Text className="text-gray900 font-medium">{t('account.twoFactor')}</Text>
-              <Text className="text-xs text-gray500 mt-1">{t('account.twoFactorSubtitle')}</Text>
-            </View>
-            <Switch
-              value={false}
-              onValueChange={() =>
-                Alert.alert(t('account.twoFactorAlertTitle'), t('account.twoFactorAlertMessage'))
-              }
-              thumbColor="#808080"
-              trackColor={{ false: '#E5E7EB', true: '#59B259' }}
+    <PageScaffold title={t('profile.acct.title')} subtitle={t('profile.acct.subtitle')} onBack={onBack}>
+      {/* Password & security */}
+      <SectionTitle title={t('profile.acct.passwordSecurity')} className="mt-2" />
+      <Card className="p-4">
+        {hasPassword ? (
+          <Field label={t('profile.acct.currentPassword')}>
+            <Input
+              value={current}
+              onChangeText={setCurrent}
+              secureTextEntry={!showCurrent}
+              autoCapitalize="none"
+              textContentType="password"
+              right={eye(showCurrent, () => setShowCurrent((v) => !v))}
+              accessibilityLabel={t('profile.acct.currentPassword')}
             />
-          </View>
-        </View>
-
-        {/* Account Verification */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-4">{t('account.verification')}</Text>
-
-          <View className="flex-row items-center justify-between py-3 border-b border-gray200">
-            <View className="flex-row items-center gap-x-3">
-              <Feather name="mail" size={18} color="#111827" />
-              <View>
-                <Text className="text-gray900 font-medium">{t('account.emailAddress')}</Text>
-                <Text className="text-xs text-gray500 mt-0.5">
-                  {clerkUser?.primaryEmailAddress?.emailAddress ?? t('account.notSet')}
-                </Text>
-              </View>
+          </Field>
+        ) : null}
+        <Field label={hasPassword ? t('profile.acct.newPassword') : t('profile.acct.setPassword')}>
+          <Input
+            value={next}
+            onChangeText={setNext}
+            secureTextEntry={!showNext}
+            autoCapitalize="none"
+            textContentType="newPassword"
+            right={eye(showNext, () => setShowNext((v) => !v))}
+            accessibilityLabel={t('profile.acct.newPassword')}
+          />
+        </Field>
+        {next.length > 0 ? (
+          <View className="-mt-2 mb-3" accessibilityLabel={t('profile.acct.strengthLabel', { strength: strength.label })}>
+            <View className="flex-row gap-x-1.5">
+              {[1, 2, 3, 4].map((i) => (
+                <View key={i} className="flex-1 h-1.5 rounded-full" style={{ backgroundColor: i <= score ? strength.color : gs.line }} />
+              ))}
             </View>
-            <Text className={cx('text-sm font-medium', emailVerified ? 'text-green-600' : 'text-orange-500')}>
-              {emailVerified ? t('account.verified') : t('account.unverified')}
+            <Text className="mt-1 text-[13px] font-bold" style={{ color: strength.color }}>
+              {strength.label}
             </Text>
           </View>
+        ) : null}
+        <Text className="text-[13px] text-subtle mb-3 leading-[18px]">{t('profile.acct.passwordRules')}</Text>
+        <GsButton
+          label={hasPassword ? t('profile.acct.updatePassword') : t('profile.acct.setPasswordAction')}
+          onPress={() => void onUpdatePassword()}
+          disabled={!canUpdatePw}
+          loading={pwBusy}
+          fullWidth
+        />
+        {pwMsg ? (
+          <Text className="mt-2 text-[13px] font-semibold" style={{ color: pwMsg.ok ? gs.green : gs.danger }}>
+            {pwMsg.text}
+          </Text>
+        ) : null}
+      </Card>
 
-          <View className="flex-row items-center justify-between py-3">
-            <View className="flex-row items-center gap-x-3">
-              <Feather name="smartphone" size={18} color="#111827" />
-              <View>
-                <Text className="text-gray900 font-medium">{t('account.phoneNumber')}</Text>
-                <Text className="text-xs text-gray500 mt-0.5">
-                  {clerkUser?.primaryPhoneNumber?.phoneNumber ?? t('account.notSet')}
-                </Text>
-              </View>
-            </View>
-            {phoneVerified ? (
-              <Text className="text-sm font-medium text-green-600">{t('account.verified')}</Text>
+      <Card className="mt-3">
+        <Row
+          icon={ShieldCheck}
+          title={t('profile.acct.twoStep')}
+          subtitle={totpOn ? t('profile.acct.twoStepOn') : t('profile.acct.twoStepOff')}
+          chevron={false}
+          right={
+            totpBusy && !totpSheet ? (
+              <ActivityIndicator color={gs.violet} />
             ) : (
-              <Pressable className="px-3 py-1.5 border border-gray300 rounded-lg active:opacity-70">
-                <Text className="text-sm text-gray900">{t('account.verify')}</Text>
-              </Pressable>
-            )}
+              <GsSwitch
+                value={totpOn}
+                onValueChange={(v) => (v ? void startTotp() : setDisableTotpOpen(true))}
+                accessibilityLabel={t('profile.acct.twoStep')}
+              />
+            )
+          }
+        />
+        <Divider />
+        <ToggleRow
+          icon={BellRing}
+          title={t('profile.acct.loginAlerts')}
+          subtitle={t('profile.acct.loginAlertsSub')}
+          value={settings?.loginNotificationsEnabled ?? false}
+          onChange={(v) => void updateSettings({ loginNotificationsEnabled: v }).catch(() => undefined)}
+          disabled={!settings}
+        />
+      </Card>
+
+      {/* Verification */}
+      <SectionTitle title={t('profile.acct.verification')} />
+      <Card>
+        <Row
+          icon={Mail}
+          title={t('profile.acct.email')}
+          subtitle={email ?? '—'}
+          chevron={false}
+          right={
+            email ? (
+              <StatusChip label={emailVerified ? `✓ ${t('account.verified')}` : t('account.unverified')} tone={emailVerified ? 'green' : 'orange'} />
+            ) : null
+          }
+        />
+        <Divider />
+        <Row
+          icon={Phone}
+          title={t('profile.acct.phone')}
+          subtitle={phone ?? '—'}
+          chevron={false}
+          right={
+            phone && phoneVerified ? (
+              <StatusChip label={`✓ ${t('account.verified')}`} tone="green" />
+            ) : (
+              <GsButton label={phone ? t('account.verify') : t('profile.acct.addVerify')} size="sm" onPress={() => setPhoneSheet(true)} />
+            )
+          }
+        />
+      </Card>
+
+      {/* Devices */}
+      <SectionTitle title={t('profile.acct.devices')} />
+      <Card>
+        {devices === null ? (
+          <View className="py-6 items-center">
+            <ActivityIndicator color={gs.violet} />
           </View>
-        </View>
-
-        {/* Login & Activity */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-4">{t('account.loginActivity')}</Text>
-
-          <View className="flex-row items-center justify-between pb-4 border-b border-gray200">
-            <View>
-              <Text className="text-gray900 font-medium">{t('account.loginNotifications')}</Text>
-              <Text className="text-xs text-gray500 mt-1">{t('account.loginNotificationsSubtitle')}</Text>
-            </View>
-            <Switch
-              value={settings?.loginNotificationsEnabled ?? false}
-              onValueChange={handleToggleLoginNotifications}
-              thumbColor={settings?.loginNotificationsEnabled ? '#FFFFFF' : '#808080'}
-              trackColor={{ false: '#E5E7EB', true: '#59B259' }}
-            />
-          </View>
-
-          <Pressable
-            className="mt-4 border border-gray300 rounded-xl py-3 items-center active:opacity-70"
-            onPress={() => setShowLoginHistory(!showLoginHistory)}
-          >
-            <Text className="text-gray900 font-medium">
-              {showLoginHistory ? t('account.hideLoginHistory') : t('account.viewLoginHistory')}
-            </Text>
-          </Pressable>
-
-          {showLoginHistory && (
-            <View className="mt-4 pt-4 border-t border-gray200">
-              {historyLoading ? (
-                <ActivityIndicator size="small" color="#6B7280" />
-              ) : history.length === 0 ? (
-                <Text className="text-sm text-gray500">{t('account.noLoginHistory')}</Text>
-              ) : (
-                history.map((entry) => (
-                  <View key={entry.id} className="py-2 border-b border-gray100 last:border-b-0">
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-x-2">
-                        <Feather
-                          name={entry.deviceType === 'mobile' ? 'smartphone' : 'monitor'}
-                          size={14}
-                          color="#6B7280"
-                        />
-                        <Text className="text-sm text-gray700">
-                          {entry.location ?? t('account.unknownLocation')}
-                        </Text>
-                      </View>
-                      <Text className={cx('text-xs', entry.wasSuccessful ? 'text-green-600' : 'text-red-500')}>
-                        {entry.wasSuccessful ? t('account.loginSuccess') : t('account.loginFailed')}
-                      </Text>
-                    </View>
-                    <Text className="text-xs text-gray500 mt-1">
-                      {new Date(entry.loggedInAt).toLocaleString(locale)}
+        ) : devices.length === 0 ? (
+          <Text className="px-4 py-5 text-[14px] text-muted">{t('profile.acct.noDevices')}</Text>
+        ) : (
+          devices.map((d, i) => {
+            const isThis = d.id === sessionId;
+            return (
+              <View key={d.id}>
+                {i > 0 ? <Divider /> : null}
+                <View className="flex-row items-center px-4 py-3 min-h-[64px]">
+                  <IconTile icon={d.kind === 'phone' ? Smartphone : d.kind === 'tablet' ? Tablet : Laptop} />
+                  <View className="flex-1 ml-3 pr-2">
+                    <Text className="text-[16px] font-bold text-ink" numberOfLines={1}>
+                      {d.title}
+                    </Text>
+                    <Text className="text-[13px]" style={{ color: isThis ? gs.green : gs.subtle }} numberOfLines={1}>
+                      {[d.where || null, isThis ? t('profile.acct.thisDevice') : d.lastActive ? timeAgo(d.lastActive, t, locale) : null]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </Text>
                   </View>
-                ))
-              )}
-            </View>
+                  {isThis ? null : (
+                    <SmallButton label={t('profile.acct.logOut')} tone="danger" loading={revoking === d.id} onPress={() => void revoke(d)} />
+                  )}
+                </View>
+              </View>
+            );
+          })
+        )}
+        <Divider />
+        <Row
+          icon={History}
+          title={t('profile.acct.history')}
+          subtitle={t('profile.acct.historySub')}
+          onPress={() => setHistoryOpen((v) => !v)}
+          chevron={false}
+          right={historyOpen ? <ChevronUp size={18} color={gs.subtle} /> : <ChevronDown size={18} color={gs.subtle} />}
+        />
+        {historyOpen ? (
+          <View className="px-4 pb-3">
+            {historyLoading ? (
+              <ActivityIndicator color={gs.violet} />
+            ) : history.length === 0 ? (
+              <Text className="text-[14px] text-muted py-2">{t('account.noLoginHistory')}</Text>
+            ) : (
+              history.map((h) => (
+                <View key={h.id} className="flex-row items-center py-2 border-t" style={{ borderColor: gs.line }}>
+                  <View className="flex-1 pr-2">
+                    <Text className="text-[14px] font-bold text-ink" numberOfLines={1}>
+                      {h.loggedInAt ? new Date(h.loggedInAt).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </Text>
+                    <Text className="text-[13px] text-subtle" numberOfLines={1}>
+                      {[h.location ?? t('account.unknownLocation'), h.deviceType !== 'unknown' ? t(`profile.acct.deviceType.${h.deviceType}`) : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                  <StatusChip
+                    label={h.wasSuccessful ? t('account.loginSuccess') : t('account.loginFailed')}
+                    tone={h.wasSuccessful ? 'green' : 'red'}
+                    size="xs"
+                  />
+                </View>
+              ))
+            )}
+          </View>
+        ) : null}
+      </Card>
+
+      {/* Your data */}
+      <SectionTitle title={t('profile.acct.yourData')} />
+      <Card>
+        <Row
+          icon={Download}
+          title={t('profile.acct.download')}
+          subtitle={
+            exportState === 'sent'
+              ? t('profile.acct.downloadSent')
+              : exportState === 'soon'
+                ? t('profile.acct.downloadSoon')
+                : exportState === 'error'
+                  ? exportError
+                  : t('profile.acct.downloadSub')
+          }
+          onPress={exportState === 'busy' || exportState === 'sent' ? undefined : () => void onExport()}
+          right={exportState === 'busy' ? <ActivityIndicator color={gs.violet} /> : null}
+        />
+        <Divider />
+        <Row
+          icon={Trash2}
+          tone="danger"
+          title={t('profile.acct.delete')}
+          subtitle={t('profile.acct.deleteSub')}
+          onPress={() => {
+            setDeleteText('');
+            setDeleteError(null);
+            setScheduledFor(null);
+            setDeleteOpen(true);
+          }}
+        />
+      </Card>
+
+      {/* Two-step setup sheet */}
+      <GsSheet visible={!!totpSheet} onClose={() => setTotpSheet(null)} title={t('profile.acct.twoStepSetup')}>
+        <View className="px-5">
+          {totpSheet?.secret ? (
+            <>
+              <Text className="text-[15px] text-subtle leading-[21px]">{t('profile.acct.twoStepStep1')}</Text>
+              <View className="mt-3 rounded-2xl p-4 items-center" style={{ backgroundColor: gs.surface2 }}>
+                {totpSheet.uri ? (
+                  <View className="p-3 mb-3 rounded-xl bg-white">
+                    <QRCode value={totpSheet.uri} size={148} color={gs.ink} backgroundColor={gs.white} />
+                  </View>
+                ) : null}
+                <Text selectable className="text-[18px] font-extrabold text-ink tracking-[2px] text-center">
+                  {totpSheet.secret.replace(/(.{4})/g, '$1 ').trim()}
+                </Text>
+              </View>
+              {totpSheet.uri && Platform.OS !== 'web' ? (
+                <GsButton
+                  label={t('profile.acct.openAuthenticator')}
+                  variant="soft"
+                  icon={<KeyRound size={16} color={gs.violetDark} />}
+                  onPress={() => void Linking.openURL(String(totpSheet.uri)).catch(() => undefined)}
+                  className="mt-3"
+                  fullWidth
+                />
+              ) : null}
+              <Text className="mt-4 text-[15px] text-subtle">{t('profile.acct.twoStepStep2')}</Text>
+              <View className="mt-2">
+                <Input
+                  value={totpCode}
+                  onChangeText={(v) => setTotpCode(v.replace(/\D/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  placeholder="123456"
+                  maxLength={6}
+                  accessibilityLabel={t('profile.acct.code')}
+                />
+              </View>
+              {totpError ? (
+                <Text className="mt-2 text-[13px] font-semibold" style={{ color: gs.danger }}>
+                  {totpError}
+                </Text>
+              ) : null}
+              <GsButton
+                label={t('profile.acct.verifyEnable')}
+                onPress={() => void verifyTotp()}
+                disabled={totpCode.length !== 6}
+                loading={totpBusy}
+                className="mt-4"
+                fullWidth
+              />
+            </>
+          ) : (
+            <Text className="text-[15px] text-subtle leading-[21px]">{totpError ?? t('profile.acct.twoStepUnavailable')}</Text>
           )}
         </View>
+      </GsSheet>
 
-        {/* Account Visibility */}
-        <View className="mx-5 mt-5 rounded-2xl border border-gray200 bg-white p-5">
-          <Text className="text-base font-semibold text-black mb-2">{t('account.visibility')}</Text>
-          <Text className="text-sm text-gray500 mb-4">{t('account.visibilitySubtitle')}</Text>
+      <ConfirmSheet
+        visible={disableTotpOpen}
+        title={t('profile.acct.disableTwoStepTitle')}
+        message={t('profile.acct.disableTwoStepMessage')}
+        confirmLabel={t('profile.acct.disableTwoStep')}
+        busy={totpBusy}
+        onConfirm={() => void disableTotp()}
+        onClose={() => setDisableTotpOpen(false)}
+      />
 
-          <Pressable
-            className={cx(
-              'flex-row items-center px-4 py-3 rounded-xl border mb-3',
-              profile?.profileVisibility === 'public' ? 'border-green-500 bg-green-50' : 'border-gray300'
-            )}
-            onPress={() => handleToggleVisibility(true)}
-          >
-            <View className="flex-1">
-              <Text className="text-gray900 font-medium">{t('account.visibilityPublic')}</Text>
-              <Text className="text-xs text-gray500 mt-0.5">{t('account.visibilityPublicSubtitle')}</Text>
+      <PhoneVerifySheet visible={phoneSheet} onClose={() => setPhoneSheet(false)} />
+
+      {/* Delete account */}
+      <ConfirmSheet
+        visible={deleteOpen}
+        title={scheduledFor ? t('profile.acct.deleteScheduledTitle') : t('profile.acct.deleteTitle')}
+        message={scheduledFor ? t('profile.acct.deleteScheduled', { date: scheduledFor }) : t('profile.acct.deleteMessage')}
+        confirmLabel={scheduledFor ? t('profile.acct.done') : t('profile.acct.deleteConfirm')}
+        danger={!scheduledFor}
+        hideCancel={!!scheduledFor}
+        busy={deleting}
+        confirmDisabled={!scheduledFor && deleteText.trim().toUpperCase() !== 'DELETE'}
+        onConfirm={() => (scheduledFor ? setDeleteOpen(false) : void onDelete())}
+        onClose={() => setDeleteOpen(false)}
+      >
+        {scheduledFor ? null : (
+          <View className="mt-4">
+            <Field label={t('profile.acct.typeDelete')} hint={deleteError} hintTone="red">
+              <Input value={deleteText} onChangeText={setDeleteText} autoCapitalize="characters" autoCorrect={false} placeholder="DELETE" accessibilityLabel={t('profile.acct.typeDelete')} />
+            </Field>
+          </View>
+        )}
+      </ConfirmSheet>
+    </PageScaffold>
+  );
+}
+
+/** Add (or re-verify) a phone number through Clerk: number → SMS code. */
+function PhoneVerifySheet({ visible, onClose }: Readonly<{ visible: boolean; onClose: () => void }>): ReactElement {
+  const { t } = useTranslation();
+  const { user } = useUser();
+  type PhoneRes = Awaited<ReturnType<NonNullable<typeof user>['createPhoneNumber']>>;
+  const [number, setNumber] = useState('');
+  const [resource, setResource] = useState<PhoneRes | null>(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setNumber(user?.primaryPhoneNumber?.phoneNumber ?? '');
+    setResource(null);
+    setCode('');
+    setError(null);
+  }, [visible, user]);
+
+  const send = async (): Promise<void> => {
+    if (!user) return;
+    try {
+      setBusy(true);
+      setError(null);
+      const existing = user.phoneNumbers?.find((p) => p.phoneNumber.replace(/\s/g, '') === number.replace(/\s/g, ''));
+      const res = existing ?? (await user.createPhoneNumber({ phoneNumber: number.replace(/\s/g, '') }));
+      await res.prepareVerification();
+      setResource(res);
+    } catch (e: unknown) {
+      setError(clerkMessage(e, t('profile.tryAgain')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verify = async (): Promise<void> => {
+    if (!resource || !user) return;
+    try {
+      setBusy(true);
+      setError(null);
+      const res = await resource.attemptVerification({ code });
+      if (res.verification?.status === 'verified' && user.primaryPhoneNumberId !== res.id) {
+        await user.update({ primaryPhoneNumberId: res.id }).catch(() => undefined);
+      }
+      void user.reload?.();
+      onClose();
+    } catch (e: unknown) {
+      setError(clerkMessage(e, t('profile.acct.codeInvalid')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <GsSheet visible={visible} onClose={onClose} title={t('profile.acct.phoneTitle')}>
+      <View className="px-5">
+        {resource ? (
+          <>
+            <Text className="text-[15px] text-subtle">{t('profile.acct.codeSent', { phone: number })}</Text>
+            <View className="mt-3">
+              <Input
+                value={code}
+                onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+                keyboardType="number-pad"
+                textContentType="oneTimeCode"
+                placeholder="123456"
+                accessibilityLabel={t('profile.acct.code')}
+              />
             </View>
-            {profile?.profileVisibility === 'public' && (
-              <Feather name="check-circle" size={20} color="#22C55E" />
-            )}
-          </Pressable>
-
-          <Pressable
-            className={cx(
-              'flex-row items-center px-4 py-3 rounded-xl border',
-              profile?.profileVisibility === 'private' ? 'border-green-500 bg-green-50' : 'border-gray300'
-            )}
-            onPress={() => handleToggleVisibility(false)}
-          >
-            <View className="flex-1">
-              <Text className="text-gray900 font-medium">{t('account.visibilityPrivate')}</Text>
-              <Text className="text-xs text-gray500 mt-0.5">{t('account.visibilityPrivateSubtitle')}</Text>
+          </>
+        ) : (
+          <>
+            <Text className="text-[15px] text-subtle">{t('profile.acct.phoneIntro')}</Text>
+            <View className="mt-3">
+              <Input
+                value={number}
+                onChangeText={setNumber}
+                keyboardType="phone-pad"
+                textContentType="telephoneNumber"
+                placeholder="+33 6 12 34 56 78"
+                accessibilityLabel={t('profile.acct.phone')}
+              />
             </View>
-            {profile?.profileVisibility === 'private' && (
-              <Feather name="check-circle" size={20} color="#22C55E" />
-            )}
-          </Pressable>
-        </View>
-
-        {/* Danger Zone */}
-        <View className="mx-5 mt-5 mb-10 rounded-2xl border border-red-200 bg-red-50 p-5">
-          <Text className="text-base font-semibold text-red-600 mb-2">{t('account.dangerZone')}</Text>
-
-          <Pressable
-            disabled={isDeactivating}
-            onPress={handleDeactivateAccount}
-            className={cx(
-              'border border-gray300 bg-white rounded-xl py-3 items-center mb-3 active:opacity-70',
-              isDeactivating && 'opacity-70'
-            )}
-          >
-            {isDeactivating ? (
-              <ActivityIndicator size="small" color="#6B7280" />
-            ) : (
-              <Text className="text-gray900 font-medium">{t('account.deactivateAction')}</Text>
-            )}
-          </Pressable>
-
-          <Pressable
-            disabled={isDeleting}
-            onPress={handleDeleteAccount}
-            className={cx(
-              'bg-red-500 rounded-xl py-3 items-center active:opacity-90',
-              isDeleting && 'opacity-70'
-            )}
-          >
-            {isDeleting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text className="text-white font-medium">{t('account.deleteTitle')}</Text>
-            )}
-          </Pressable>
-
-          <Text className="text-xs text-red-600 mt-3 text-center">
-            {t('account.warning')}
+          </>
+        )}
+        {error ? (
+          <Text className="mt-2 text-[13px] font-semibold" style={{ color: gs.danger }}>
+            {error}
           </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        ) : null}
+        <GsButton
+          label={resource ? t('profile.acct.verify') : t('profile.acct.sendCode')}
+          onPress={() => void (resource ? verify() : send())}
+          disabled={resource ? code.length < 6 : number.replace(/\D/g, '').length < 8}
+          loading={busy}
+          className="mt-4"
+          fullWidth
+        />
+      </View>
+    </GsSheet>
   );
 }
