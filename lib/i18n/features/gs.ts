@@ -1,0 +1,63 @@
+// Shared strings for the redesign (tab bar, common labels, timing).
+const gs = {
+  en: {
+    'gs.tab.map': 'Map',
+    'gs.tab.discover': 'Discover',
+    'gs.tab.bookings': 'Bookings',
+    'gs.tab.social': 'Social',
+    'gs.tab.profile': 'Profile',
+    'gs.tab.socialSoon': 'Social is coming soon',
+
+    'gs.free': 'Free',
+    'gs.from': 'from {{price}}',
+    'gs.seeAll': 'See all',
+    'gs.back': 'Back',
+    'gs.close': 'Close',
+    'gs.share': 'Share',
+    'gs.save': 'Save',
+    'gs.saved': 'Saved',
+    'gs.retry': 'Try again',
+    'gs.loading': 'Loading…',
+    'gs.live': 'LIVE',
+    'gs.going': '{{count}} going',
+    'gs.comingSoon': 'Coming soon',
+    'gs.errorTitle': 'Something went wrong',
+
+    'gs.when.liveNow': 'Live now',
+    'gs.when.liveUntil': 'Live now · until {{time}}',
+    'gs.when.tonight': 'Tonight · {{time}}',
+    'gs.when.today': 'Today · {{time}}',
+    'gs.when.tomorrow': 'Tomorrow · {{time}}',
+  },
+  fr: {
+    'gs.tab.map': 'Carte',
+    'gs.tab.discover': 'Découvrir',
+    'gs.tab.bookings': 'Réservations',
+    'gs.tab.social': 'Social',
+    'gs.tab.profile': 'Profil',
+    'gs.tab.socialSoon': 'Le Social arrive bientôt',
+
+    'gs.free': 'Gratuit',
+    'gs.from': 'dès {{price}}',
+    'gs.seeAll': 'Tout voir',
+    'gs.back': 'Retour',
+    'gs.close': 'Fermer',
+    'gs.share': 'Partager',
+    'gs.save': 'Enregistrer',
+    'gs.saved': 'Enregistré',
+    'gs.retry': 'Réessayer',
+    'gs.loading': 'Chargement…',
+    'gs.live': 'LIVE',
+    'gs.going': '{{count}} participants',
+    'gs.comingSoon': 'Bientôt disponible',
+    'gs.errorTitle': 'Une erreur est survenue',
+
+    'gs.when.liveNow': 'En ce moment',
+    'gs.when.liveUntil': 'En ce moment · jusqu’à {{time}}',
+    'gs.when.tonight': 'Ce soir · {{time}}',
+    'gs.when.today': 'Aujourd’hui · {{time}}',
+    'gs.when.tomorrow': 'Demain · {{time}}',
+  },
+} as const;
+
+export default gs;
