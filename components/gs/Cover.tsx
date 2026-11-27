@@ -1,5 +1,5 @@
 // components/gs/Cover.tsx — image with a striped tone placeholder behind it.
-import React, { type ReactElement, type ReactNode } from 'react';
+import React, { useId, type ReactElement, type ReactNode } from 'react';
 import { Image, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, Pattern, Rect, Line } from 'react-native-svg';
 import { toneFor } from './styles';
@@ -15,7 +15,8 @@ export type CoverProps = Readonly<{
 
 export default function Cover({ uri, toneKey, style, radius = 0, children }: CoverProps): ReactElement {
   const [a, b] = toneFor(toneKey);
-  const pid = `p${toneKey.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) || 'x'}`;
+  // Unique per instance: two covers with the same toneKey must not share an SVG id.
+  const pid = `gsp${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <View style={[{ overflow: 'hidden', borderRadius: radius, backgroundColor: a }, style]}>
       <Svg width="100%" height="100%" style={{ position: 'absolute' }}>
