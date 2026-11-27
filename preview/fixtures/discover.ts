@@ -170,7 +170,8 @@ export const discoverHandlers: MockHandler[] = [
   {
     method: 'GET',
     path: /^\/v1\/discover\/artists$/,
-    handle: () => ({
+    // Pick "Lyon" in the city sheet to see the "Artists are coming soon" state.
+    handle: (r) => (r.query.get('city') ?? '').toLowerCase() === 'lyon' ? { status: 404, json: { error: { code: 'not_found', message: 'No route' } } } : ({
       items: ARTISTS.map((a, i) => ({ rank: i + 1, artist: a, gigsInPeriod: GIGS[a.id].length + 2, nextGig: GIGS[a.id][0] })),
       nextCursor: null,
       hasMore: false,

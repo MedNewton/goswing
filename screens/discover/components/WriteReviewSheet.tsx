@@ -64,7 +64,7 @@ export default function WriteReviewSheet({
       }
     >
       <View className="px-5">
-        <Text className="-mt-2 text-[14px] text-muted">{t('discover.reviews.publicNote')}</Text>
+        <Text className="text-[14px] text-muted">{t('discover.reviews.publicNote')}</Text>
 
         <Text className="mt-5 text-[16px] font-extrabold text-ink">{t('discover.reviews.whichVisit')}</Text>
         <View className="mt-2.5 gap-y-2">

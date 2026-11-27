@@ -51,6 +51,7 @@ type Section =
   | { key: SectionKey; kind: 'artists'; layout: 'rank' | 'rows'; items: ReadonlyArray<DiscoverArtist> };
 
 const ROWS_PREVIEW = 4;
+const NEARBY_KM = 60;
 const RANK_PREVIEW = 10;
 
 const byStart = (a: Event, b: Event): number => (eventStart(a)?.getTime() ?? 0) - (eventStart(b)?.getTime() ?? 0);
@@ -84,15 +85,27 @@ export default function DiscoverTab(): ReactElement {
   );
 
   // ---- Matching --------------------------------------------------------------
+  // Events around the chosen city (or the user's position). With GPS only,
+  // fall back to every event when none is nearby so the tab is never empty.
+  const nearbyEvents = useMemo(() => {
+    if (!origin) return events;
+    const cityName = (location.choice?.label ?? '').toLowerCase();
+    const near = events.filter((e) => {
+      const d = eventDistanceKm(e, origin);
+      return (d != null && d <= NEARBY_KM) || (!!cityName && (e.city ?? '').toLowerCase() === cityName);
+    });
+    return near.length > 0 || location.choice ? near : events;
+  }, [events, origin, location.choice]);
+
   const compute = useCallback(
     (f: DiscoverFilters) => {
       const ctx = ctxFor(f);
-      const evs = events.filter((e) => eventMatches(e, ctx));
+      const evs = nearbyEvents.filter((e) => eventMatches(e, ctx));
       const places = (data.venues ?? []).filter((v) => venueMatches(v, ctx));
       const artists = (data.artists ?? []).filter((a) => artistMatches(a, ctx));
       return { evs, places, artists };
     },
-    [ctxFor, events, data.venues, data.artists],
+    [ctxFor, nearbyEvents, data.venues, data.artists],
   );
 
   const matched = useMemo(() => compute(filters), [compute, filters]);
