@@ -123,8 +123,22 @@ function offline(): void {
   if (flag('offline') === '1') throw new TypeError('Network request failed');
 }
 
-/** Reservations made in this preview session (POST /v1/reservations). */
-const createdList: Array<Record<string, unknown>> = [];
+/** Reservations made in the preview (POST /v1/reservations), kept across reloads. */
+const CREATED_KEY = 'preview.bookings.created';
+const createdList: Array<Record<string, unknown>> = (() => {
+  try {
+    return JSON.parse(globalThis.localStorage?.getItem(CREATED_KEY) ?? '[]') as Array<Record<string, unknown>>;
+  } catch {
+    return [];
+  }
+})();
+function saveCreated(): void {
+  try {
+    globalThis.localStorage?.setItem(CREATED_KEY, JSON.stringify(createdList));
+  } catch {
+    // ignore
+  }
+}
 
 export const bookingsHandlers: MockHandler[] = [
   { method: 'GET', path: /^\/v1\/me\/reservations$/, handle: () => { offline(); return data(); } },
@@ -167,6 +181,7 @@ export const bookingsHandlers: MockHandler[] = [
             { ref: `GS-${id.slice(-6).toUpperCase()}`, mode: body.paymentMode === 'payAtVenue' ? 'payAtVenue' : 'payNow', p4 },
           ),
         );
+        saveCreated();
       }
       return {
         reservationId: id,

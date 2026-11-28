@@ -28,6 +28,7 @@ import { computeTotals, createReservation } from '@/lib/supabase/checkout';
 import {
   createBooking,
   createHold,
+  fetchBooking,
   fetchEventCheckoutFields,
   fetchTicketTypesRaw,
   idempotencyKey,
@@ -38,7 +39,11 @@ import {
   type PaymentMethodKind,
   type ReservationHold,
 } from '@/lib/api/bookings';
-import { refreshBookings } from '@/screens/bookings/bookingsStore';
+import { currentBookingsUser, refreshBookings } from '@/screens/bookings/bookingsStore';
+import { recordMockBooking } from '@/screens/bookings/mockPayments';
+import { isTestMode, markTicketsPaid, presentPayment, saveCard, type CardDetails } from '@/lib/payments';
+import CardFormSheet from '@/components/payments/CardFormSheet';
+import TestModeBadge from '@/components/payments/TestModeBadge';
 
 export type CheckoutPageProps = Readonly<{
   event: Event;
@@ -53,7 +58,7 @@ export type CheckoutPageProps = Readonly<{
 }>;
 
 type PayMode = 'payNow' | 'payAtVenue';
-type Method = Readonly<{ key: string; kind: PaymentMethodKind; id: string | null; label: string }>;
+type Method = Readonly<{ key: string; kind: PaymentMethodKind; id: string | null; label: string; card?: CardDetails | null }>;
 type Holder = Readonly<{ name: string; email: string }>;
 type Slot = Readonly<{ key: string; ticketTypeId: string; index: number }>;
 type Done = Readonly<{
@@ -174,7 +179,8 @@ export default function CheckoutPage({
   );
 
   const paymentsLive = hold != null;
-  const payAtVenueOk = paymentsLive && eventFields?.payAtVenueEnabled === true;
+  // The event decides when it says so (Phase 4); in test mode both options are offered.
+  const payAtVenueOk = typeof eventFields?.payAtVenueEnabled === 'boolean' ? eventFields.payAtVenueEnabled : isTestMode();
   const [mode, setMode] = useState<PayMode>('payNow');
   useEffect(() => {
     if (!payAtVenueOk && mode === 'payAtVenue') setMode('payNow');
@@ -242,14 +248,20 @@ export default function CheckoutPage({
       cancelled = true;
     };
   }, [t]);
-  const methods = [wallet, ...cards];
+  // A card typed in the card form (saved or not) for this payment.
+  const [newCard, setNewCard] = useState<Method | null>(null);
+  const [cardSheet, setCardSheet] = useState(false);
+  const methods = [wallet, ...cards.filter((c) => c.id == null || c.id !== newCard?.id), ...(newCard ? [newCard] : [])];
   const method = methods.find((m) => m.key === methodKey) ?? wallet;
+  const [payError, setPayError] = useState<string | null>(null);
+  useEffect(() => setPayError(null), [methodKey, mode]);
 
   // ── submit ──
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<Done | null>(null);
   const [legal, setLegal] = useState<'rules' | 'policy' | null>(null);
   const idemKey = useRef(idempotencyKey());
+  const created = useRef<{ reservationId: string; status: string | null } | null>(null);
 
   const submit = async (): Promise<void> => {
     if (busy) return;
@@ -269,26 +281,59 @@ export default function CheckoutPage({
       const qty: Record<string, number> = {};
       for (const [k, v] of Object.entries(quantities)) if (v > 0) qty[k] = v;
 
+      const charge = mode === 'payNow' && totalCents > 0;
+      // Test-mode payment (lib/payments): the only provider for now.
+      const payMock = async (): Promise<boolean> => {
+        const r = await presentPayment({
+          amountCents: totalCents,
+          currency,
+          method: method.kind,
+          paymentMethodId: method.kind === 'saved_card' ? method.id : null,
+          card: method.card ?? null,
+          label: `${event.title} · ${t('bookings.ticketsCount', { count: totalQty })}`,
+        });
+        if (r.status === 'succeeded') return true;
+        setPayError(t('bookings.co.declined', { message: r.message ?? t('bookings.payDeclined') }));
+        return false;
+      };
+
       let reservationId: string;
       let status: string | null = null;
+      let paid = false;
+      let mockPaid = false;
       if (paymentsLive && hold) {
-        const res = await createBooking({ eventId, quantities: qty, attendees, billing, phase4: { holdId: hold.holdId, paymentMode: mode } }, idemKey.current);
-        reservationId = res.reservationId;
-        status = res.status;
+        // Phase 4: create the reservation once (retries reuse it), then pay via
+        // route 148; the test-mode payment stands in while that route is missing.
+        if (!created.current) {
+          const res = await createBooking({ eventId, quantities: qty, attendees, billing, phase4: { holdId: hold.holdId, paymentMode: mode } }, idemKey.current);
+          created.current = { reservationId: res.reservationId, status: res.status };
+          consumed.current = true;
+        }
+        reservationId = created.current.reservationId;
+        status = created.current.status;
+        if (charge) {
+          const pay = await startPayment(reservationId, { method: method.kind, paymentMethodId: method.id }).catch(() => null);
+          if (pay?.kind === 'unavailable') {
+            if (!(await payMock())) return;
+            paid = mockPaid = true;
+          } else paid = pay?.kind === 'started' && pay.status === 'succeeded';
+        }
       } else {
-        // Today's flow: the existing adapter, no charge.
+        // Pay first: a declined payment creates nothing.
+        if (charge && !(await payMock())) return;
         const res = await createReservation({ eventId, userId, quantities: qty, attendees, billing, status: 'pending' });
         reservationId = res.reservationId;
+        consumed.current = true;
+        paid = mockPaid = charge;
+        if (totalCents > 0) await recordMockBooking(currentBookingsUser(), reservationId, { mode, paidAll: charge });
       }
-      consumed.current = true;
-
-      let paid = totalCents === 0;
-      if (paymentsLive && mode === 'payNow' && totalCents > 0) {
+      if (mockPaid) {
+        // Remember the paid tickets on the device (the API doesn't know about test payments).
         try {
-          const pay = await startPayment(reservationId, { method: method.kind, paymentMethodId: method.id });
-          paid = pay.kind === 'started' && pay.status === 'succeeded';
+          const b = await fetchBooking(reservationId);
+          await markTicketsPaid(b.tickets.map((tk) => tk.id));
         } catch {
-          paid = false; // The booking exists; the tickets can be paid later from Bookings.
+          // The reservation record (paidAll) still marks it paid.
         }
       }
 
@@ -299,7 +344,7 @@ export default function CheckoutPage({
         count: totalQty,
         totalCents,
         savingsCents,
-        mode: paymentsLive ? mode : null,
+        mode: totalCents > 0 ? mode : null,
         paid: paid && totalCents > 0,
         pending: (status ?? '').toLowerCase() === 'pending' && event.approvalMode != null && event.approvalMode !== 'auto',
       });
@@ -320,7 +365,6 @@ export default function CheckoutPage({
 
   let cta: { label: string; dark: boolean; icon: ReactElement | null };
   if (totalCents === 0) cta = { label: t('bookings.co.btnConfirmFree'), dark: false, icon: null };
-  else if (!paymentsLive) cta = { label: t('bookings.co.btnConfirm', { price: fmt(totalCents) }), dark: false, icon: null };
   else if (mode === 'payAtVenue') cta = { label: t('bookings.co.btnVenue', { price: fmt(totalCents) }), dark: false, icon: null };
   else if (method.kind === 'apple_pay') cta = { label: t('bookings.co.btnApple', { price: fmt(totalCents) }), dark: true, icon: <Apple size={20} color={gs.white} fill={gs.white} /> };
   else if (method.kind === 'google_pay') cta = { label: t('bookings.co.btnGoogle', { price: fmt(totalCents) }), dark: true, icon: null };
@@ -504,14 +548,7 @@ export default function CheckoutPage({
           {/* Payment method */}
           {mode === 'payNow' && totalCents > 0 ? (
             <Section title={t('bookings.co.method')}>
-              {!paymentsLive ? (
-                <View className="flex-row rounded-[18px] p-3.5" style={{ backgroundColor: gs.violetSoft, gap: 10 }}>
-                  <Info size={18} color={gs.violetDark} style={{ marginTop: 1 }} />
-                  <Text className="flex-1 text-[14px] leading-[20px]" style={{ color: gs.violetDark }}>
-                    {t('bookings.co.paySoon')}
-                  </Text>
-                </View>
-              ) : null}
+              <TestModeBadge />
               <View className="flex-row flex-wrap" style={{ gap: 10 }}>
                 {methods.map((m) => {
                   const on = m.key === method.key;
@@ -533,7 +570,7 @@ export default function CheckoutPage({
                 })}
               </View>
               <Pressable
-                onPress={() => Alert.alert(t('bookings.co.addCard'), t('bookings.co.addCardSoon'))}
+                onPress={() => setCardSheet(true)}
                 accessibilityRole="button"
                 className="self-start h-11 flex-row items-center px-1"
                 style={{ gap: 6 }}
@@ -574,12 +611,12 @@ export default function CheckoutPage({
               ) : null}
               <View className="flex-row items-baseline justify-between pt-3" style={{ borderTopWidth: 1.5, borderTopColor: gs.surface2 }}>
                 <Text className="text-[19px] font-extrabold text-ink">
-                  {!paymentsLive ? t('bookings.co.total') : mode === 'payAtVenue' ? t('bookings.co.totalVenue') : t('bookings.co.totalNow')}
+                  {totalCents === 0 ? t('bookings.co.total') : mode === 'payAtVenue' ? t('bookings.co.totalVenue') : t('bookings.co.totalNow')}
                 </Text>
                 <Text className="text-[24px] font-extrabold text-ink">{fmt(totalCents)}</Text>
               </View>
               <Text className="text-[13px] text-muted leading-[18px]">
-                {!paymentsLive ? t('bookings.co.noteNoPayment') : mode === 'payAtVenue' ? t('bookings.co.noteVenue') : t('bookings.co.noteNow')}
+                {mode === 'payAtVenue' && totalCents > 0 ? t('bookings.co.noteVenue') : t('bookings.co.noteNow')}
               </Text>
             </View>
             <Text className="text-[12px] leading-[18px] text-muted text-center px-3">
@@ -600,6 +637,13 @@ export default function CheckoutPage({
       {/* Sticky CTA */}
       <View className="absolute left-0 right-0 bottom-0 px-5 pt-3" style={{ paddingBottom: Math.max(insets.bottom, 16) + 8, backgroundColor: gs.surface }}>
         <FadeTop />
+        {payError ? (
+          <View accessibilityRole="alert" className="rounded-2xl px-4 py-3 mb-2.5" style={{ backgroundColor: gs.dangerSoft }}>
+            <Text className="text-[14px] font-semibold text-center" style={{ color: gs.danger }}>
+              {payError}
+            </Text>
+          </View>
+        ) : null}
         {submitted && !formValid ? (
           <Text accessibilityRole="alert" className="text-center text-[13px] font-bold mb-2.5" style={{ color: gs.danger }}>
             {t('bookings.co.errSummary')}
@@ -627,6 +671,21 @@ export default function CheckoutPage({
           </Text>
         </Pressable>
       </View>
+
+      <CardFormSheet
+        visible={cardSheet}
+        mode="pay"
+        defaultName={holders[0]?.name ?? ''}
+        onClose={() => setCardSheet(false)}
+        onSubmit={async ({ card, save, makeDefault }) => {
+          let id: string | null = null;
+          if (save) id = (await saveCard(card, makeDefault)).id;
+          const m: Method = { key: `new-${card.number.slice(-4)}-${Date.now()}`, kind: 'card', id, label: t('bookings.co.newCard', { last4: card.number.slice(-4) }), card };
+          setNewCard(m);
+          setMethodKey(m.key);
+          setCardSheet(false);
+        }}
+      />
 
       <GsSheet visible={legal != null} onClose={() => setLegal(null)} title={legal === 'policy' ? t('bookings.co.policy') : t('bookings.co.rules')}>
         <Text className="px-5 text-[15px] leading-[22px] text-subtle">{legal === 'policy' ? t('bookings.co.policyBody') : t('bookings.co.rulesBody')}</Text>
@@ -783,7 +842,6 @@ function DoneView({
   if (done.pending) sub = t('bookings.co.subPending');
   else if (done.paid) sub = done.savingsCents > 0 ? t('bookings.co.subSaved', { count: done.count, saved: fmt(done.savingsCents) }) : t('bookings.co.subReady', { count: done.count });
   else if (venue) sub = t('bookings.co.subVenue', { count: done.count, price: fmt(done.totalCents) });
-  else if (done.totalCents > 0) sub = t('bookings.co.subNoPayment', { count: done.count });
   else sub = t('bookings.co.subReady', { count: done.count });
   const state = done.paid ? t('bookings.co.statusPaid') : venue ? t('bookings.co.statusVenue') : t('bookings.co.statusReserved');
   const line = [t('bookings.ticketsCount', { count: done.count }), done.totalCents > 0 ? fmt(done.totalCents) : t('gs.free'), state].join(' · ');
@@ -803,6 +861,11 @@ function DoneView({
             {title}
           </Text>
           <Text className="text-[16px] leading-[24px] text-muted text-center mt-3 px-4">{sub}</Text>
+          {done.mode ? (
+            <View className="mt-4">
+              <TestModeBadge compact />
+            </View>
+          ) : null}
         </View>
         <View className={cx('flex-row items-center bg-white rounded-[22px] p-3 mt-8')} style={[softShadow, { gap: 12 }]}>
           <Cover uri={event.imageUrl} toneKey={String(event.id)} radius={14} style={{ width: 60, height: 60 }} />

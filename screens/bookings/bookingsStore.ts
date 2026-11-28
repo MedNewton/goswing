@@ -5,6 +5,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchMyBookings, isNetworkError, type Booking, type BookingsData } from '@/lib/api/bookings';
+import { applyMockPayments, loadMockState } from './mockPayments';
 
 const CACHE_PREFIX = 'gs.bookings.v1';
 const STALE_MS = 60_000;
@@ -57,7 +58,8 @@ async function loadCache(): Promise<void> {
     if (!raw || state.data) return;
     const parsed = JSON.parse(raw) as { data: BookingsData; fetchedAt: number };
     if (parsed?.data?.active && parsed?.data?.past) {
-      set({ data: parsed.data, fetchedAt: parsed.fetchedAt ?? null, loading: false });
+      const data = applyMockPayments(parsed.data, await loadMockState(userId));
+      set({ data, fetchedAt: parsed.fetchedAt ?? null, loading: false });
     }
   } catch {
     // Corrupt or unavailable cache: ignore.
@@ -81,7 +83,7 @@ export function refreshBookings(opts: Readonly<{ force?: boolean; pull?: boolean
     await loadCache();
     set({ refreshing: !!opts.pull, error: null });
     try {
-      const data = await fetchMyBookings();
+      const data = applyMockPayments(await fetchMyBookings(), await loadMockState(forUser));
       if (forUser !== userId) return; // signed-in user changed meanwhile
       const fetchedAt = Date.now();
       set({ data, loading: false, refreshing: false, offline: false, error: null, fetchedAt });
@@ -101,6 +103,27 @@ export function refreshBookings(opts: Readonly<{ force?: boolean; pull?: boolean
     }
   })();
   return inflight;
+}
+
+/** The signed-in user the store is bound to (for per-user local records). */
+export function currentBookingsUser(): string {
+  return userId;
+}
+
+/**
+ * Re-applies the test-mode payment records to the loaded bookings at once
+ * (works offline), then refreshes from the API.
+ */
+export async function reapplyMockPayments(): Promise<void> {
+  const forUser = userId;
+  if (state.data) {
+    const data = applyMockPayments(state.data, await loadMockState(forUser));
+    if (forUser === userId) {
+      set({ data });
+      if (state.fetchedAt) void saveCache(data, state.fetchedAt);
+    }
+  }
+  await refreshBookings({ force: true });
 }
 
 function subscribe(l: () => void): () => void {

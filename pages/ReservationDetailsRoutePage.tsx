@@ -10,7 +10,8 @@ import { GsButton } from '@/components/gs';
 import { gs } from '@/theme/colors';
 import TicketView from '@/components/reservations/TicketView';
 import { fetchBooking, isNetworkError, type Booking } from '@/lib/api/bookings';
-import { findBooking, refreshBookings } from '@/screens/bookings/bookingsStore';
+import { currentBookingsUser, findBooking, refreshBookings, useBookings } from '@/screens/bookings/bookingsStore';
+import { applyMockPayments, loadMockState } from '@/screens/bookings/mockPayments';
 import { useAppNav } from '@/navigation/AppNav';
 import { useEvents } from '@/providers/EventsProvider';
 
@@ -34,11 +35,13 @@ export default function ReservationDetailsRoutePage({ reservationId, onBack }: R
     setError(null);
     (async () => {
       try {
-        const fresh = await fetchBooking(reservationId);
+        const raw = await fetchBooking(reservationId);
+        // Same test-mode payment overlay as the bookings list.
+        const fresh = applyMockPayments({ active: [raw], past: [], summary: null }, await loadMockState(currentBookingsUser())).active[0];
         if (cancelled) return;
         // Keep the richer list copy (savings, cover) when the detail lacks it.
         const cached = findBooking(reservationId);
-        setBooking(cached ? { ...cached, ...fresh, imageUrl: fresh.imageUrl ?? cached.imageUrl, savingsCents: fresh.savingsCents || cached.savingsCents } : fresh);
+        setBooking(cached ? { ...fresh, imageUrl: fresh.imageUrl ?? cached.imageUrl, savingsCents: fresh.savingsCents || cached.savingsCents, isPast: cached.isPast } : fresh);
         setOffline(false);
       } catch (e: unknown) {
         if (cancelled) return;
@@ -60,8 +63,12 @@ export default function ReservationDetailsRoutePage({ reservationId, onBack }: R
   }, [reservationId, attempt, t]);
 
   const close = onBack ?? nav.back;
+  // Prefer the shared list copy once it has this booking: it updates after "Pay X now".
+  const { data } = useBookings();
+  const live = data ? (data.active.find((b) => b.id === reservationId) ?? data.past.find((b) => b.id === reservationId) ?? null) : null;
+  const shown = live ?? booking;
 
-  if (!booking) {
+  if (!shown) {
     return (
       <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: gs.violet, marginTop: -insets.top }}>
         {error ? (
@@ -79,12 +86,12 @@ export default function ReservationDetailsRoutePage({ reservationId, onBack }: R
     );
   }
 
-  const image = booking.imageUrl ?? events.find((e) => String(e.id) === booking.eventId)?.imageUrl ?? null;
+  const image = shown.imageUrl ?? booking?.imageUrl ?? events.find((e) => String(e.id) === shown.eventId)?.imageUrl ?? null;
   // Paint the violet under the status bar too (the shell pads the top inset).
   return (
     <View className="flex-1" style={{ backgroundColor: gs.violet, marginTop: -insets.top, paddingTop: insets.top }}>
       <TicketView
-        booking={booking}
+        booking={shown}
         imageUrl={image}
         onClose={close}
         onOpenEvent={(eventId) => nav.openEvent(eventId)}

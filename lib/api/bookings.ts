@@ -135,6 +135,8 @@ export type Booking = Readonly<{
   releaseAt: string | null;
   isPast: boolean;
   tickets: ReadonlyArray<BookingTicket>;
+  /** Payment state comes from the on-device test-mode records, not the API. */
+  mockPayment?: boolean;
 }>;
 
 export type BookingsData = Readonly<{
