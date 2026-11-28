@@ -1,311 +1,181 @@
-// pages/HelpSupportPage.tsx
+// pages/Helpsupportpage.tsx — Help & support: contact, searchable FAQ and
+// "Report a problem" (opens the mail app with the report filled in).
 import React, { useMemo, useState, type ReactElement } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  TextInput,
-  Alert,
-  Linking,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Linking, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
+import {
+  ChevronDown,
+  ChevronUp,
+  CircleUser,
+  CreditCard,
+  Mail,
+  QrCode,
+  RotateCcw,
+  Search,
+  Ticket,
+  X,
+  type LucideIcon,
+} from 'lucide-react-native';
 
-type HelpSupportPageProps = Readonly<{
-  onBack: () => void;
-}>;
+import { gs } from '@/theme/colors';
+import { GsButton, Pill, softShadow } from '@/components/gs';
+import { Card, Divider, Field, IconTile, Input, PageScaffold, SectionTitle } from '@/screens/profile/components/ui';
 
-type FAQItem = {
-  id: string;
-  question: string;
-  answer: string;
-  icon: keyof typeof Feather.glyphMap;
-};
+type HelpSupportPageProps = Readonly<{ onBack: () => void }>;
 
-function FAQAccordion({ item }: { item: FAQItem }): ReactElement {
-  const [expanded, setExpanded] = useState(false);
+export const SUPPORT_EMAIL = 'goswingapp@gmail.com';
 
-  return (
-    <View className="border-b border-gray200">
-      <Pressable
-        onPress={() => setExpanded(!expanded)}
-        className="flex-row items-center justify-between py-4 px-4 active:opacity-80"
-      >
-        <View className="flex-row items-center gap-x-3 flex-1">
-          <Feather name={item.icon} size={18} color="#6B7280" />
-          <Text className="text-sm text-gray900 flex-1">{item.question}</Text>
-        </View>
-        <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#9CA3AF" />
-      </Pressable>
-      {expanded && (
-        <View className="px-4 pb-4 pt-0">
-          <Text className="text-sm text-gray600 leading-5 ml-7">{item.answer}</Text>
-        </View>
-      )}
-    </View>
-  );
-}
+const FAQ: ReadonlyArray<{ id: string; icon: LucideIcon }> = [
+  { id: 'book', icon: Ticket },
+  { id: 'qr', icon: QrCode },
+  { id: 'pay', icon: CreditCard },
+  { id: 'refund', icon: RotateCcw },
+  { id: 'account', icon: CircleUser },
+  { id: 'contact', icon: Mail },
+];
+
+type Category = 'bug' | 'event' | 'payment';
+
+const normalize = (s: string): string =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
 
 export default function HelpSupportPage({ onBack }: HelpSupportPageProps): ReactElement {
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [category, setCategory] = useState('');
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
+  const [category, setCategory] = useState<Category>('bug');
+  const [description, setDescription] = useState('');
+  const [mailError, setMailError] = useState<string | null>(null);
 
-  const FAQ_DATA: FAQItem[] = useMemo(() => [
-    { id: '1', question: t('helpSupport.faq.q1'), answer: t('helpSupport.faq.a1'), icon: 'help-circle' },
-    { id: '2', question: t('helpSupport.faq.q2'), answer: t('helpSupport.faq.a2'), icon: 'calendar' },
-    { id: '3', question: t('helpSupport.faq.q3'), answer: t('helpSupport.faq.a3'), icon: 'credit-card' },
-    { id: '4', question: t('helpSupport.faq.q4'), answer: t('helpSupport.faq.a4'), icon: 'calendar' },
-    { id: '5', question: t('helpSupport.faq.q5'), answer: t('helpSupport.faq.a5'), icon: 'message-circle' },
-  ], [t]);
+  const items = useMemo(() => {
+    const q = normalize(query.trim());
+    return FAQ.map((f) => ({ ...f, q: t(`profile.help.faq.${f.id}.q`), a: t(`profile.help.faq.${f.id}.a`) })).filter(
+      (f) => !q || normalize(`${f.q} ${f.a}`).includes(q),
+    );
+  }, [query, t]);
 
-  const handleLiveChat = (): void => {
-    Alert.alert(t('helpSupport.liveChat'), t('helpSupport.liveChatComingSoon'));
-  };
-
-  const handleEmailUs = async (): Promise<void> => {
-    const emailUrl = 'mailto:goswingapp@gmail.com';
-    const canOpen = await Linking.canOpenURL(emailUrl);
-
-    if (canOpen) {
-      await Linking.openURL(emailUrl);
-    } else {
-      Alert.alert(t('common.error'), t('helpSupport.emailOpenError'));
+  const mail = async (subject: string, body = ''): Promise<void> => {
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}${body ? `&body=${encodeURIComponent(body)}` : ''}`;
+    try {
+      setMailError(null);
+      await Linking.openURL(url);
+    } catch {
+      setMailError(t('helpSupport.emailOpenError'));
     }
   };
 
-  const handleSendMessage = (): void => {
-    if (!subject.trim() || !message.trim()) {
-      Alert.alert(t('common.error'), t('helpSupport.errFillFields'));
-      return;
-    }
-
-    Alert.alert(
-      t('helpSupport.sentTitle'),
-      t('helpSupport.sentMessage'),
-      [
-        {
-          text: t('helpSupport.ok'),
-          onPress: () => {
-            setCategory('');
-            setSubject('');
-            setMessage('');
-          },
-        },
-      ]
-    );
+  const sendReport = (): void => {
+    const version = Constants.expoConfig?.version ?? '';
+    const body = `${description.trim()}\n\n—\n${t('profile.help.reportCategory')}: ${t(`profile.help.cat.${category}`)}\nGoSwing ${version} · ${Platform.OS} ${String(Platform.Version ?? '')}`;
+    void mail(`[${t(`profile.help.cat.${category}`)}] ${t('profile.help.reportSubject')}`, body);
   };
-
-  const handleReportBug = (): void => {
-    Alert.alert(
-      t('helpSupport.reportBugTitle'),
-      t('helpSupport.reportBugMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('helpSupport.reportViaEmail'),
-          onPress: async () => {
-            const emailUrl = 'mailto:goswingapp@gmail.com?subject=Bug%20Report';
-            const canOpen = await Linking.canOpenURL(emailUrl);
-            if (canOpen) {
-              await Linking.openURL(emailUrl);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const filteredFAQs = FAQ_DATA.filter(
-    (faq) =>
-      faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
-    <SafeAreaView edges={['left', 'right']} className="flex-1 bg-gray50">
-      {/* Header */}
-      <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray200">
-        <Pressable onPress={onBack} className="mr-3 active:opacity-70">
-          <Feather name="arrow-left" size={24} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-semibold text-black">{t('helpSupport.title')}</Text>
+    <PageScaffold title={t('profile.help.title')} subtitle={t('profile.help.subtitle')} onBack={onBack}>
+      {/* Contact */}
+      <Pressable
+        onPress={() => void mail(t('profile.help.mailSubject'))}
+        accessibilityRole="button"
+        accessibilityLabel={`${t('profile.help.emailUs')}, ${SUPPORT_EMAIL}`}
+        className="mx-5 mt-1 rounded-[24px] bg-white p-4 flex-row items-center"
+        style={softShadow}
+      >
+        <View className="h-12 w-12 rounded-2xl items-center justify-center" style={{ backgroundColor: gs.violet }}>
+          <Mail size={22} color={gs.white} />
+        </View>
+        <View className="flex-1 ml-3">
+          <Text className="text-[17px] font-extrabold text-ink">{t('profile.help.emailUs')}</Text>
+          <Text className="text-[14px] text-subtle">{SUPPORT_EMAIL}</Text>
+          <Text className="text-[12px] font-bold mt-0.5" style={{ color: gs.green }}>
+            {t('profile.help.replyTime')}
+          </Text>
+        </View>
+      </Pressable>
+
+      {/* Search */}
+      <View className="mx-5 mt-4 h-14 rounded-[20px] bg-white flex-row items-center px-4" style={softShadow}>
+        <Search size={20} color={gs.muted} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t('profile.help.search')}
+          placeholderTextColor={gs.faint}
+          accessibilityLabel={t('profile.help.search')}
+          returnKeyType="search"
+          className="flex-1 ml-3 text-[16px] text-ink"
+          style={{ outlineStyle: 'none' } as object}
+        />
+        {query ? (
+          <Pressable onPress={() => setQuery('')} accessibilityRole="button" accessibilityLabel={t('gs.close')} hitSlop={10}>
+            <X size={18} color={gs.muted} />
+          </Pressable>
+        ) : null}
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 20 }}
-      >
-        {/* Quick Actions */}
-        <View className="mx-5 mt-4 flex-row gap-x-3">
-          <Pressable
-            onPress={handleLiveChat}
-            className="flex-1 items-center rounded-2xl border border-gray200 bg-white py-5 active:opacity-80"
-          >
-            <Feather name="message-circle" size={24} color="#111827" />
-            <Text className="mt-2 text-sm font-medium text-gray900">{t('helpSupport.liveChat')}</Text>
-            <Text className="mt-1 text-xs text-gray500">{t('helpSupport.liveChatSubtitle')}</Text>
-          </Pressable>
+      <SectionTitle title={t('profile.help.faqTitle')} />
+      <Card>
+        {items.length === 0 ? (
+          <Text className="px-4 py-5 text-[14px] text-muted">{t('profile.help.noResults')}</Text>
+        ) : (
+          items.map((f, i) => {
+            const expanded = open === f.id || (query.trim().length > 1 && items.length <= 2);
+            return (
+              <View key={f.id}>
+                {i > 0 ? <Divider /> : null}
+                <Pressable
+                  onPress={() => setOpen(open === f.id ? null : f.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded }}
+                  className="flex-row items-center px-4 py-3 min-h-[60px]"
+                >
+                  <IconTile icon={f.icon} />
+                  <Text className="flex-1 ml-3 mr-2 text-[16px] font-bold text-ink">{f.q}</Text>
+                  {expanded ? <ChevronUp size={18} color={gs.subtle} /> : <ChevronDown size={18} color={gs.subtle} />}
+                </Pressable>
+                {expanded ? <Text className="px-4 pb-4 pl-[68px] text-[14px] text-subtle leading-[21px]">{f.a}</Text> : null}
+              </View>
+            );
+          })
+        )}
+      </Card>
 
-          <Pressable
-            onPress={handleEmailUs}
-            className="flex-1 items-center rounded-2xl border border-gray200 bg-white py-5 active:opacity-80"
-          >
-            <Feather name="mail" size={24} color="#111827" />
-            <Text className="mt-2 text-sm font-medium text-gray900">{t('helpSupport.emailUs')}</Text>
-            <Text className="mt-1 text-xs text-gray500">{t('helpSupport.emailUsSubtitle')}</Text>
-          </Pressable>
-        </View>
-
-        {/* Search Help Articles */}
-        <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-3">{t('helpSupport.searchTitle')}</Text>
-          <View className="flex-row items-center border border-gray200 rounded-xl px-3 py-2.5 bg-gray50">
-            <Feather name="search" size={18} color="#9CA3AF" />
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder={t('helpSupport.searchPlaceholder')}
-              placeholderTextColor="#9CA3AF"
-              className="flex-1 ml-2 text-sm text-gray900"
-            />
+      {/* Report a problem */}
+      <SectionTitle title={t('profile.help.report')} subtitle={t('profile.help.reportSub')} />
+      <Card className="p-4">
+        <Field label={t('profile.help.reportCategory')}>
+          <View className="flex-row flex-wrap gap-2">
+            {(['bug', 'event', 'payment'] as const).map((c) => (
+              <Pill key={c} label={t(`profile.help.cat.${c}`)} size="sm" active={category === c} onPress={() => setCategory(c)} />
+            ))}
           </View>
-        </View>
-
-        {/* Frequently Asked Questions */}
-        <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white overflow-hidden">
-          <View className="px-4 py-4 border-b border-gray200">
-            <Text className="text-base font-semibold text-black">{t('helpSupport.faqTitle')}</Text>
-          </View>
-          {filteredFAQs.length > 0 ? (
-            filteredFAQs.map((faq) => <FAQAccordion key={faq.id} item={faq} />)
-          ) : (
-            <View className="px-4 py-6 items-center">
-              <Text className="text-sm text-gray500">{t('helpSupport.faqNoMatch')}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Contact Support Form */}
-        <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-4">{t('helpSupport.contactTitle')}</Text>
-
-          <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">{t('helpSupport.category')}</Text>
-            <View className="border border-gray200 rounded-xl overflow-hidden">
-              <TextInput
-                value={category}
-                onChangeText={setCategory}
-                placeholder={t('helpSupport.categoryPlaceholder')}
-                placeholderTextColor="#9CA3AF"
-                className="px-3 py-3 text-sm text-gray900 bg-white"
-              />
-            </View>
-          </View>
-
-          <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">{t('helpSupport.subject')}</Text>
-            <View className="border border-gray200 rounded-xl overflow-hidden">
-              <TextInput
-                value={subject}
-                onChangeText={setSubject}
-                placeholder={t('helpSupport.subjectPlaceholder')}
-                placeholderTextColor="#9CA3AF"
-                className="px-3 py-3 text-sm text-gray900 bg-white"
-              />
-            </View>
-          </View>
-
-          <View className="mb-4">
-            <Text className="text-sm text-gray700 mb-2">{t('helpSupport.messageLabel')}</Text>
-            <View className="border border-gray200 rounded-xl overflow-hidden">
-              <TextInput
-                value={message}
-                onChangeText={setMessage}
-                placeholder={t('helpSupport.messagePlaceholder')}
-                placeholderTextColor="#9CA3AF"
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                className="px-3 py-3 text-sm text-gray900 bg-white min-h-[100px]"
-              />
-            </View>
-          </View>
-
-          <Pressable
-            onPress={handleSendMessage}
-            className="bg-gray900 rounded-xl py-3.5 items-center active:opacity-90"
-          >
-            <Text className="text-white font-medium">{t('helpSupport.sendMessage')}</Text>
-          </Pressable>
-        </View>
-
-        {/* Other Ways to Reach Us */}
-        <View className="mx-5 mt-4 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-4">{t('helpSupport.otherTitle')}</Text>
-
-          <View className="flex-row items-start gap-x-3 mb-4">
-            <Feather name="mail" size={18} color="#111827" />
-            <View className="flex-1">
-              <Text className="text-sm font-medium text-gray900">{t('helpSupport.emailSupport')}</Text>
-              <Text className="text-sm text-gray600">goswingapp@gmail.com</Text>
-              <Text className="text-xs text-gray500 mt-0.5">{t('helpSupport.emailResponseTime')}</Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-start gap-x-3 mb-4">
-            <Feather name="phone" size={18} color="#111827" />
-            <View className="flex-1">
-              <Text className="text-sm font-medium text-gray900">{t('helpSupport.phoneSupport')}</Text>
-              <Text className="text-sm text-gray600">+1 (555) 123-HELP</Text>
-              <Text className="text-xs text-gray500 mt-0.5">{t('helpSupport.phoneHours')}</Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-start gap-x-3">
-            <Feather name="message-circle" size={18} color="#111827" />
-            <View className="flex-1">
-              <Text className="text-sm font-medium text-gray900">{t('helpSupport.liveChat')}</Text>
-              <Text className="text-sm text-gray600">{t('helpSupport.liveChatAvailable')}</Text>
-              <Text className="text-xs text-gray500 mt-0.5">{t('helpSupport.liveChatHours')}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Report a Bug */}
-        <View className="mx-5 mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-4">
-          <View className="flex-row items-center gap-x-2 mb-2">
-            <Feather name="settings" size={18} color="#F97316" />
-            <Text className="text-base font-semibold text-orange-600">{t('helpSupport.bugTitle')}</Text>
-          </View>
-          <Text className="text-sm text-orange-700 mb-3">
-            {t('helpSupport.bugBody')}
+        </Field>
+        <Field label={t('profile.help.description')}>
+          <Input
+            value={description}
+            onChangeText={(v) => setDescription(v.slice(0, 2000))}
+            multiline
+            placeholder={t('profile.help.descriptionPlaceholder')}
+            accessibilityLabel={t('profile.help.description')}
+          />
+        </Field>
+        <GsButton
+          label={t('profile.help.send')}
+          icon={<Mail size={17} color={gs.white} />}
+          onPress={sendReport}
+          disabled={description.trim().length < 10}
+          fullWidth
+        />
+        <Text className="mt-2 text-[12px] text-muted text-center">{t('profile.help.sendHint')}</Text>
+        {mailError ? (
+          <Text className="mt-2 text-[13px] font-semibold text-center" style={{ color: gs.danger }}>
+            {mailError}
           </Text>
-          <Pressable
-            onPress={handleReportBug}
-            className="self-start border border-gray300 bg-white rounded-xl px-4 py-2 active:opacity-80"
-          >
-            <Text className="text-sm font-medium text-gray900">{t('helpSupport.reportBug')}</Text>
-          </Pressable>
-        </View>
-
-        {/* System Status */}
-        <View className="mx-5 mt-4 mb-16 rounded-2xl border border-gray200 bg-white p-4">
-          <Text className="text-base font-semibold text-black mb-3">{t('helpSupport.systemStatus')}</Text>
-          <View className="flex-row items-center gap-x-2">
-            <View className="w-2.5 h-2.5 rounded-full bg-green-500" />
-            <Text className="text-sm text-gray900">{t('helpSupport.allOperational')}</Text>
-          </View>
-          <Pressable className="mt-2 active:opacity-70">
-            <Text className="text-sm text-gray600 underline">{t('helpSupport.viewStatusPage')}</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        ) : null}
+      </Card>
+    </PageScaffold>
   );
 }

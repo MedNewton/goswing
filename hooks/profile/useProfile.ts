@@ -1,33 +1,77 @@
 // hooks/profile/useProfile.ts
 // Current user's profile — backed by the Gooswing REST API (routes C.1–C.6).
+//
+// Every component calling useProfile() shares one in-memory copy, so an edit
+// made in Edit profile shows up at once in the Profile tab header (and in the
+// shell, which reads the city).
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/clerk-expo';
 import * as meApi from '@/lib/api/me';
-import type { ApiProfile } from '@/lib/api/types';
+import * as profileApi from '@/lib/api/profile';
+import type { ApiProfileV4, ProfilePatch, ProfileSupport, DeleteAccountResult } from '@/lib/api/profile';
 import type { UserProfile, ID } from '@/types/domain';
+
+/** Phase 4 profile fields, null when absent. */
+export type ProfileExtras = Readonly<{
+  username: string | null;
+  bio: string | null;
+  dateOfBirth: string | null;
+  accountStatus: string | null;
+  scheduledDeletionAt: string | null;
+}>;
 
 type UseProfileReturn = {
   profile: UserProfile | null;
+  /** Phase 4 fields (username, bio…) when the server returns them. */
+  extras: ProfileExtras;
+  /** Which Phase 4 fields the server supports (present in the response). */
+  support: ProfileSupport;
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  /** Raw PATCH /v1/me/profile, including Phase 4 fields. */
+  patchProfile: (body: ProfilePatch) => Promise<void>;
+  /** Replace the shared copy with a server response (e.g. after an avatar upload). */
+  applyProfile: (raw: Partial<ApiProfileV4>) => void;
   deactivateAccount: () => Promise<void>;
-  deleteAccount: () => Promise<void>;
+  deleteAccount: () => Promise<DeleteAccountResult>;
 };
+
+// ─── Shared store ─────────────────────────────────────────────────────────────
+
+type Store = { raw: ApiProfileV4 | null; userId: string | null; inflight: Promise<void> | null };
+const store: Store = { raw: null, userId: null, inflight: null };
+const listeners = new Set<() => void>();
+const emit = (): void => listeners.forEach((l) => l());
+
+function setShared(raw: ApiProfileV4 | null): void {
+  store.raw = raw;
+  emit();
+}
 
 export function useProfile(): UseProfileReturn {
   const { user: clerkUser } = useUser();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const userId = clerkUser?.id ?? null;
+  const [, force] = useState(0);
+  const [isLoading, setIsLoading] = useState(store.raw == null || store.userId !== userId);
   const [error, setError] = useState<Error | null>(null);
 
+  useEffect(() => {
+    const l = (): void => force((n) => n + 1);
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  }, []);
+
   const mapProfile = useCallback(
-    (raw: ApiProfile): UserProfile => ({
+    (raw: ApiProfileV4): UserProfile => ({
       id: (raw.id || clerkUser?.id || '') as ID,
       name: raw.displayName ?? clerkUser?.fullName ?? '',
-      avatarUri: raw.avatarUrl ?? clerkUser?.imageUrl ?? null,
+      // Clerk's imageUrl is a generated placeholder unless the user uploaded one.
+      avatarUri: raw.avatarUrl ?? (clerkUser?.hasImage ? clerkUser.imageUrl : null) ?? null,
       email: raw.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? null,
       phone: raw.phone ?? clerkUser?.primaryPhoneNumber?.phoneNumber ?? null,
       phoneVerified:
@@ -36,7 +80,7 @@ export function useProfile(): UseProfileReturn {
       city: raw.city ?? undefined,
       countryCode: raw.countryCode ?? undefined,
       profileVisibility: raw.profileVisibility ?? 'public',
-      accountStatus: raw.accountStatus ?? 'active',
+      accountStatus: (raw.accountStatus as UserProfile['accountStatus']) ?? 'active',
       createdAt: raw.createdAt ?? undefined,
       updatedAt: raw.updatedAt ?? undefined,
       deactivatedAt: raw.deactivatedAt ?? null,
@@ -53,31 +97,53 @@ export function useProfile(): UseProfileReturn {
   );
 
   const fetchProfile = useCallback(async () => {
-    if (!clerkUser?.id) {
-      setProfile(null);
+    if (!userId) {
+      setShared(null);
       setIsLoading(false);
       return;
     }
-
     try {
       setIsLoading(true);
       setError(null);
-      const raw = await meApi.getMyProfile();
-      setProfile(mapProfile(raw));
+      if (!store.inflight) {
+        store.inflight = meApi
+          .getMyProfile()
+          .then((raw) => {
+            store.userId = userId;
+            setShared(raw as ApiProfileV4);
+          })
+          .finally(() => {
+            store.inflight = null;
+          });
+      }
+      await store.inflight;
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch profile'));
     } finally {
       setIsLoading(false);
     }
-  }, [clerkUser?.id, mapProfile]);
+  }, [userId]);
 
   useEffect(() => {
+    if (store.raw && store.userId === userId) {
+      setIsLoading(false);
+      return;
+    }
     void fetchProfile();
-  }, [fetchProfile]);
+  }, [fetchProfile, userId]);
+
+  const patchProfile = useCallback(
+    async (body: ProfilePatch) => {
+      if (!userId) throw new Error('Not authenticated');
+      const raw = await profileApi.patchProfile(body);
+      setShared({ ...(store.raw ?? {}), ...raw } as ApiProfileV4);
+    },
+    [userId],
+  );
 
   const updateProfile = useCallback(
     async (updates: Partial<UserProfile>) => {
-      if (!clerkUser?.id) throw new Error('Not authenticated');
+      if (!userId) throw new Error('Not authenticated');
 
       const body: Parameters<typeof meApi.patchMyProfile>[0] = {};
       if (updates.name !== undefined) body.displayName = updates.name;
@@ -93,33 +159,61 @@ export function useProfile(): UseProfileReturn {
       }
 
       const raw = await meApi.patchMyProfile(body);
-      setProfile(mapProfile(raw));
+      setShared({ ...(store.raw ?? {}), ...raw } as ApiProfileV4);
     },
-    [clerkUser?.id, mapProfile],
+    [userId],
   );
 
+  const applyProfile = useCallback((raw: Partial<ApiProfileV4>) => {
+    setShared({ ...(store.raw ?? {}), ...raw } as ApiProfileV4);
+  }, []);
+
   const deactivateAccount = useCallback(async () => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
+    if (!userId) throw new Error('Not authenticated');
     await meApi.deactivateMyAccount();
+    store.raw = null;
     await fetchProfile();
-  }, [clerkUser?.id, fetchProfile]);
+  }, [userId, fetchProfile]);
 
   const deleteAccount = useCallback(async () => {
-    if (!clerkUser?.id) throw new Error('Not authenticated');
-    await meApi.deleteMyAccount();
-    setProfile(null);
-  }, [clerkUser?.id]);
+    if (!userId) throw new Error('Not authenticated');
+    const res = await profileApi.deleteAccount();
+    if (res.accountStatus === 'pendingDeletion') {
+      applyProfile({ accountStatus: res.accountStatus, scheduledDeletionAt: res.scheduledDeletionAt ?? null });
+    } else {
+      setShared(null);
+    }
+    return res;
+  }, [userId, applyProfile]);
+
+  const raw = store.userId === userId ? store.raw : null;
+  const profile = useMemo(() => (raw ? mapProfile(raw) : null), [raw, mapProfile]);
+  const extras = useMemo<ProfileExtras>(
+    () => ({
+      username: raw?.username ?? null,
+      bio: raw?.bio ?? null,
+      dateOfBirth: raw?.dateOfBirth ?? null,
+      accountStatus: raw?.accountStatus ?? null,
+      scheduledDeletionAt: raw?.scheduledDeletionAt ?? null,
+    }),
+    [raw],
+  );
+  const support = useMemo(() => profileApi.profileSupport(raw), [raw]);
 
   return useMemo(
     () => ({
       profile,
-      isLoading,
+      extras,
+      support,
+      isLoading: isLoading && !raw,
       error,
       refetch: fetchProfile,
       updateProfile,
+      patchProfile,
+      applyProfile,
       deactivateAccount,
       deleteAccount,
     }),
-    [profile, isLoading, error, fetchProfile, updateProfile, deactivateAccount, deleteAccount],
+    [profile, extras, support, isLoading, raw, error, fetchProfile, updateProfile, patchProfile, applyProfile, deactivateAccount, deleteAccount],
   );
 }

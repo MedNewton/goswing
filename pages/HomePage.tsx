@@ -26,6 +26,7 @@ import { useBookingsBadge } from '@/screens/bookings/useBookingsBadge';
 import PlacePage from '@/screens/discover/PlacePage';
 import ArtistPage from '@/screens/discover/ArtistPage';
 import SavedScreen from '@/screens/profile/SavedScreen';
+import ProfileScreen from '@/screens/profile/ProfileScreen';
 
 import EventDetailsPage from '@/pages/EventDetailsPage';
 import OrganizerProfilePage from '@/pages/OrganizerProfilePage';
@@ -201,6 +202,8 @@ function PushedScreen({
       return <SavedScreen key={key} onBack={nav.back} />;
     case 'notifications':
       return <NotificationsPage key={key} onBack={nav.back} />;
+    case 'profileScreen':
+      return <ProfileScreen key={`${key}-${route.screen}`} screen={route.screen} onBack={nav.back} />;
     default:
       return null;
   }

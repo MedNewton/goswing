@@ -1,335 +1,378 @@
-// pages/MyReviewsPage.tsx
-import React, { useEffect, useState, type ReactElement } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  ScrollView,
-  Image,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+// pages/MyReviewsPage.tsx — My reviews: stats, "waiting for your review"
+// (Phase 4 route 154), filters by target type, review cards with edit / delete.
+import React, { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { ChevronRight, Star } from 'lucide-react-native';
 
-import { getMyReviews, deleteReview, type UserReview, type UserReviewsResult } from '@/lib/supabase/reviews';
+import { gs } from '@/theme/colors';
+import { Cover, EmptyState, GsButton, GsSheet, Pill, StatusChip } from '@/components/gs';
+import type { ChipTone } from '@/components/gs/StatusChip';
+import { useAppNav } from '@/navigation/AppNav';
+import { useProfile } from '@/hooks/profile';
+import {
+  createReview,
+  deleteReview,
+  getMyReviews,
+  getReviewEligibility,
+  updateReview,
+  type ApiReviewEligibility,
+  type ReviewTargetType,
+} from '@/lib/api/profile';
+import { Card, ConfirmSheet, Input, Loading, PageScaffold, SectionTitle, STAR, Stars, TextAction } from '@/screens/profile/components/ui';
 
-const cx = (...c: ReadonlyArray<string | null | undefined | false>) =>
-  c.filter(Boolean).join(' ');
+type MyReviewsPageProps = Readonly<{ onBack: () => void }>;
 
-type MyReviewsPageProps = Readonly<{
-  onBack: () => void;
+type Filter = 'all' | ReviewTargetType;
+
+type ReviewItem = Readonly<{
+  id: string;
+  targetType: ReviewTargetType;
+  targetId: string;
+  name: string;
+  imageUrl: string | null;
+  createdAt: string | null;
+  rating: number;
+  comment: string | null;
+  helpfulCount: number | null;
+  reply: string | null;
+  replyFrom: string;
+  isDraft: boolean;
 }>;
 
-type TabKey = 'published' | 'drafts';
+type Stats = Readonly<{ count: number; average: number | null; helpful: number | null }>;
 
-function StarRating({ rating, size = 16 }: { rating: number; size?: number }): ReactElement {
-  const stars = [];
-  for (let i = 1; i <= 5; i++) {
-    stars.push(
-      <Feather
-        key={i}
-        name="star"
-        size={size}
-        color={i <= rating ? '#FBBF24' : '#E5E7EB'}
-        style={{ marginRight: 2 }}
-      />
-    );
-  }
-  return <View className="flex-row">{stars}</View>;
-}
+const TYPE_TONE: Readonly<Record<ReviewTargetType, ChipTone>> = { event: 'violet', venue: 'orange', organizer: 'blue' };
 
-function ReviewCard({
-  review,
-  onEdit,
-  onDelete,
-}: {
-  review: UserReview;
-  onEdit: () => void;
-  onDelete: () => void;
-}): ReactElement {
-  const { t } = useTranslation();
-  return (
-    <View className="rounded-2xl border border-gray200 bg-white p-4 mb-4">
-      {/* Header */}
-      <View className="flex-row items-start justify-between">
-        <View className="flex-row items-center flex-1">
-          {review.eventImageUrl ? (
-            <Image
-              source={{ uri: review.eventImageUrl }}
-              className="w-14 h-14 rounded-xl"
-            />
-          ) : (
-            <View className="w-14 h-14 rounded-xl bg-gray200 items-center justify-center">
-              <Feather name="calendar" size={20} color="#9CA3AF" />
-            </View>
-          )}
-          <View className="ml-3 flex-1">
-            <Text className="text-base font-semibold text-black" numberOfLines={1}>
-              {review.eventTitle}
-            </Text>
-            <Text className="text-xs text-gray500 mt-0.5">
-              {t('myReviews.byOrganizer', { name: review.organizerName })}
-            </Text>
-            <View className="flex-row items-center mt-1">
-              <Feather name="calendar" size={12} color="#9CA3AF" />
-              <Text className="text-xs text-gray500 ml-1">{review.eventDate}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Actions */}
-        <View className="flex-row items-center gap-x-2">
-          <Pressable onPress={onEdit} className="p-2 active:opacity-70">
-            <Feather name="edit-2" size={18} color="#6B7280" />
-          </Pressable>
-          <Pressable onPress={onDelete} className="p-2 active:opacity-70">
-            <Feather name="trash-2" size={18} color="#6B7280" />
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Rating */}
-      <View className="flex-row items-center mt-3">
-        <StarRating rating={review.rating} />
-        <Text className="text-sm text-gray600 ml-2">{t('myReviews.starsOf5', { rating: review.rating })}</Text>
-      </View>
-
-      {/* Comment */}
-      {review.comment && (
-        <Text className="text-sm text-gray700 mt-3 leading-5">
-          {review.comment}
-        </Text>
-      )}
-
-      {/* Review Images */}
-      {review.images.length > 0 && (
-        <View className="flex-row mt-3 gap-x-2">
-          {review.images.slice(0, 3).map((img, idx) => (
-            <Image
-              key={idx}
-              source={{ uri: img }}
-              className="w-16 h-16 rounded-lg"
-            />
-          ))}
-        </View>
-      )}
-
-      {/* Footer */}
-      <View className="flex-row items-center justify-between mt-4 pt-3 border-t border-gray100">
-        <Text className="text-xs text-gray500">
-          {t('myReviews.reviewedOn', {
-            date: new Date(review.createdAt).toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            }),
-          })}
-        </Text>
-        {review.helpfulCount > 0 && (
-          <Text className="text-xs text-gray500">
-            {t('myReviews.helpful', { count: review.helpfulCount })}
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
+/** Text the user is writing in the sheet (edit or new review). */
+type Draft = Readonly<{
+  mode: 'edit' | 'new';
+  reviewId?: string;
+  target?: ApiReviewEligibility;
+  title: string;
+  rating: number;
+  comment: string;
+}>;
 
 export default function MyReviewsPage({ onBack }: MyReviewsPageProps): ReactElement {
-  const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
+  const { t, i18n } = useTranslation();
+  const nav = useAppNav();
+  const { refetch: refetchProfile } = useProfile();
 
-  const [tab, setTab] = useState<TabKey>('published');
-  const [isLoading, setIsLoading] = useState(true);
+  const [items, setItems] = useState<ReadonlyArray<ReviewItem>>([]);
+  const [stats, setStats] = useState<Stats>({ count: 0, average: null, helpful: null });
+  const [waiting, setWaiting] = useState<ReadonlyArray<ApiReviewEligibility> | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [reviewsData, setReviewsData] = useState<UserReviewsResult | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
 
-  const fetchReviews = async () => {
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [toDelete, setToDelete] = useState<ReviewItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(async () => {
     try {
-      setIsLoading(true);
       setError(null);
-      const data = await getMyReviews();
-      setReviewsData(data);
-    } catch (err: any) {
-      setError(err?.message ?? t('myReviews.errLoad'));
+      const [res, eligible] = await Promise.all([getMyReviews(), getReviewEligibility().catch(() => null)]);
+      const mapped: ReviewItem[] = (res.items ?? []).map((r) => {
+        const type: ReviewTargetType = r.targetType ?? 'event';
+        const name = r.target?.name ?? r.eventTitle ?? '';
+        return {
+          id: String(r.id),
+          targetType: type,
+          targetId: String(r.target?.id ?? r.eventId ?? ''),
+          name,
+          imageUrl: r.target?.imageUrl ?? r.eventImageUrl ?? null,
+          createdAt: r.createdAt ?? null,
+          rating: Math.max(0, Math.min(5, Math.round(Number(r.rating ?? 0)))),
+          comment: r.comment ?? null,
+          helpfulCount: typeof r.helpfulCount === 'number' ? r.helpfulCount : null,
+          reply: r.adminReply ?? null,
+          replyFrom: type === 'event' ? r.organizerName || name : name,
+          isDraft: Boolean(r.isDraft),
+        };
+      });
+      setItems(mapped);
+      const published = mapped.filter((r) => !r.isDraft);
+      const avg = published.length ? published.reduce((a, r) => a + r.rating, 0) / published.length : null;
+      setStats({
+        count: res.stats?.count ?? res.totals?.publishedCount ?? published.length,
+        average: res.stats?.averageGiven ?? res.totals?.averageRating ?? avg,
+        helpful: typeof res.stats?.helpfulReceived === 'number' ? res.stats.helpfulReceived : null,
+      });
+      setWaiting(eligible ? eligible.filter((e) => !e.reviewed) : null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('myReviews.errLoad'));
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: items.length, event: 0, venue: 0, organizer: 0 };
+    for (const r of items) c[r.targetType] += 1;
+    return c;
+  }, [items]);
+
+  const shown = filter === 'all' ? items : items.filter((r) => r.targetType === filter);
+  const fmtDate = (iso: string | null): string =>
+    iso ? new Date(iso).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+  const typeLabel = (type: ReviewTargetType): string => t(`profile.reviews.type.${type}`);
+
+  const openTarget = (r: ReviewItem): void => {
+    if (!r.targetId) return;
+    if (r.targetType === 'event') nav.openEvent(r.targetId);
+    else if (r.targetType === 'organizer') nav.push({ name: 'organizerProfile', organizerId: r.targetId, organizerName: r.name });
+    else nav.push({ name: 'place', place: { id: r.targetId, name: r.name, source: 'goswing', venueId: r.targetId } });
+  };
+
+  const submit = async (): Promise<void> => {
+    if (!draft || draft.rating < 1) return;
+    try {
+      setSaving(true);
+      const comment = draft.comment.trim() || null;
+      if (draft.mode === 'edit' && draft.reviewId) {
+        await updateReview(draft.reviewId, { rating: draft.rating, comment });
+      } else if (draft.target) {
+        await createReview(draft.target, { rating: draft.rating, comment });
+      }
+      setDraft(null);
+      await load();
+      if (draft.mode === 'new') void refetchProfile();
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('profile.tryAgain'));
+    } finally {
+      setSaving(false);
     }
   };
 
-  useEffect(() => {
-    fetchReviews();
-  }, []);
-
-  const handleEdit = (review: UserReview) => {
-    // TODO: Navigate to edit review screen or open modal
-    Alert.alert(t('myReviews.editTitle'), t('myReviews.editComingSoon'));
+  const confirmDelete = async (): Promise<void> => {
+    if (!toDelete) return;
+    try {
+      setDeleting(true);
+      await deleteReview(toDelete.id);
+      setItems((xs) => xs.filter((x) => x.id !== toDelete.id));
+      setToDelete(null);
+      void load();
+      void refetchProfile();
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('myReviews.errCouldNotDelete'));
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const handleDelete = (review: UserReview) => {
-    Alert.alert(
-      t('myReviews.deleteTitle'),
-      t('myReviews.deleteConfirm', { title: review.eventTitle }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('myReviews.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeletingId(review.id);
-              await deleteReview(review.id);
-              await fetchReviews();
-            } catch (err: any) {
-              Alert.alert(t('common.error'), err?.message ?? t('myReviews.errCouldNotDelete'));
-            } finally {
-              setDeletingId(null);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const reviews = tab === 'published' 
-    ? reviewsData?.published ?? [] 
-    : reviewsData?.drafts ?? [];
-
-  if (isLoading) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#6B7280" />
-        <Text className="text-gray600 mt-3">{t('myReviews.loading')}</Text>
-      </SafeAreaView>
-    );
-  }
+  const filters: ReadonlyArray<Filter> = ['all', 'event', 'venue', 'organizer'];
+  const visibleFilters = filters.filter((f) => f === 'all' || f === filter || counts[f] > 0);
 
   return (
-    <SafeAreaView edges={['left', 'right']} className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-5 py-4 border-b border-gray200">
-        <Pressable onPress={onBack} className="mr-4 active:opacity-70">
-          <Feather name="arrow-left" size={24} color="#111827" />
-        </Pressable>
-        <View>
-          <Text className="text-lg font-semibold text-black">{t('myReviews.title')}</Text>
-          <Text className="text-xs text-gray500">
-            {t('myReviews.countSuffix', { count: reviewsData?.totalCount ?? 0 })}
-          </Text>
-        </View>
-      </View>
+    <PageScaffold title={t('profile.reviews.title')} onBack={onBack}>
+      {loading ? (
+        <Loading />
+      ) : error ? (
+        <EmptyState title={t('gs.errorTitle')} message={error} actionLabel={t('gs.retry')} onAction={() => void load()} />
+      ) : (
+        <>
+          {/* Stats */}
+          <Card className="flex-row py-4 mt-1">
+            <StatCell value={String(stats.count)} label={t('profile.reviews.statCount', { count: stats.count })} />
+            <View style={{ width: 1, backgroundColor: gs.line }} />
+            <StatCell value={stats.average != null ? stats.average.toFixed(1) : '–'} label={t('profile.reviews.statAverage')} star />
+            {stats.helpful != null ? (
+              <>
+                <View style={{ width: 1, backgroundColor: gs.line }} />
+                <StatCell value={String(stats.helpful)} label={t('profile.reviews.statHelpful')} />
+              </>
+            ) : null}
+          </Card>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 40 }}
-      >
-        {/* Stats Cards */}
-        <View className="mx-5 mt-5 flex-row gap-x-3">
-          <View className="flex-1 rounded-2xl border border-gray200 bg-white py-4 items-center">
-            <Text className="text-2xl font-bold text-black">{reviewsData?.totalCount ?? 0}</Text>
-            <Text className="text-xs text-gray500 mt-1">{t('myReviews.publishedReviews')}</Text>
-          </View>
-          <View className="flex-1 rounded-2xl border border-gray200 bg-white py-4 items-center">
-            <Text className="text-2xl font-bold text-black">{reviewsData?.averageRating ?? 0}</Text>
-            <Text className="text-xs text-gray500 mt-1">{t('myReviews.averageRating')}</Text>
-          </View>
-        </View>
+          {/* Waiting for your review (route 154) */}
+          {waiting && waiting.length > 0 ? (
+            <>
+              <SectionTitle title={t('profile.reviews.waiting')} />
+              <View className="gap-y-3">
+                {waiting.map((w) => (
+                  <Card key={`${w.targetType}-${w.targetId}-${w.reservationId ?? ''}`} className="p-4">
+                    <View className="flex-row items-center">
+                      <Cover uri={w.imageUrl} toneKey={w.targetId} radius={14} style={{ width: 56, height: 56 }} />
+                      <View className="flex-1 ml-3">
+                        <Text className="text-[17px] font-extrabold text-ink" numberOfLines={1}>
+                          {w.targetName ?? w.eventTitle ?? ''}
+                        </Text>
+                        <Text className="text-[14px] text-subtle" numberOfLines={1}>
+                          {[
+                            typeLabel(w.targetType),
+                            w.targetType !== 'event' ? w.eventTitle : null,
+                            w.visitDate ? fmtDate(w.visitDate) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="mt-2 -ml-2">
+                      <Stars
+                        rating={0}
+                        size={30}
+                        onChange={(r) =>
+                          setDraft({ mode: 'new', target: w, title: w.targetName ?? w.eventTitle ?? '', rating: r, comment: '' })
+                        }
+                      />
+                    </View>
+                  </Card>
+                ))}
+              </View>
+            </>
+          ) : null}
 
-        {/* Tabs */}
-        <View className="mx-5 mt-5 flex-row rounded-xl border border-gray200 bg-gray100 p-1">
-          <Pressable
-            className={cx(
-              'flex-1 py-2.5 rounded-lg items-center',
-              tab === 'published' && 'bg-white'
-            )}
-            onPress={() => setTab('published')}
-          >
-            <Text className={cx(
-              'text-sm font-medium',
-              tab === 'published' ? 'text-black' : 'text-gray500'
-            )}>
-              {t('myReviews.publishedTab', { count: reviewsData?.published.length ?? 0 })}
-            </Text>
-          </Pressable>
-          <Pressable
-            className={cx(
-              'flex-1 py-2.5 rounded-lg items-center',
-              tab === 'drafts' && 'bg-white'
-            )}
-            onPress={() => setTab('drafts')}
-          >
-            <Text className={cx(
-              'text-sm font-medium',
-              tab === 'drafts' ? 'text-black' : 'text-gray500'
-            )}>
-              {t('myReviews.draftsTab', { count: reviewsData?.drafts.length ?? 0 })}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Error State */}
-        {error && (
-          <View className="mx-5 mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">
-            <Text className="text-red-600">{error}</Text>
-            <Pressable
-              className="mt-3 bg-red-500 rounded-xl py-2 items-center"
-              onPress={fetchReviews}
+          {/* Filters — types without reviews are hidden (only event reviews exist until Phase 4 § I ships). */}
+          {visibleFilters.length > 2 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
+              className="mt-6 mb-4"
             >
-              <Text className="text-white font-medium">{t('myReviews.retry')}</Text>
-            </Pressable>
-          </View>
-        )}
+              {visibleFilters.map((f) => (
+                <Pill
+                  key={f}
+                  label={`${t(`profile.reviews.filter.${f}`)} (${counts[f]})`}
+                  active={filter === f}
+                  onPress={() => setFilter(f)}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <View className="h-6" />
+          )}
 
-        {/* Reviews List */}
-        {!error && (
-          <View className="mx-5 mt-5">
-            {reviews.length === 0 ? (
-              <View className="rounded-2xl border border-gray200 bg-white p-6 items-center">
-                <Feather name="star" size={40} color="#9CA3AF" />
-                <Text className="text-gray700 font-medium mt-3">
-                  {tab === 'published' ? t('myReviews.noPublished') : t('myReviews.noDrafts')}
-                </Text>
-                <Text className="text-gray500 text-sm mt-1 text-center">
-                  {tab === 'published'
-                    ? t('myReviews.noPublishedSubtitle')
-                    : t('myReviews.noDraftsSubtitle')}
-                </Text>
-              </View>
-            ) : (
-              reviews.map((review) => (
-                <View key={review.id} style={{ opacity: deletingId === review.id ? 0.5 : 1 }}>
-                  <ReviewCard
-                    review={review}
-                    onEdit={() => handleEdit(review)}
-                    onDelete={() => handleDelete(review)}
-                  />
-                </View>
-              ))
-            )}
-          </View>
-        )}
+          {shown.length === 0 ? (
+            <EmptyState
+              icon={<Star size={28} color={gs.violet} />}
+              title={filter === 'all' ? t('myReviews.noPublished') : t('profile.reviews.emptyFiltered')}
+              message={filter === 'all' ? t('myReviews.noPublishedSubtitle') : undefined}
+            />
+          ) : (
+            <View className="gap-y-3">
+              {shown.map((r) => (
+                <Card key={r.id} className="p-4">
+                  <Pressable
+                    onPress={() => openTarget(r)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${typeLabel(r.targetType)}: ${r.name}`}
+                    className="flex-row items-center"
+                  >
+                    <Cover uri={r.imageUrl} toneKey={r.targetId || r.id} radius={12} style={{ width: 52, height: 52 }} />
+                    <View className="flex-1 ml-3 pr-2">
+                      <View className="flex-row items-center gap-x-1.5">
+                        <StatusChip label={typeLabel(r.targetType)} tone={TYPE_TONE[r.targetType]} size="xs" />
+                        {r.isDraft ? <StatusChip label={t('profile.reviews.draft')} tone="gray" size="xs" /> : null}
+                      </View>
+                      <Text className="text-[18px] font-extrabold text-ink mt-0.5" numberOfLines={1}>
+                        {r.name}
+                      </Text>
+                    </View>
+                    <ChevronRight size={18} color={gs.subtle} />
+                  </Pressable>
 
-        {/* Guidelines */}
-        <View className="mx-5 mt-5 mb-10 rounded-2xl bg-amber-50 border border-amber-200 p-4">
-          <Text className="text-base font-semibold text-amber-800 mb-3">{t('myReviews.guidelines')}</Text>
-          <View className="gap-y-2">
-            {[
-              t('myReviews.guideline1'),
-              t('myReviews.guideline2'),
-              t('myReviews.guideline3'),
-              t('myReviews.guideline4'),
-            ].map((guideline, idx) => (
-              <View key={idx} className="flex-row items-start">
-                <Text className="text-amber-700 mr-2">•</Text>
-                <Text className="text-sm text-amber-700 flex-1">{guideline}</Text>
-              </View>
-            ))}
+                  <View className="flex-row items-center mt-2.5">
+                    <Stars rating={r.rating} size={16} />
+                    <Text className="ml-2 text-[14px] text-subtle">{fmtDate(r.createdAt)}</Text>
+                  </View>
+
+                  {r.comment ? <Text className="mt-2 text-[15px] text-ink leading-[22px]">{r.comment}</Text> : null}
+
+                  {r.reply ? (
+                    <View className="mt-3 rounded-2xl p-3" style={{ backgroundColor: gs.surface2 }}>
+                      <Text className="text-[13px] font-extrabold" style={{ color: gs.violet }}>
+                        {t('profile.reviews.replyFrom', { name: r.replyFrom })}
+                      </Text>
+                      <Text className="text-[14px] text-ink mt-0.5 leading-[20px]">{r.reply}</Text>
+                    </View>
+                  ) : null}
+
+                  <View className="flex-row items-center mt-3 pt-1 border-t" style={{ borderColor: gs.line }}>
+                    <Text className="flex-1 text-[13px] text-muted">
+                      {r.helpfulCount ? t('profile.reviews.helpful', { count: r.helpfulCount }) : ''}
+                    </Text>
+                    <TextAction
+                      label={t('common.edit')}
+                      onPress={() => setDraft({ mode: 'edit', reviewId: r.id, title: r.name, rating: r.rating, comment: r.comment ?? '' })}
+                    />
+                    <View className="w-3" />
+                    <TextAction label={t('profile.reviews.delete')} tone="danger" onPress={() => setToDelete(r)} />
+                  </View>
+                </Card>
+              ))}
+            </View>
+          )}
+        </>
+      )}
+
+      <GsSheet
+        visible={!!draft}
+        onClose={() => setDraft(null)}
+        title={draft?.mode === 'edit' ? t('profile.reviews.editTitle') : t('profile.reviews.writeTitle')}
+        footer={
+          <GsButton
+            label={draft?.mode === 'edit' ? t('profile.reviews.saveChanges') : t('profile.reviews.publish')}
+            onPress={() => void submit()}
+            loading={saving}
+            disabled={!draft || draft.rating < 1}
+            fullWidth
+            size="lg"
+          />
+        }
+      >
+        {draft ? (
+          <View className="px-5">
+            <Text className="text-[16px] font-bold text-subtle">{draft.title}</Text>
+            <View className="mt-2 -ml-2">
+              <Stars rating={draft.rating} size={34} onChange={(rating) => setDraft({ ...draft, rating })} />
+            </View>
+            <View className="mt-3">
+              <Input
+                value={draft.comment}
+                onChangeText={(comment) => setDraft({ ...draft, comment: comment.slice(0, 500) })}
+                placeholder={t('profile.reviews.commentPlaceholder')}
+                multiline
+                accessibilityLabel={t('profile.reviews.commentPlaceholder')}
+              />
+              <Text className="text-right text-[12px] text-muted mt-1">{draft.comment.length}/500</Text>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        ) : null}
+      </GsSheet>
+
+      <ConfirmSheet
+        visible={!!toDelete}
+        title={t('profile.reviews.deleteTitle')}
+        message={t('profile.reviews.deleteMessage', { name: toDelete?.name ?? '' })}
+        confirmLabel={t('profile.reviews.delete')}
+        busy={deleting}
+        onConfirm={() => void confirmDelete()}
+        onClose={() => setToDelete(null)}
+      />
+    </PageScaffold>
+  );
+}
+
+function StatCell({ value, label, star }: Readonly<{ value: string; label: string; star?: boolean }>): ReactElement {
+  return (
+    <View className="flex-1 items-center px-1">
+      <View className="flex-row items-center">
+        {star ? <Star size={18} color={STAR} fill={STAR} style={{ marginRight: 4 }} /> : null}
+        <Text className="text-[24px] font-extrabold text-ink">{value}</Text>
+      </View>
+      <Text className="text-[13px] text-subtle mt-0.5 text-center" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
   );
 }
