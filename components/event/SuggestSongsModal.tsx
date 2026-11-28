@@ -141,6 +141,7 @@ export default function SuggestSongsModal({
   ...rest
 }: SuggestSongsModalProps): ReactElement {
   const { t } = useTranslation();
+  const translate = t;
   const [tab, setTab] = useState<"search" | "mine">("search");
 
   const [query, setQuery] = useState<string>("");
@@ -240,7 +241,7 @@ export default function SuggestSongsModal({
       await refreshMine();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert(t("event.songs.couldNotSuggest"), msg);
+      Alert.alert(translate("event.songs.couldNotSuggest"), msg);
     } finally {
       setSuggestingTrackIds((cur) => {
         const next = new Set(cur);
