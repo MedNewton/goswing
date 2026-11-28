@@ -8,7 +8,10 @@ import { CreditCard, Plus, RotateCcw, ShieldCheck, Ticket } from 'lucide-react-n
 
 import { gs } from '@/theme/colors';
 import { EmptyState, GsButton, StatusChip } from '@/components/gs';
-import { usePaymentMethods, useSettings } from '@/hooks/profile';
+import { usePaymentMethods, useProfile, useSettings } from '@/hooks/profile';
+import CardFormSheet, { type CardFormResult } from '@/components/payments/CardFormSheet';
+import TestModeBadge from '@/components/payments/TestModeBadge';
+import { saveCard } from '@/lib/payments';
 import { listMyPayments, type ApiPaymentTx } from '@/lib/api/profile';
 import { formatCents } from '@/lib/format';
 import type { PaymentMethod } from '@/types/domain';
@@ -21,6 +24,7 @@ export default function PaymentMethodsPage({ onBack }: PaymentMethodsPageProps):
   const { t, i18n } = useTranslation();
   const { paymentMethods, isLoading, error, refetch, removePaymentMethod, setDefaultPaymentMethod } = usePaymentMethods();
   const { settings, updateSettings } = useSettings();
+  const { profile } = useProfile();
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toRemove, setToRemove] = useState<PaymentMethod | null>(null);
@@ -62,6 +66,13 @@ export default function PaymentMethodsPage({ onBack }: PaymentMethodsPageProps):
     }
   };
 
+  /** Mock provider for now (lib/payments): only display data reaches the API. */
+  const onAddCard = async ({ card, makeDefault }: CardFormResult): Promise<void> => {
+    await saveCard(card, makeDefault || paymentMethods.length === 0);
+    await refetch();
+    setAddOpen(false);
+  };
+
   const onToggle = (key: 'savePaymentInfo' | 'emailReceipts', v: boolean): void => {
     void updateSettings({ [key]: v }).catch((e: unknown) =>
       Alert.alert(t('common.error'), e instanceof Error ? e.message : t('paymentMethods.errCouldNotUpdateSetting')),
@@ -81,7 +92,10 @@ export default function PaymentMethodsPage({ onBack }: PaymentMethodsPageProps):
 
   return (
     <PageScaffold title={t('profile.pay.title')} subtitle={t('profile.pay.subtitle')} onBack={onBack}>
-      <View className="px-5 mt-1">
+      <View className="px-5 mt-1 mb-3">
+        <TestModeBadge compact />
+      </View>
+      <View className="px-5">
         <GsButton label={t('profile.pay.add')} icon={<Plus size={18} color={gs.white} />} size="lg" onPress={() => setAddOpen(true)} fullWidth />
       </View>
 
@@ -210,15 +224,13 @@ export default function PaymentMethodsPage({ onBack }: PaymentMethodsPageProps):
         onClose={() => setToRemove(null)}
       />
 
-      <ConfirmSheet
+      <CardFormSheet
         visible={addOpen}
-        title={t('profile.pay.addSoonTitle')}
-        message={t('profile.pay.addSoonMessage')}
-        confirmLabel={t('profile.pay.gotIt')}
-        danger={false}
-        hideCancel
-        onConfirm={() => setAddOpen(false)}
+        mode="add"
+        offerDefault={paymentMethods.length > 0}
+        defaultName={profile?.name ?? ''}
         onClose={() => setAddOpen(false)}
+        onSubmit={onAddCard}
       />
     </PageScaffold>
   );

@@ -173,6 +173,27 @@ export const profileHandlers: MockHandler[] = [
   { method: 'GET', path: /^\/v1\/me\/payment-methods$/, handle: () => ({ items: cards }) },
   {
     method: 'POST',
+    path: /^\/v1\/me\/payment-methods$/,
+    handle: (r) => {
+      const b = (r.body ?? {}) as Record<string, unknown>;
+      const makeDefault = Boolean(b.isDefault) || cards.length === 0;
+      const card = {
+        id: `pm${Date.now()}`,
+        userId: 'user_preview',
+        provider: String(b.provider ?? 'other'),
+        providerPaymentMethodId: String(b.providerPaymentMethodId ?? ''),
+        cardBrand: String(b.cardBrand ?? 'other'),
+        cardLastFour: String(b.cardLastFour ?? ''),
+        cardExpMonth: Number(b.cardExpMonth ?? 0),
+        cardExpYear: Number(b.cardExpYear ?? 0),
+        isDefault: makeDefault,
+      };
+      cards = [...cards.map((c) => (makeDefault ? { ...c, isDefault: false } : c)), card];
+      return { status: 201, json: card };
+    },
+  },
+  {
+    method: 'POST',
     path: /^\/v1\/me\/payment-methods\/([^/]+)\/default$/,
     handle: (r) => ((cards = cards.map((c) => ({ ...c, isDefault: c.id === r.params[0] }))), cards.find((c) => c.id === r.params[0])),
   },

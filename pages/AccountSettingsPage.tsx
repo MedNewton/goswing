@@ -58,6 +58,19 @@ function clerkMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
 }
 
+// Set EXPO_PUBLIC_CLERK_TOTP=1 once TOTP (authenticator app) is turned on in the Clerk dashboard.
+const TOTP_ENABLED = process.env.EXPO_PUBLIC_CLERK_TOTP === '1';
+
+/** Friendly text for Clerk 2-step errors (never Clerk's raw message). */
+function totpMessage(e: unknown, t: TFunction, fallbackKey: string): string {
+  const code = (e as { errors?: ReadonlyArray<{ code?: string }> })?.errors?.[0]?.code ?? '';
+  if (/code_incorrect|param_format_invalid|code_invalid/.test(code)) return t('profile.acct.codeInvalid');
+  if (/expired/.test(code)) return t('profile.acct.codeExpired');
+  if (/too_many|rate_limit/.test(code)) return t('profile.acct.tooManyAttempts');
+  if (/not_enabled|not_allowed|feature/.test(code)) return t('profile.acct.twoStepUnavailable');
+  return t(fallbackKey);
+}
+
 /** 0–4: length ≥ 8, uppercase, digit, symbol. */
 export function passwordScore(p: string): number {
   if (!p) return 0;
@@ -139,7 +152,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
       setTotpSheet({ secret: totp.secret, uri: totp.uri });
     } catch (e: unknown) {
       setTotpSheet({});
-      setTotpError(clerkMessage(e, t('profile.acct.twoStepUnavailable')));
+      setTotpError(totpMessage(e, t, 'profile.acct.twoStepUnavailable'));
     } finally {
       setTotpBusy(false);
     }
@@ -155,7 +168,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
       setTotpSheet(null);
       void user.reload?.();
     } catch (e: unknown) {
-      setTotpError(clerkMessage(e, t('profile.acct.codeInvalid')));
+      setTotpError(totpMessage(e, t, 'profile.acct.codeInvalid'));
     } finally {
       setTotpBusy(false);
     }
@@ -170,7 +183,7 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
       setDisableTotpOpen(false);
       void user.reload?.();
     } catch (e: unknown) {
-      setTotpError(clerkMessage(e, t('profile.tryAgain')));
+      setTotpError(totpMessage(e, t, 'profile.tryAgain'));
     } finally {
       setTotpBusy(false);
     }
@@ -337,10 +350,12 @@ export default function AccountSettingsPage({ onBack }: AccountSettingsPageProps
         <Row
           icon={ShieldCheck}
           title={t('profile.acct.twoStep')}
-          subtitle={totpOn ? t('profile.acct.twoStepOn') : t('profile.acct.twoStepOff')}
+          subtitle={!TOTP_ENABLED ? t('profile.acct.twoStepSoonSub') : totpOn ? t('profile.acct.twoStepOn') : t('profile.acct.twoStepOff')}
           chevron={false}
           right={
-            totpBusy && !totpSheet ? (
+            !TOTP_ENABLED ? (
+              <StatusChip label={t('gs.comingSoon')} tone="violet" />
+            ) : totpBusy && !totpSheet ? (
               <ActivityIndicator color={gs.violet} />
             ) : (
               <GsSwitch
