@@ -89,7 +89,7 @@ type MarkerProps = {
   [key: string]: unknown;
 };
 
-export function Marker({ coordinate, children, onPress, anchor }: MarkerProps) {
+export function Marker({ coordinate, children, onPress, anchor, zIndex }: MarkerProps) {
   const ctx = useContext(MapCtx);
   const [box, setBox] = useState({ w: 0, h: 0 });
   if (!ctx || !coordinate) return null;
@@ -99,8 +99,9 @@ export function Marker({ coordinate, children, onPress, anchor }: MarkerProps) {
   return (
     <View
       onLayout={(e: LayoutChangeEvent) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-      style={{ position: 'absolute', left: p.x - box.w * ax, top: p.y - box.h * ay, opacity: box.w ? 1 : 0 }}
-      onTouchEnd={onPress ? () => onPress({ nativeEvent: { coordinate } }) : undefined}
+      style={{ position: 'absolute', left: p.x - box.w * ax, top: p.y - box.h * ay, opacity: box.w ? 1 : 0, zIndex: typeof zIndex === 'number' ? zIndex : undefined }}
+      // onClick (react-native-web) so mouse clicks and Playwright taps reach the marker.
+      {...({ onClick: onPress ? () => onPress({ nativeEvent: { coordinate } }) : undefined } as object)}
     >
       {children ?? <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#E0296B' }} />}
     </View>
