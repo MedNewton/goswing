@@ -152,4 +152,15 @@ export const coreHandlers: MockHandler[] = [
   { method: 'GET', path: /^\/v1\/me\/settings$/, handle: () => SETTINGS },
   { method: 'PATCH', path: /^\/v1\/me\/settings$/, handle: (r) => ({ ...SETTINGS, ...(r.body as object) }) },
   { method: 'GET', path: /^\/v1\/tags$/, handle: () => ({ items: [] }) },
+  {
+    method: 'POST',
+    path: /^\/v1\/me\/payment-methods$/,
+    handle: (r) => ({
+      id: `pm-${Date.now()}`,
+      userId: 'user_preview',
+      ...(r.body as object),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }),
+  },
 ];
