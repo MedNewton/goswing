@@ -1,97 +1,98 @@
-import React, { memo, useMemo, type ReactElement } from 'react';
-import { View, Text, Pressable, type ViewProps } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+// components/navigation/BottomTabBar.tsx — floating tab bar of the redesign.
+// Social is shown but disabled until the Social area ships.
+import React, { memo, useState, type ReactElement } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { Compass, Map as MapIcon, Ticket, User, Users, type LucideIcon } from 'lucide-react-native';
 
-export type BottomTabKey = 'home' | 'search' | 'saved' | 'reservations' | 'profile';
+import { gs } from '@/theme/colors';
+import { floatShadow } from '@/components/gs/styles';
+import type { TabKey } from '@/navigation/routes';
 
-export type BottomTabItem = Readonly<{
-  key: BottomTabKey;
-  label: string;
-  icon: keyof typeof Feather.glyphMap;
-}>;
+/** Kept for older imports; the redesign uses `TabKey`. */
+export type BottomTabKey = TabKey;
 
-export type BottomTabBarProps = Readonly<
-  {
-    activeKey: BottomTabKey;
-    onChange: (key: BottomTabKey) => void;
-    items?: ReadonlyArray<BottomTabItem>;
-    className?: string;
-  } & Omit<ViewProps, 'children'>
->;
+type Item = Readonly<{ key: TabKey; labelKey: string; Icon: LucideIcon; disabled?: boolean }>;
 
-const cx = (...c: ReadonlyArray<string | null | undefined | false>): string =>
-  c.filter(Boolean).join(' ');
+const ITEMS: ReadonlyArray<Item> = [
+  { key: 'map', labelKey: 'gs.tab.map', Icon: MapIcon },
+  { key: 'discover', labelKey: 'gs.tab.discover', Icon: Compass },
+  { key: 'bookings', labelKey: 'gs.tab.bookings', Icon: Ticket },
+  { key: 'social', labelKey: 'gs.tab.social', Icon: Users, disabled: true },
+  { key: 'profile', labelKey: 'gs.tab.profile', Icon: User },
+];
 
-function TabButton({
-  item,
-  selected,
-  onPress,
-}: {
-  item: BottomTabItem;
-  selected: boolean;
-  onPress: () => void;
-}): ReactElement {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className="flex-1 items-center justify-center gap-y-1 py-2"
-      android_ripple={{ color: '#E5E7EB', borderless: true }}
-    >
-      <Feather name={item.icon} size={22} color={selected ? '#0B1220' : '#6B7280'} />
-      <Text className={selected ? 'text-xs text-black font-medium' : 'text-xs text-gray500'}>
-        {item.label}
-      </Text>
-    </Pressable>
-  );
+/** Height of the bar itself, without the safe-area inset. Screens pad by this. */
+export const TAB_BAR_HEIGHT = 70;
+
+export function useTabBarSpace(): number {
+  const insets = useSafeAreaInsets();
+  return TAB_BAR_HEIGHT + Math.max(insets.bottom, 12) + 12;
 }
 
-export default memo(function BottomTabBar({
-  activeKey,
-  onChange,
-  items,
-  className,
-  ...rest
-}: BottomTabBarProps): ReactElement {
+export type BottomTabBarProps = Readonly<{
+  activeKey: TabKey;
+  onChange: (key: TabKey) => void;
+  badges?: Partial<Record<TabKey, number>>;
+}>;
+
+export default memo(function BottomTabBar({ activeKey, onChange, badges }: BottomTabBarProps): ReactElement {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 6);
-  const resolvedItems = useMemo<ReadonlyArray<BottomTabItem>>(
-    () =>
-      items ?? [
-        { key: 'home', label: t('nav.home'), icon: 'home' },
-        { key: 'search', label: t('nav.search'), icon: 'search' },
-        { key: 'saved', label: t('nav.saved'), icon: 'heart' },
-        { key: 'reservations', label: t('nav.reservations'), icon: 'calendar' },
-        { key: 'profile', label: t('nav.profile'), icon: 'user' },
-      ],
-    [items, t],
-  );
+  const [hint, setHint] = useState<boolean>(false);
 
   return (
-    <View
-      pointerEvents="box-none"
-      className="absolute inset-x-0 bottom-0"
-    >
+    <View pointerEvents="box-none" className="absolute inset-x-0 bottom-0 px-4" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
+      {hint ? (
+        <View className="self-center mb-2 rounded-full px-4 py-2" style={{ backgroundColor: gs.ink }}>
+          <Text className="text-[13px] font-semibold text-white">{t('gs.tab.socialSoon')}</Text>
+        </View>
+      ) : null}
       <View
-        {...rest}
-        className={cx(
-          'border-t border-gray200 bg-white flex-row items-center',
-          className
-        )}
-        style={{ paddingBottom: bottomPad }}
+        className="flex-row items-center rounded-[28px] bg-white px-2"
+        style={[{ height: TAB_BAR_HEIGHT }, floatShadow]}
       >
-        {resolvedItems.map((it) => (
-          <TabButton
-            key={it.key}
-            item={it}
-            selected={it.key === activeKey}
-            onPress={() => onChange(it.key)}
-          />
-        ))}
+        {ITEMS.map(({ key, labelKey, Icon, disabled }) => {
+          const selected = key === activeKey;
+          const color = disabled ? gs.faint : selected ? gs.violet : gs.subtle;
+          const badge = badges?.[key];
+          return (
+            <Pressable
+              key={key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected, disabled }}
+              accessibilityLabel={disabled ? `${t(labelKey)}, ${t('gs.comingSoon')}` : t(labelKey)}
+              onPress={() => {
+                if (disabled) {
+                  setHint(true);
+                  setTimeout(() => setHint(false), 1800);
+                  return;
+                }
+                onChange(key);
+              }}
+              className="flex-1 items-center justify-center"
+            >
+              <View
+                className="h-8 w-[52px] items-center justify-center rounded-full"
+                style={{ backgroundColor: selected ? gs.violetSoft : 'transparent' }}
+              >
+                <Icon size={22} color={color} strokeWidth={selected ? 2.4 : 2} />
+                {badge ? (
+                  <View
+                    className="absolute -top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full items-center justify-center border-2 border-white"
+                    style={{ backgroundColor: gs.pink }}
+                  >
+                    <Text className="text-[10px] font-bold text-white">{badge > 9 ? '9+' : badge}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text className="mt-1 text-[11px] font-bold" style={{ color }} numberOfLines={1}>
+                {t(labelKey)}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );

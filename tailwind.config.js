@@ -8,6 +8,10 @@ module.exports = {
     './components/**/*.{ts,tsx,js,jsx}',
     './data/**/*.{ts,tsx,js,jsx}',
     './pages/**/*.{ts,tsx,js,jsx}',
+    './screens/**/*.{ts,tsx,js,jsx}',
+    './navigation/**/*.{ts,tsx,js,jsx}',
+    './providers/**/*.{ts,tsx,js,jsx}',
+    './preview/**/*.{ts,tsx,js,jsx}',
   ],
   presets: [require('nativewind/preset')],
   theme: {
@@ -15,12 +19,24 @@ module.exports = {
       colors: {
         // Brand
         brand: {
-          DEFAULT: '#0EA5E9',
-          dark: '#0284C7',
-          light: '#7DD3FC',
+          DEFAULT: '#5B36F2',
+          dark: '#4A26D9',
+          light: '#EFEBFF',
         },
+        // Redesign tokens (mirror theme/colors.ts `gs`)
+        violet: { DEFAULT: '#5B36F2', dark: '#4A26D9', soft: '#EFEBFF', line: '#D9D0FF' },
+        pink: { DEFAULT: '#E0296B', soft: '#FDE7EF', dark: '#A3124A' },
+        green: { DEFAULT: '#1F7A43', soft: '#E3F5EA' },
+        orange: { DEFAULT: '#B54708', soft: '#FDEFE3' },
+        blue: { DEFAULT: '#1F5FA8', soft: '#E8F1FB' },
+        ink: '#14121F',
+        subtle: '#4F4C63',
+        muted: '#6B6880',
+        faint: '#9C99AE',
+        line: { DEFAULT: '#ECEAF3', strong: '#D9D6E4' },
+        surface2: '#F1F0F5',
         // Neutrals
-        black: '#0B1220',
+        black: '#14121F',
         white: '#FFFFFF',
         gray50: '#F9FAFB',
         gray100: '#F3F4F6',
@@ -38,8 +54,8 @@ module.exports = {
         warning: '#F59E0B',
         danger:  '#EF4444',
         info:    '#22C55E',
-        border:  '#E5E7EB',
-        surface: '#F9FAFB',
+        border:  '#ECEAF3',
+        surface: '#F7F6FB',
       },
       fontFamily: {
         regular: ['System'],
