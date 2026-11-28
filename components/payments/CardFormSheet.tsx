@@ -26,6 +26,9 @@ export type CardFormSheetProps = Readonly<{
   offerDefault?: boolean;
 }>;
 
+// react-native-web colors the "on" thumb teal unless activeThumbColor is set.
+const WEB_THUMB = { activeThumbColor: gs.white } as Record<string, string>;
+
 type Errors = Partial<Record<'number' | 'expiry' | 'cvc' | 'holder' | 'form', string>>;
 
 function parseExpiry(v: string): { m: number; y: number } | null {
@@ -184,13 +187,13 @@ export default function CardFormSheet({
         {mode === 'pay' ? (
           <Pressable onPress={() => setSave((v) => !v)} className="flex-row items-center justify-between py-1" accessibilityRole="switch" accessibilityState={{ checked: save }}>
             <Text className="text-[15px] font-semibold text-ink">{t('gs.pay.saveCard')}</Text>
-            <Switch value={save} onValueChange={setSave} trackColor={{ true: gs.violet, false: gs.lineStrong }} thumbColor={gs.white} />
+            <Switch value={save} onValueChange={setSave} trackColor={{ true: gs.violet, false: gs.lineStrong }} thumbColor={gs.white} {...WEB_THUMB} />
           </Pressable>
         ) : null}
         {offerDefault ? (
           <Pressable onPress={() => setMakeDefault((v) => !v)} className="flex-row items-center justify-between py-1" accessibilityRole="switch" accessibilityState={{ checked: makeDefault }}>
             <Text className="text-[15px] font-semibold text-ink">{t('gs.pay.makeDefault')}</Text>
-            <Switch value={makeDefault} onValueChange={setMakeDefault} trackColor={{ true: gs.violet, false: gs.lineStrong }} thumbColor={gs.white} />
+            <Switch value={makeDefault} onValueChange={setMakeDefault} trackColor={{ true: gs.violet, false: gs.lineStrong }} thumbColor={gs.white} {...WEB_THUMB} />
           </Pressable>
         ) : null}
 

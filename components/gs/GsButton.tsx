@@ -44,6 +44,7 @@ export default function GsButton({
       onPress={onPress}
       disabled={off}
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ disabled: off, busy: loading }}
       style={{ opacity: disabled ? 0.45 : 1 }}
       className={cx(

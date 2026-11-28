@@ -10,18 +10,16 @@ export default function TestModeBadge({ compact = false }: Readonly<{ compact?: 
   const { t } = useTranslation();
   if (!isTestMode()) return null;
   return (
-    <View
-      accessibilityRole="text"
-      className="flex-row items-center self-start rounded-xl px-3 py-2"
-      style={{ backgroundColor: gs.orangeSoft }}
-    >
-      <FlaskConical size={16} color={gs.orange} />
-      <Text className="ml-2 text-[13px] font-bold" style={{ color: gs.orange }}>
-        {t('gs.pay.testMode')}
-      </Text>
+    <View accessibilityRole="text" className={compact ? "self-start rounded-xl px-3 py-2" : "self-stretch rounded-xl px-3 py-2"} style={{ backgroundColor: gs.orangeSoft }}>
+      <View className="flex-row items-center">
+        <FlaskConical size={16} color={gs.orange} />
+        <Text className="ml-2 text-[13px] font-bold" style={{ color: gs.orange }}>
+          {t('gs.pay.testMode')}
+        </Text>
+      </View>
       {compact ? null : (
-        <Text className="ml-1.5 text-[13px] flex-shrink" style={{ color: gs.orange }}>
-          · {t('gs.pay.testModeNote')}
+        <Text className="mt-0.5 text-[13px] leading-[18px]" style={{ color: gs.orange }}>
+          {t('gs.pay.testModeNote')}
         </Text>
       )}
     </View>
